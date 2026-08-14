@@ -57,6 +57,7 @@
       "Target": "Selected target",
       "NoTarget": "No target selected",
       "NoTargetDetail": "Target with T or use the target menu.",
+      "YouAreTarget": "You are the target",
       "NoOwner": "Only owners of this token can use its actions.",
       "Skills": "Skills",
       "Spells": "Spells",

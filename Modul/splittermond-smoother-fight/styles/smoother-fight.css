@@ -36,7 +36,7 @@
 
 #splittermond-smoother-fight-hud .sf-shell {
     display: grid;
-    grid-template-columns: 146px minmax(330px, 1fr) 146px;
+    grid-template-columns: 160px minmax(330px, 1fr) 160px;
     align-items: end;
     gap: 6px;
 }
@@ -93,6 +93,14 @@
 #splittermond-smoother-fight-hud .sf-turn-target i {
     color: var(--sf-gold);
     margin-right: 3px;
+}
+
+#splittermond-smoother-fight-hud .sf-turn-target.is-user-target {
+    padding: 3px 7px;
+    border-radius: 999px;
+    color: #ffd4cf;
+    background: rgba(198, 65, 55, 0.24);
+    box-shadow: inset 0 0 0 1px rgba(255, 143, 132, 0.44);
 }
 
 #splittermond-smoother-fight-hud .sf-hud-toggle {
@@ -189,7 +197,7 @@
 
 #splittermond-smoother-fight-hud .sf-portrait {
     position: relative;
-    min-height: 174px;
+    min-height: 190px;
     border: 1px solid var(--sf-line);
     border-radius: 8px 8px 3px 3px;
     background: var(--sf-bg);
@@ -220,7 +228,7 @@
 }
 
 #splittermond-smoother-fight-hud .sf-portrait-image {
-    height: 102px;
+    height: 112px;
     background-image:
         linear-gradient(to top, rgba(5, 15, 18, 0.84), transparent 48%),
         var(--sf-token-image);
@@ -247,6 +255,32 @@
     right: 7px;
 }
 
+#splittermond-smoother-fight-hud .sf-is-user-target {
+    border-color: rgba(255, 116, 103, 0.92);
+    box-shadow: 0 0 0 2px rgba(198, 65, 55, 0.32), 0 0 22px rgba(255, 90, 78, 0.5);
+}
+
+#splittermond-smoother-fight-hud .sf-target-alert {
+    position: absolute;
+    z-index: 2;
+    top: 36px;
+    left: 7px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px;
+    border: 1px solid rgba(255, 185, 177, 0.72);
+    border-radius: 999px;
+    color: #fff;
+    background: rgba(139, 34, 27, 0.9);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.46);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
 #splittermond-smoother-fight-hud .sf-portrait-name {
     position: relative;
     margin-top: -23px;
@@ -254,6 +288,7 @@
     text-align: center;
     font-family: var(--font-secondary, serif);
     font-weight: 700;
+    font-size: 14px;
     text-shadow: 0 1px 4px #000;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -272,6 +307,7 @@
     flex-direction: column;
     align-items: center;
     padding: 4px 1px;
+    font-size: 13px;
     font-weight: 700;
 }
 
@@ -292,7 +328,7 @@
 
 #splittermond-smoother-fight-hud .sf-resource {
     position: relative;
-    height: 13px;
+    height: 15px;
     border-radius: 3px;
     overflow: hidden;
     background: #1b2626;
@@ -318,7 +354,7 @@
     color: #fff;
     font-size: 9px;
     font-weight: 700;
-    line-height: 13px;
+    line-height: 15px;
     text-shadow: 0 1px 3px #000, 0 0 2px #000;
 }
 
@@ -1165,15 +1201,15 @@
     }
 
     #splittermond-smoother-fight-hud .sf-shell {
-        grid-template-columns: 114px minmax(280px, 1fr) 114px;
+        grid-template-columns: 126px minmax(280px, 1fr) 126px;
     }
 
     #splittermond-smoother-fight-hud .sf-portrait {
-        min-height: 148px;
+        min-height: 160px;
     }
 
     #splittermond-smoother-fight-hud .sf-portrait-image {
-        height: 80px;
+        height: 90px;
     }
 
     #splittermond-smoother-fight-hud .sf-action-menu > summary span,
@@ -1190,6 +1226,10 @@
     #splittermond-smoother-fight-hud .sf-prepared-spell-cast b span {
         display: none;
     }
+
+    #splittermond-smoother-fight-hud .sf-target-alert span {
+        display: none;
+    }
 }
 
 @media (max-width: 820px) {
@@ -1199,15 +1239,15 @@
     }
 
     #splittermond-smoother-fight-hud .sf-shell {
-        grid-template-columns: 86px minmax(230px, 1fr) 86px;
+        grid-template-columns: 96px minmax(230px, 1fr) 96px;
     }
 
     #splittermond-smoother-fight-hud .sf-portrait {
-        min-height: 116px;
+        min-height: 128px;
     }
 
     #splittermond-smoother-fight-hud .sf-portrait-image {
-        height: 65px;
+        height: 72px;
     }
 
     #splittermond-smoother-fight-hud .sf-defense-row,

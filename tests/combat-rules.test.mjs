@@ -7,6 +7,7 @@ import {
     findDefensiveFeatureValue,
     fullyConsumedCost,
     linkMatchesCombatant,
+    mayViewActorResources,
     normalizeActorUserLinks,
     normalizeSearchText,
     normalizeUserTokenLinks,
@@ -136,6 +137,12 @@ test("unlinked synthetic tokens resolve to their stable source sheet UUID", () =
 test("sheet search is case- and accent-insensitive", () => {
     assert.equal(normalizeSearchText("  Äijagar  "), "aijagar");
     assert.equal(normalizeSearchText("GRAULWURM"), "graulwurm");
+});
+
+test("health and focus require observer permission unless the viewer is a GM", () => {
+    assert.equal(mayViewActorResources(false, false), false);
+    assert.equal(mayViewActorResources(false, true), true);
+    assert.equal(mayViewActorResources(true, false), true);
 });
 
 test("attack, spell, and damage chat messages are classified as combat events", () => {

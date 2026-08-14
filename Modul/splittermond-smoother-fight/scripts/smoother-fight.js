@@ -5,6 +5,7 @@ import {
     findDefensiveFeatureValue,
     fullyConsumedCost,
     linkMatchesCombatant,
+    mayViewActorResources,
     normalizeActorUserLinks,
     normalizeSearchText,
     normalizeUserTokenLinks,
@@ -560,6 +561,7 @@ async function buildHud(context) {
         : t("SMOOTHER_FIGHT.HUD.NoTargetDetail");
     const minimized = getSetting("minimized", false);
     const hudToggle = buildHudToggle(minimized);
+    const personalTarget = isCurrentUserTarget(target);
 
     if (minimized) {
         return `
@@ -569,7 +571,7 @@ async function buildHud(context) {
                         <span class="sf-live-dot"></span>
                         <strong>${escapeHtml(actor.name)}</strong>
                         <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
-                        <span class="sf-turn-target"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
+                        <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
                         ${hudToggle}
                     </header>
                 </main>
@@ -585,7 +587,7 @@ async function buildHud(context) {
                     <span class="sf-live-dot"></span>
                     <strong>${escapeHtml(actor.name)}</strong>
                     <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
-                    <span class="sf-turn-target"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
+                    <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
                     ${hudToggle}
                 </header>
                 ${canAct ? buildCombatControls(context) : ""}
@@ -594,7 +596,7 @@ async function buildHud(context) {
             </main>
             <div class="sf-target-column">
                 ${canChooseTarget(context) ? buildQuickTargets(context) : ""}
-                ${target ? portraitPanel({ side: "target", token: target, actor: target.actor, eyebrow: t("SMOOTHER_FIGHT.HUD.Target") }) : noTargetPanel()}
+                ${target ? portraitPanel({ side: "target", token: target, actor: target.actor, eyebrow: t("SMOOTHER_FIGHT.HUD.Target"), highlighted: personalTarget }) : noTargetPanel()}
             </div>
         </div>
     `;
@@ -606,16 +608,17 @@ function buildHudToggle(minimized) {
     return `<button type="button" class="sf-hud-toggle" data-sf-action="toggle-hud" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid ${icon}"></i></button>`;
 }
 
-function portraitPanel({ side, token, actor, eyebrow, action = "" }) {
+function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false }) {
     const image = token?.texture?.src ?? actor?.img ?? "icons/svg/mystery-man.svg";
     const clickable = action ? `data-sf-action="${action}" role="button" tabindex="0"` : "";
     const defense = getDerivedValue(actor, "defense");
     const body = getDerivedValue(actor, "bodyresist");
     const mind = getDerivedValue(actor, "mindresist");
     return `
-        <aside class="sf-portrait sf-${side}" ${clickable}>
+        <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""}" ${clickable}>
             <div class="sf-portrait-image" style="--sf-token-image:url('${escapeCssUrl(image)}')">
                 <span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>
+                ${highlighted ? `<span class="sf-target-alert"><i class="fa-solid fa-bullseye"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YouAreTarget"))}</span></span>` : ""}
             </div>
             <div class="sf-portrait-name">${escapeHtml(token?.name ?? actor?.name ?? "–")}</div>
             <div class="sf-defense-row" aria-label="VTD, KW, GW">
@@ -623,7 +626,7 @@ function portraitPanel({ side, token, actor, eyebrow, action = "" }) {
                 <span><small>KW</small>${escapeHtml(body)}</span>
                 <span><small>GW</small>${escapeHtml(mind)}</span>
             </div>
-            ${resourceBars(actor)}
+            ${canViewResources(actor) ? resourceBars(actor) : ""}
         </aside>
     `;
 }
@@ -646,6 +649,11 @@ function resourceBars(actor) {
         ${resourceBar("health", t("SMOOTHER_FIGHT.HUD.Health"), health)}
         ${resourceBar("focus", t("SMOOTHER_FIGHT.HUD.Focus"), focus)}
     </div>`;
+}
+
+function canViewResources(actor) {
+    const observer = Boolean(actor?.testUserPermission?.(game.user, "OBSERVER"));
+    return mayViewActorResources(game.user?.isGM, observer);
 }
 
 function resourceBar(type, label, resource) {
@@ -960,6 +968,17 @@ function getEffectiveTokenOwner(token) {
     return owners.find((user) => user.active) ?? owners[0] ?? null;
 }
 
+function isCurrentUserTarget(token) {
+    if (!token || !game.user || game.user.isGM) return false;
+    const explicitOwnerId = getExplicitTokenOwnerId(token);
+    if (explicitOwnerId) return explicitOwnerId === game.user.id;
+
+    const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
+    const actorOwnerId = actorLinks[actorAssignmentUuid(token.actor, token.actorId)];
+    if (actorOwnerId) return actorOwnerId === game.user.id;
+    return Boolean(token.actor?.testUserPermission?.(game.user, "OWNER"));
+}
+
 async function openTokenOwnerDialog(token) {
     if (!game.user.isGM) return;
     const users = Array.from(game.users ?? []).sort((left, right) =>
@@ -1062,7 +1081,8 @@ function getTargetForUser(user) {
         uuid = tokenUuid(localTarget);
         runtime.targetByUser.set(user.id, uuid || null);
     }
-    return uuid ? resolveToken(uuid) : null;
+    const target = uuid ? resolveToken(uuid) : null;
+    return !game.user.isGM && target?.hidden ? null : target;
 }
 
 function getSceneTokens() {

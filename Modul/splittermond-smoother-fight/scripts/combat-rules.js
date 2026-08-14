@@ -136,6 +136,10 @@ export function normalizeSearchText(value) {
         .trim();
 }
 
+export function mayViewActorResources(isGm, hasObserverPermission) {
+    return Boolean(isGm || hasObserverPermission);
+}
+
 export function combatMessageKind(message) {
     const type = message?.type;
     const modelName = message?.system?.constructor?.name;

@@ -57,6 +57,7 @@
       "Target": "Ausgewähltes Ziel",
       "NoTarget": "Noch kein Ziel ausgewählt",
       "NoTargetDetail": "Mit T ein Ziel markieren oder das Zielmenü verwenden.",
+      "YouAreTarget": "Du bist das Ziel",
       "NoOwner": "Nur Owner dieses Tokens können Aktionen ausführen.",
       "Skills": "Fertigkeiten",
       "Spells": "Zauber",
