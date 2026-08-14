@@ -1,0 +1,80 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+    calculateActiveDefenseValue,
+    findDefensiveFeatureValue,
+    linkMatchesCombatant,
+    recalculateAttackReport,
+    totalDegreesOfSuccess,
+} from "../Modul/splittermond-smoother-fight/scripts/combat-rules.js";
+
+function attackReport(overrides = {}) {
+    return {
+        roll: { total: 26, dice: [{ total: 12 }] },
+        skill: { points: 6 },
+        difficulty: 18,
+        succeeded: true,
+        isFumble: false,
+        isCrit: false,
+        degreeOfSuccess: { fromRoll: 2, modification: 0 },
+        maneuvers: [],
+        ...overrides,
+    };
+}
+
+test("successful active defense increases the base defense by 1 + EG + Defensiv", () => {
+    const value = calculateActiveDefenseValue({
+        baseDefense: 20,
+        succeeded: true,
+        degreeOfSuccess: { fromRoll: 2, modification: 1 },
+    }, 2);
+    assert.equal(value, 26);
+});
+
+test("failed active defense leaves the base defense unchanged", () => {
+    assert.equal(calculateActiveDefenseValue({ baseDefense: 20, succeeded: false }, 3), 20);
+});
+
+test("attack is recalculated against the improved defense", () => {
+    const result = recalculateAttackReport(attackReport(), 24);
+    assert.equal(result.succeeded, true);
+    assert.equal(result.difficulty, 24);
+    assert.equal(result.degreeOfSuccess.fromRoll, 0);
+});
+
+test("active defense can turn an attack into a failure", () => {
+    const result = recalculateAttackReport(attackReport(), 27);
+    assert.equal(result.succeeded, false);
+    assert.equal(result.degreeOfSuccess.fromRoll, 0);
+});
+
+test("critical and fumble modifiers remain compatible with Splittermond", () => {
+    const critical = recalculateAttackReport(attackReport({ isCrit: true }), 20);
+    assert.equal(critical.degreeOfSuccess.fromRoll, 5);
+
+    const fumble = recalculateAttackReport(attackReport({ isFumble: true }), 18);
+    assert.equal(fumble.succeeded, false);
+    assert.equal(fumble.degreeOfSuccess.fromRoll, -1);
+});
+
+test("grazing hit penalty is recalculated from selected maneuvers", () => {
+    const result = recalculateAttackReport(attackReport({ maneuvers: [{}, {}] }), 24);
+    assert.equal(result.grazingHitPenalty, 4);
+    assert.equal(totalDegreesOfSuccess(result), 0);
+});
+
+test("Defensiv is found in serialized feature lists", () => {
+    assert.equal(findDefensiveFeatureValue({
+        itemFeatures: { internalFeatureList: [{ name: "Defensiv", value: 2 }] },
+    }), 2);
+});
+
+test("token mapping prefers exact token or actor matches", () => {
+    const combatant = {
+        token: { uuid: "Scene.s1.Token.t1" },
+        actor: { uuid: "Actor.a1", id: "a1" },
+    };
+    assert.equal(linkMatchesCombatant({ tokenUuid: "Scene.s1.Token.t1" }, combatant), true);
+    assert.equal(linkMatchesCombatant({ actorUuid: "Actor.a1" }, combatant), true);
+    assert.equal(linkMatchesCombatant({ actorId: "other" }, combatant), false);
+});

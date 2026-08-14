@@ -1,0 +1,699 @@
+:root {
+    --sf-bg: rgba(5, 15, 18, 0.94);
+    --sf-bg-soft: rgba(9, 31, 34, 0.92);
+    --sf-line: rgba(117, 191, 186, 0.26);
+    --sf-gold: #d8a85d;
+    --sf-gold-bright: #f2ce87;
+    --sf-teal: #6cc9c1;
+    --sf-text: #eef4ef;
+    --sf-muted: #9caaa5;
+    --sf-danger: #c65d55;
+}
+
+#splittermond-smoother-fight-hud.sf-hud {
+    position: fixed;
+    z-index: 80;
+    left: 92px;
+    right: 326px;
+    bottom: 10px;
+    max-width: 1220px;
+    margin-inline: auto;
+    color: var(--sf-text);
+    font-family: var(--font-primary, "Signika", sans-serif);
+    filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.48));
+    pointer-events: none;
+    transition: opacity 160ms ease, transform 160ms ease;
+}
+
+#splittermond-smoother-fight-hud.is-hidden {
+    display: none;
+}
+
+#splittermond-smoother-fight-hud .sf-shell,
+#splittermond-smoother-fight-hud .sf-gm-targets {
+    pointer-events: auto;
+}
+
+#splittermond-smoother-fight-hud .sf-shell {
+    display: grid;
+    grid-template-columns: 146px minmax(330px, 1fr) 146px;
+    align-items: end;
+    gap: 6px;
+}
+
+#splittermond-smoother-fight-hud .sf-center {
+    min-width: 0;
+    border: 1px solid var(--sf-line);
+    border-radius: 8px 8px 3px 3px;
+    background:
+        linear-gradient(130deg, rgba(22, 65, 66, 0.22), transparent 44%),
+        var(--sf-bg);
+    backdrop-filter: blur(14px);
+    overflow: visible;
+}
+
+#splittermond-smoother-fight-hud .sf-turnline {
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    color: var(--sf-muted);
+    font-size: 12px;
+    border-bottom: 1px solid var(--sf-line);
+    letter-spacing: 0.02em;
+}
+
+#splittermond-smoother-fight-hud .sf-turnline strong {
+    color: var(--sf-text);
+    font-size: 14px;
+}
+
+#splittermond-smoother-fight-hud .sf-turn-target {
+    margin-left: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-turn-target i {
+    color: var(--sf-gold);
+    margin-right: 3px;
+}
+
+#splittermond-smoother-fight-hud .sf-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--sf-teal);
+    box-shadow: 0 0 0 4px rgba(108, 201, 193, 0.12), 0 0 10px var(--sf-teal);
+}
+
+#splittermond-smoother-fight-hud .sf-portrait {
+    position: relative;
+    min-height: 174px;
+    border: 1px solid var(--sf-line);
+    border-radius: 8px 8px 3px 3px;
+    background: var(--sf-bg);
+    backdrop-filter: blur(14px);
+    overflow: hidden;
+    pointer-events: auto;
+}
+
+#splittermond-smoother-fight-hud .sf-portrait[role="button"] {
+    cursor: pointer;
+}
+
+#splittermond-smoother-fight-hud .sf-portrait[role="button"]:hover {
+    border-color: var(--sf-gold);
+}
+
+#splittermond-smoother-fight-hud .sf-portrait-image {
+    height: 102px;
+    background-image:
+        linear-gradient(to top, rgba(5, 15, 18, 0.84), transparent 48%),
+        var(--sf-token-image);
+    background-size: cover;
+    background-position: center 26%;
+}
+
+#splittermond-smoother-fight-hud .sf-eyebrow {
+    position: absolute;
+    top: 7px;
+    left: 7px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.68);
+    color: var(--sf-gold-bright);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-target .sf-eyebrow {
+    left: auto;
+    right: 7px;
+}
+
+#splittermond-smoother-fight-hud .sf-portrait-name {
+    position: relative;
+    margin-top: -23px;
+    padding: 4px 7px 6px;
+    text-align: center;
+    font-family: var(--font-secondary, serif);
+    font-weight: 700;
+    text-shadow: 0 1px 4px #000;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-defense-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid var(--sf-line);
+    border-bottom: 1px solid var(--sf-line);
+}
+
+#splittermond-smoother-fight-hud .sf-defense-row span {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 1px;
+    font-weight: 700;
+}
+
+#splittermond-smoother-fight-hud .sf-defense-row span + span {
+    border-left: 1px solid var(--sf-line);
+}
+
+#splittermond-smoother-fight-hud .sf-defense-row small {
+    color: var(--sf-muted);
+    font-size: 8px;
+}
+
+#splittermond-smoother-fight-hud .sf-resources {
+    display: grid;
+    gap: 3px;
+    padding: 5px;
+}
+
+#splittermond-smoother-fight-hud .sf-resource {
+    position: relative;
+    height: 9px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: #1b2626;
+}
+
+#splittermond-smoother-fight-hud .sf-resource > span {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #78372f, #c75a4e);
+}
+
+#splittermond-smoother-fight-hud .sf-resource-focus > span {
+    background: linear-gradient(90deg, #315979, #549cca);
+}
+
+#splittermond-smoother-fight-hud .sf-resource small {
+    position: absolute;
+    inset: -2px 3px auto auto;
+    font-size: 8px;
+    line-height: 12px;
+    text-shadow: 0 1px 2px #000;
+}
+
+#splittermond-smoother-fight-hud .sf-no-target {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    color: var(--sf-muted);
+    text-align: center;
+    border-style: dashed;
+}
+
+#splittermond-smoother-fight-hud .sf-no-target strong {
+    color: var(--sf-text);
+    margin-top: 8px;
+}
+
+#splittermond-smoother-fight-hud .sf-no-target small {
+    font-size: 10px;
+    margin-top: 4px;
+}
+
+#splittermond-smoother-fight-hud .sf-target-rings {
+    width: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(216, 168, 93, 0.42);
+    border-radius: 50%;
+    color: var(--sf-gold);
+    font-size: 24px;
+    box-shadow: inset 0 0 20px rgba(216, 168, 93, 0.08);
+}
+
+#splittermond-smoother-fight-hud .sf-actions {
+    display: flex;
+    align-items: stretch;
+    min-height: 49px;
+    border-bottom: 1px solid var(--sf-line);
+}
+
+#splittermond-smoother-fight-hud details > summary {
+    list-style: none;
+}
+
+#splittermond-smoother-fight-hud details > summary::-webkit-details-marker {
+    display: none;
+}
+
+#splittermond-smoother-fight-hud .sf-action-menu {
+    position: relative;
+    flex: 1;
+    min-width: 88px;
+}
+
+#splittermond-smoother-fight-hud .sf-action-menu + .sf-action-menu {
+    border-left: 1px solid var(--sf-line);
+}
+
+#splittermond-smoother-fight-hud .sf-action-menu > summary {
+    height: 49px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    cursor: pointer;
+    color: var(--sf-text);
+    font-family: var(--font-secondary, serif);
+    font-weight: 700;
+    transition: color 120ms ease, background 120ms ease;
+}
+
+#splittermond-smoother-fight-hud .sf-action-menu > summary:hover,
+#splittermond-smoother-fight-hud .sf-action-menu[open] > summary {
+    color: var(--sf-gold-bright);
+    background: rgba(108, 201, 193, 0.08);
+}
+
+#splittermond-smoother-fight-hud .sf-action-menu > summary > i:first-child {
+    color: var(--sf-gold);
+    font-size: 17px;
+}
+
+#splittermond-smoother-fight-hud .sf-chevron {
+    color: var(--sf-muted);
+    font-size: 8px;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover {
+    position: absolute;
+    z-index: 20;
+    left: 0;
+    bottom: 100%;
+    width: max(250px, 100%);
+    max-height: min(440px, 52vh);
+    overflow: auto;
+    padding: 5px;
+    border: 1px solid var(--sf-line);
+    border-radius: 6px 6px 0 0;
+    background: rgba(5, 15, 18, 0.98);
+    box-shadow: 0 -14px 32px rgba(0, 0, 0, 0.42);
+}
+
+#splittermond-smoother-fight-hud .sf-action-menu:nth-child(n+3) .sf-action-popover {
+    left: auto;
+    right: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button,
+#splittermond-smoother-fight-hud .sf-gm-targets > div button {
+    width: 100%;
+    min-height: 35px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 4px 7px;
+    border: 0;
+    border-radius: 3px;
+    color: var(--sf-text);
+    background: transparent;
+    text-align: left;
+    line-height: 1.1;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button:hover:not(:disabled),
+#splittermond-smoother-fight-hud .sf-gm-targets > div button:hover,
+#splittermond-smoother-fight-hud .sf-gm-targets > div button.is-current {
+    background: rgba(108, 201, 193, 0.14);
+    color: var(--sf-gold-bright);
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button:disabled {
+    opacity: 0.38;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button + button {
+    border-top: 1px solid rgba(117, 191, 186, 0.1);
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button img,
+#splittermond-smoother-fight-hud .sf-gm-targets img {
+    width: 28px;
+    height: 28px;
+    object-fit: cover;
+    border: 0;
+    border-radius: 3px;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button span {
+    display: flex;
+    flex-direction: column;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button small {
+    color: var(--sf-muted);
+    margin-top: 2px;
+    font-size: 9px;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button b {
+    color: var(--sf-gold-bright);
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button.is-prepared {
+    box-shadow: inset 3px 0 var(--sf-gold);
+    background: rgba(216, 168, 93, 0.09);
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button.is-unequipped {
+    opacity: 0.55;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover h4 {
+    margin: 7px 5px 3px;
+    color: var(--sf-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+#splittermond-smoother-fight-hud .sf-defense-pills {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 8px;
+    border-left: 1px solid var(--sf-line);
+}
+
+#splittermond-smoother-fight-hud .sf-defense-pills span {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: var(--sf-muted);
+    font-size: 8px;
+}
+
+#splittermond-smoother-fight-hud .sf-defense-pills b {
+    color: var(--sf-text);
+    font-size: 15px;
+}
+
+#splittermond-smoother-fight-hud .sf-owner-note {
+    min-height: 49px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin: 0;
+    color: var(--sf-muted);
+    border-bottom: 1px solid var(--sf-line);
+}
+
+#splittermond-smoother-fight-hud .sf-events {
+    max-height: min(330px, 40vh);
+    transition: max-height 160ms ease;
+}
+
+#splittermond-smoother-fight-hud .sf-events.is-collapsed {
+    max-height: 32px;
+    overflow: hidden;
+}
+
+#splittermond-smoother-fight-hud .sf-events-heading {
+    width: 100%;
+    height: 31px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0;
+    padding: 4px 9px;
+    border: 0;
+    border-radius: 0;
+    color: var(--sf-muted);
+    background: rgba(0, 0, 0, 0.16);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-events-heading span {
+    display: flex;
+    gap: 6px;
+}
+
+#splittermond-smoother-fight-hud .sf-event-scroller {
+    max-height: min(298px, calc(40vh - 32px));
+    overflow: auto;
+    scrollbar-width: thin;
+}
+
+#splittermond-smoother-fight-hud .sf-events-empty {
+    margin: 0;
+    padding: 16px;
+    color: var(--sf-muted);
+    text-align: center;
+    font-size: 11px;
+}
+
+#splittermond-smoother-fight-hud .sf-event-group + .sf-event-group {
+    border-top: 1px solid var(--sf-line);
+}
+
+#splittermond-smoother-fight-hud .sf-event-group > summary {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
+    color: var(--sf-muted);
+    cursor: pointer;
+    font-size: 11px;
+}
+
+#splittermond-smoother-fight-hud .sf-event-group > summary > i {
+    margin-left: auto;
+}
+
+#splittermond-smoother-fight-hud .sf-event-badge {
+    padding: 2px 6px;
+    border-radius: 8px;
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.12);
+    font-size: 9px;
+}
+
+#splittermond-smoother-fight-hud .sf-event-badge i {
+    margin-right: 3px;
+}
+
+#splittermond-smoother-fight-hud .sf-event-badge.is-muted {
+    color: var(--sf-muted);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+#splittermond-smoother-fight-hud .sf-event-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 7px;
+    padding: 3px 7px 8px;
+    align-items: start;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message {
+    min-width: 0;
+    margin: 0;
+    padding: 7px;
+    border: 1px solid rgba(117, 191, 186, 0.16);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--sf-text);
+    font-size: 11px;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .message-content {
+    overflow: visible;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message button {
+    pointer-events: auto;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .chat-message-header img {
+    width: 36px;
+    height: 36px;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message h2,
+#splittermond-smoother-fight-hud .sf-chat-message h3 {
+    color: var(--sf-text);
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card > h4 {
+    margin: 0 0 3px;
+    color: var(--sf-gold-bright);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card > h4 i {
+    margin-right: 4px;
+}
+
+.sf-chat-recalculated {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    padding: 5px 7px;
+    border: 1px solid rgba(216, 168, 93, 0.4);
+    border-radius: 3px;
+    color: #f2ce87;
+    background: rgba(216, 168, 93, 0.1);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+#splittermond-smoother-fight-hud .sf-gm-targets {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+}
+
+#splittermond-smoother-fight-hud .sf-gm-targets > summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 9px;
+    border: 1px solid var(--sf-line);
+    border-radius: 5px;
+    color: var(--sf-gold-bright);
+    background: var(--sf-bg);
+    cursor: pointer;
+    font-size: 11px;
+}
+
+#splittermond-smoother-fight-hud .sf-gm-targets > div {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 3px);
+    width: 230px;
+    max-height: 360px;
+    overflow: auto;
+    padding: 5px;
+    border: 1px solid var(--sf-line);
+    border-radius: 5px;
+    background: rgba(5, 15, 18, 0.98);
+}
+
+#splittermond-smoother-fight-hud .sf-gm-targets p {
+    margin: 0;
+    padding: 8px;
+    color: var(--sf-muted);
+    font-size: 11px;
+}
+
+#token-action-bar.sf-system-bar-hidden {
+    display: none !important;
+}
+
+.sf-settings-form {
+    padding: 12px;
+}
+
+.sf-settings-list {
+    display: grid;
+    gap: 6px;
+    margin-block: 12px;
+}
+
+.sf-settings-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.7fr) minmax(250px, 1.3fr);
+    gap: 12px;
+    align-items: center;
+    padding: 7px;
+    border: 1px solid var(--color-border-light-tertiary);
+    border-radius: 4px;
+}
+
+.sf-settings-user {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-weight: 700;
+}
+
+.sf-settings-user small {
+    color: var(--color-text-subtle);
+}
+
+.sf-user-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #777;
+}
+
+.sf-user-dot.is-online {
+    background: #55b86d;
+    box-shadow: 0 0 5px #55b86d;
+}
+
+@media (max-width: 1120px) {
+    #splittermond-smoother-fight-hud.sf-hud {
+        left: 76px;
+        right: 310px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-shell {
+        grid-template-columns: 114px minmax(280px, 1fr) 114px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait {
+        min-height: 148px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait-image {
+        height: 80px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-action-menu > summary span,
+    #splittermond-smoother-fight-hud .sf-defense-pills {
+        display: none;
+    }
+}
+
+@media (max-width: 820px) {
+    #splittermond-smoother-fight-hud.sf-hud {
+        left: 6px;
+        right: 6px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-shell {
+        grid-template-columns: 86px minmax(230px, 1fr) 86px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait {
+        min-height: 116px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait-image {
+        height: 65px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-defense-row,
+    #splittermond-smoother-fight-hud .sf-resources,
+    #splittermond-smoother-fight-hud .sf-turn-target {
+        display: none;
+    }
+}

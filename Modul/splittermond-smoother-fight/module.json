@@ -1,0 +1,46 @@
+{
+  "id": "splittermond-smoother-fight",
+  "title": "Splittermond: Smoother Fight",
+  "description": "Ein kompaktes Kampf-HUD mit aktivem Kämpfer, Ziel, Systemaktionen, Chatkarten und aktiver Abwehr für Splittermond.",
+  "version": "0.1.0",
+  "authors": [
+    {
+      "name": "Pad"
+    }
+  ],
+  "compatibility": {
+    "minimum": "14",
+    "verified": "14",
+    "maximum": "14"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "splittermond",
+        "type": "system",
+        "compatibility": {
+          "minimum": "14"
+        }
+      }
+    ]
+  },
+  "esmodules": [
+    "scripts/smoother-fight.js"
+  ],
+  "styles": [
+    "styles/smoother-fight.css"
+  ],
+  "languages": [
+    {
+      "lang": "de",
+      "name": "Deutsch",
+      "path": "lang/de.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "socket": true
+}

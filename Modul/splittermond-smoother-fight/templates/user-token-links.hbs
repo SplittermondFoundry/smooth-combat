@@ -1,0 +1,34 @@
+<form class="sf-settings-form">
+    <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.LinksHint"}}</p>
+
+    <div class="sf-settings-list">
+        {{#each users}}
+            <label class="sf-settings-row">
+                <span class="sf-settings-user">
+                    <span class="sf-user-dot {{#if this.active}}is-online{{/if}}"></span>
+                    {{this.name}}
+                    {{#if this.isGM}}<small>GM</small>{{/if}}
+                </span>
+                <select data-user-id="{{this.id}}">
+                    <option value="">{{localize "SMOOTHER_FIGHT.Settings.Automatic"}}</option>
+                    {{#each ../tokens}}
+                        <option value="{{this.uuid}}" {{#if (eq this.uuid ../selected)}}selected{{/if}}>
+                            {{this.label}}
+                        </option>
+                    {{/each}}
+                </select>
+            </label>
+        {{/each}}
+    </div>
+
+    {{#unless tokens.length}}
+        <p class="notification warning">{{localize "SMOOTHER_FIGHT.Settings.NoTokens"}}</p>
+    {{/unless}}
+
+    <footer class="form-footer">
+        <button type="button" data-action="save-links">
+            <i class="fa-solid fa-floppy-disk"></i>
+            {{localize "SMOOTHER_FIGHT.Settings.Save"}}
+        </button>
+    </footer>
+</form>
