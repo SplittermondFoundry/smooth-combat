@@ -110,6 +110,24 @@ export function normalizeUserTokenLinks(value, fallbackUserId = null) {
     return result;
 }
 
+export function normalizeActorUserLinks(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value)
+        .filter(([actorUuid, userId]) =>
+            typeof actorUuid === "string"
+            && actorUuid.length > 0
+            && actorUuid !== "__proto__"
+            && actorUuid !== "constructor"
+            && typeof userId === "string"
+            && userId.length > 0
+        ));
+}
+
+export function actorLinkUuid(actorUuid, actorId = null) {
+    if (typeof actorUuid === "string" && actorUuid.startsWith("Actor.")) return actorUuid;
+    return actorId ? `Actor.${actorId}` : actorUuid ?? "";
+}
+
 export function combatMessageKind(message) {
     const type = message?.type;
     const modelName = message?.system?.constructor?.name;

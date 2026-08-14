@@ -1,9 +1,11 @@
 import {
+    actorLinkUuid,
     calculateActiveDefenseValue,
     combatMessageKind,
     findDefensiveFeatureValue,
     fullyConsumedCost,
     linkMatchesCombatant,
+    normalizeActorUserLinks,
     normalizeUserTokenLinks,
     parseStatusEffectLabel,
     recalculateAttackReport,
@@ -101,6 +103,13 @@ function registerSettings() {
         default: {},
         onChange: rerender,
     });
+    game.settings.register(MODULE_ID, "actorUserLinks", {
+        scope: "world",
+        config: false,
+        type: Object,
+        default: {},
+        onChange: rerender,
+    });
     game.settings.register(MODULE_ID, "primaryGmId", {
         scope: "world",
         config: false,
@@ -137,19 +146,23 @@ function registerSettingsMenu() {
             const context = await super._prepareContext(options);
             const primaryGmId = getSetting("primaryGmId", "");
             const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}), primaryGmId);
+            const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
             const tokens = getSceneTokens().map((token) => ({
                 uuid: token.uuid,
-                actorUuid: token.actor?.uuid ?? null,
-                actorId: token.actor?.id ?? null,
+                actorUuid: actorAssignmentUuid(token.actor, token.actorId),
+                actorId: token.actorId ?? token.actor?.id ?? null,
                 label: `${token.name} — ${token.actor?.name ?? "–"}`,
             }));
             const allUsers = Array.from(game.users ?? []);
+            const validUserIds = new Set(allUsers.map((user) => user.id));
             const orderedUserIds = allUsers
                 .map((user) => user.id)
                 .sort((leftId, rightId) => leftId === primaryGmId ? 1 : rightId === primaryGmId ? -1 : 0);
-            const ownerByToken = new Map(tokens.map((token) => {
+            const explicitOwnerByToken = new Map(tokens.map((token) => {
                 const ownerId = orderedUserIds.find((userId) =>
-                    (links[userId] ?? []).some((link) => settingsLinkMatchesToken(link, token, tokens))
+                    (links[userId] ?? []).some((link) => link.tokenUuid === token.uuid)
+                ) ?? orderedUserIds.find((userId) =>
+                    (links[userId] ?? []).some((link) => !link.tokenUuid && settingsLinkMatchesToken(link, token))
                 );
                 return [token.uuid, ownerId ?? null];
             }));
@@ -159,11 +172,18 @@ function registerSettingsMenu() {
                     name: user.name,
                     active: user.active,
                     isGM: user.isGM,
-                    tokens: tokens.map((token) => ({
-                        ...token,
-                        selected: ownerByToken.get(token.uuid) === user.id || (!ownerByToken.get(token.uuid) && primaryGmId === user.id),
-                        automatic: !ownerByToken.get(token.uuid) && primaryGmId === user.id,
-                    })),
+                    tokens: tokens.map((token) => {
+                        const explicitOwnerId = explicitOwnerByToken.get(token.uuid);
+                        const actorOwnerId = validUserIds.has(actorLinks[token.actorUuid]) ? actorLinks[token.actorUuid] : null;
+                        const inherited = !explicitOwnerId && actorOwnerId === user.id;
+                        const automatic = !explicitOwnerId && !actorOwnerId && primaryGmId === user.id;
+                        return {
+                            ...token,
+                            selected: explicitOwnerId === user.id || inherited || automatic,
+                            inherited,
+                            automatic,
+                        };
+                    }),
                 };
             });
             const gms = allUsers.filter((user) => user.isGM).map((user) => ({
@@ -171,29 +191,59 @@ function registerSettingsMenu() {
                 name: user.name,
                 selected: user.id === primaryGmId,
             }));
-            return { ...context, users, gms, hasTokens: tokens.length > 0 };
+            const actors = Array.from(game.actors ?? [])
+                .filter((actor) => ["character", "npc"].includes(actor.type))
+                .sort(sortByName)
+                .map((actor) => ({
+                    uuid: actor.uuid,
+                    name: actor.name,
+                    img: actor.img ?? "icons/svg/mystery-man.svg",
+                    typeLabel: actor.type === "npc"
+                        ? t("SMOOTHER_FIGHT.Settings.NpcSheet")
+                        : t("SMOOTHER_FIGHT.Settings.CharacterSheet"),
+                    users: allUsers.map((user) => ({
+                        id: user.id,
+                        name: user.name,
+                        isGM: user.isGM,
+                        selected: actorLinks[actor.uuid] === user.id,
+                    })),
+                }));
+            return {
+                ...context,
+                users,
+                gms,
+                actors,
+                hasActors: actors.length > 0,
+                hasTokens: tokens.length > 0,
+            };
         }
 
         async _onRender(context, options) {
             await super._onRender(context, options);
             const primaryGmSelect = this.element.querySelector('[data-role="primary-gm"]');
+            const actorAssignmentSelects = () => Array.from(this.element.querySelectorAll('select[data-actor-uuid]'));
             const assignmentInputs = () => Array.from(this.element.querySelectorAll('input[type="checkbox"][data-user-id][data-token-uuid]'));
-            const refreshAutomaticAssignments = () => {
+            const refreshFallbackAssignments = () => {
                 for (const input of assignmentInputs()) {
-                    if (input.dataset.automatic !== "true") continue;
+                    if (input.dataset.automatic !== "true" && input.dataset.inherited !== "true") continue;
                     input.checked = false;
                     delete input.dataset.automatic;
+                    delete input.dataset.inherited;
                 }
                 const primaryGmId = primaryGmSelect?.value ?? "";
-                if (!primaryGmId) return;
                 const tokenUuids = new Set(assignmentInputs().map((input) => input.dataset.tokenUuid));
                 for (const tokenUuid of tokenUuids) {
                     const inputs = assignmentInputs().filter((input) => input.dataset.tokenUuid === tokenUuid);
                     if (inputs.some((input) => input.checked)) continue;
-                    const fallback = inputs.find((input) => input.dataset.userId === primaryGmId);
+                    const actorUuid = inputs[0]?.dataset.actorUuid ?? "";
+                    const actorOwnerId = actorAssignmentSelects()
+                        .find((select) => select.dataset.actorUuid === actorUuid)?.value ?? "";
+                    const fallbackUserId = actorOwnerId || primaryGmId;
+                    if (!fallbackUserId) continue;
+                    const fallback = inputs.find((input) => input.dataset.userId === fallbackUserId);
                     if (!fallback) continue;
                     fallback.checked = true;
-                    fallback.dataset.automatic = "true";
+                    fallback.dataset[actorOwnerId ? "inherited" : "automatic"] = "true";
                 }
             };
             for (const checkbox of assignmentInputs()) {
@@ -203,17 +253,25 @@ function registerSettingsMenu() {
                             if (other !== checkbox && other.dataset.tokenUuid === checkbox.dataset.tokenUuid) other.checked = false;
                         }
                     }
-                    refreshAutomaticAssignments();
+                    refreshFallbackAssignments();
                 });
             }
-            primaryGmSelect?.addEventListener("change", refreshAutomaticAssignments);
+            for (const select of actorAssignmentSelects()) select.addEventListener("change", refreshFallbackAssignments);
+            primaryGmSelect?.addEventListener("change", refreshFallbackAssignments);
             this.element.querySelector('[data-action="save-links"]')?.addEventListener("click", async () => {
                 const links = {};
                 for (const user of game.users ?? []) links[user.id] = [];
                 const primaryGmId = primaryGmSelect?.value ?? "";
+                const actorLinks = Object.fromEntries(actorAssignmentSelects()
+                    .filter((select) => select.value)
+                    .map((select) => [select.dataset.actorUuid, select.value]));
                 const claimed = new Set();
                 const checked = assignmentInputs()
-                    .filter((checkbox) => checkbox.checked && checkbox.dataset.automatic !== "true")
+                    .filter((checkbox) =>
+                        checkbox.checked
+                        && checkbox.dataset.automatic !== "true"
+                        && checkbox.dataset.inherited !== "true"
+                    )
                     .sort((left, right) => left.dataset.userId === primaryGmId ? 1 : right.dataset.userId === primaryGmId ? -1 : 0);
                 for (const checkbox of checked) {
                     if (claimed.has(checkbox.dataset.tokenUuid)) continue;
@@ -223,11 +281,12 @@ function registerSettingsMenu() {
                     links[checkbox.dataset.userId] ??= [];
                     links[checkbox.dataset.userId].push({
                         tokenUuid: checkbox.value,
-                        actorUuid: token?.actor?.uuid ?? null,
-                        actorId: token?.actor?.id ?? null,
+                        actorUuid: actorAssignmentUuid(token?.actor, token?.actorId),
+                        actorId: token?.actorId ?? token?.actor?.id ?? null,
                         label: token?.name ?? checkbox.value,
                     });
                 }
+                await game.settings.set(MODULE_ID, "actorUserLinks", actorLinks);
                 await game.settings.set(MODULE_ID, "primaryGmId", primaryGmId);
                 await game.settings.set(MODULE_ID, "userTokenLinks", links);
                 ui.notifications.info(t("SMOOTHER_FIGHT.Settings.Saved"));
@@ -284,6 +343,7 @@ function registerHooks() {
 
     Hooks.on("renderChatMessageHTML", (message, html) => prepareRenderedChatMessage(message, html));
     Hooks.on("renderChatMessage", (message, html) => prepareRenderedChatMessage(message, asElement(html)));
+    Hooks.on("renderTokenHUD", (app, html) => renderTokenOwnerControl(app, html));
 }
 
 function registerSocket() {
@@ -769,9 +829,18 @@ function getLinkedUser(combatant, actor) {
     const assignments = Object.entries(links).sort(([leftId], [rightId]) =>
         leftId === primaryGmId ? 1 : rightId === primaryGmId ? -1 : 0
     );
-    const exact = assignments.find(([, userLinks]) => userLinks.some((link) => linkMatchesCombatant(link, combatant)));
+    const combatantTokenUuid = combatant.token?.uuid ?? combatant.tokenUuid ?? null;
+    const exact = assignments.find(([, userLinks]) =>
+        userLinks.some((link) => link.tokenUuid && link.tokenUuid === combatantTokenUuid)
+    ) ?? assignments.find(([, userLinks]) =>
+        userLinks.some((link) => !link.tokenUuid && linkMatchesCombatant(link, combatant))
+    );
     const explicitlyLinkedUser = exact ? game.users.get(exact[0]) : null;
     if (explicitlyLinkedUser) return explicitlyLinkedUser;
+
+    const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
+    const actorLinkedUser = game.users.get(actorLinks[actorAssignmentUuid(actor, combatant.actorId)]);
+    if (actorLinkedUser) return actorLinkedUser;
 
     const primaryGm = game.users.get(primaryGmId);
     if (primaryGm?.isGM) return primaryGm;
@@ -781,12 +850,155 @@ function getLinkedUser(combatant, actor) {
     return owners.find((user) => user.active) ?? owners[0] ?? (game.user.isGM ? game.user : null);
 }
 
-function settingsLinkMatchesToken(link, token, sceneTokens) {
-    if (link.tokenUuid === token.uuid) return true;
-    const linkedTokenStillExists = sceneTokens.some((candidate) => candidate.uuid === link.tokenUuid);
-    if (linkedTokenStillExists) return false;
+function settingsLinkMatchesToken(link, token) {
+    if (link.tokenUuid) return link.tokenUuid === token.uuid;
     if (link.actorUuid && token.actorUuid) return link.actorUuid === token.actorUuid;
     return Boolean(link.actorId && token.actorId && link.actorId === token.actorId);
+}
+
+function actorAssignmentUuid(actor, sourceActorId = null) {
+    return actorLinkUuid(actor?.uuid, sourceActorId ?? actor?.id);
+}
+
+function renderTokenOwnerControl(app, html) {
+    if (!game.user.isGM) return;
+    const root = asElement(html);
+    const tokenObject = app?.object ?? app?.token ?? null;
+    const token = tokenObject?.document ?? tokenObject;
+    if (!root || !token?.uuid || !token?.actor) return;
+
+    root.querySelector(".sf-token-owner-control")?.remove();
+    const column = root.querySelector(".col.right") ?? root.querySelector(".right") ?? root;
+    const explicitOwnerId = getExplicitTokenOwnerId(token);
+    const effectiveOwner = getEffectiveTokenOwner(token);
+    const control = document.createElement("div");
+    control.className = `control-icon sf-token-owner-control${explicitOwnerId ? " active" : ""}`;
+    control.dataset.action = "smoother-fight-assign-owner";
+    control.dataset.tooltip = t("SMOOTHER_FIGHT.Settings.TokenAssignControl", {
+        owner: effectiveOwner?.name ?? t("SMOOTHER_FIGHT.Settings.Unassigned"),
+    });
+    control.setAttribute("aria-label", control.dataset.tooltip);
+    control.innerHTML = '<i class="fa-solid fa-user-tag"></i>';
+    control.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void openTokenOwnerDialog(token);
+    });
+    column.append(control);
+}
+
+function getExplicitTokenOwnerId(token) {
+    const primaryGmId = getSetting("primaryGmId", "");
+    const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}), primaryGmId);
+    return Object.entries(links)
+        .find(([, userLinks]) => userLinks.some((link) => link.tokenUuid === token.uuid))?.[0] ?? "";
+}
+
+function getEffectiveTokenOwner(token) {
+    const explicitOwner = game.users.get(getExplicitTokenOwnerId(token));
+    if (explicitOwner) return explicitOwner;
+    const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
+    const actorOwner = game.users.get(actorLinks[actorAssignmentUuid(token.actor, token.actorId)]);
+    if (actorOwner) return actorOwner;
+    const primaryGm = game.users.get(getSetting("primaryGmId", ""));
+    if (primaryGm?.isGM) return primaryGm;
+    const owners = Array.from(game.users ?? [])
+        .filter((user) => !user.isGM && token.actor?.testUserPermission?.(user, "OWNER"));
+    return owners.find((user) => user.active) ?? owners[0] ?? null;
+}
+
+async function openTokenOwnerDialog(token) {
+    if (!game.user.isGM) return;
+    const users = Array.from(game.users ?? []).sort((left, right) =>
+        Number(left.isGM) - Number(right.isGM) || sortByName(left, right)
+    );
+    if (!users.length) return;
+
+    const explicitOwnerId = getExplicitTokenOwnerId(token);
+    const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
+    const actorOwner = game.users.get(actorLinks[actorAssignmentUuid(token.actor, token.actorId)]);
+    const primaryGm = game.users.get(getSetting("primaryGmId", ""));
+    const effectiveOwner = getEffectiveTokenOwner(token);
+    const source = explicitOwnerId
+        ? t("SMOOTHER_FIGHT.Settings.DirectTokenAssignment")
+        : actorOwner
+            ? t("SMOOTHER_FIGHT.Settings.SheetAssignment")
+            : primaryGm?.isGM
+                ? t("SMOOTHER_FIGHT.Settings.PrimaryGmAssignment")
+                : t("SMOOTHER_FIGHT.Settings.OwnerAssignment");
+    const options = users.map((user) =>
+        `<option value="${escapeAttr(user.id)}" ${user.id === effectiveOwner?.id ? "selected" : ""}>${escapeHtml(user.name)}${user.isGM ? " (GM)" : ""}</option>`
+    ).join("");
+    const content = `<form class="sf-token-owner-dialog">
+        <p>${escapeHtml(t("SMOOTHER_FIGHT.Settings.TokenAssignHint", { token: token.name }))}</p>
+        <p class="notes"><strong>${escapeHtml(t("SMOOTHER_FIGHT.Settings.CurrentAssignment"))}:</strong>
+            ${escapeHtml(effectiveOwner?.name ?? t("SMOOTHER_FIGHT.Settings.Unassigned"))}
+            <span>(${escapeHtml(source)})</span>
+        </p>
+        <div class="form-group">
+            <label>${escapeHtml(t("SMOOTHER_FIGHT.Settings.User"))}</label>
+            <select name="ownerId">${options}</select>
+        </div>
+    </form>`;
+    const result = await foundry.applications.api.DialogV2.wait({
+        id: `${MODULE_ID}-token-owner-dialog`,
+        window: { title: t("SMOOTHER_FIGHT.Settings.TokenAssignTitle", { token: token.name }) },
+        position: { width: 420 },
+        content,
+        buttons: [
+            {
+                action: "assign",
+                label: t("SMOOTHER_FIGHT.Settings.Assign"),
+                icon: "fa-solid fa-user-check",
+                callback: (_event, button) => button.form.elements.ownerId.value,
+                default: true,
+            },
+            {
+                action: "clear",
+                label: t("SMOOTHER_FIGHT.Settings.ClearDirectAssignment"),
+                icon: "fa-solid fa-rotate-left",
+                callback: () => "",
+            },
+            {
+                action: "cancel",
+                label: t("SMOOTHER_FIGHT.Settings.Cancel"),
+                icon: "fa-solid fa-xmark",
+                callback: () => null,
+            },
+        ],
+        close: () => null,
+        modal: true,
+    });
+    if (result === null || result === undefined) return;
+    await setExplicitTokenOwner(token, result);
+}
+
+async function setExplicitTokenOwner(token, userId) {
+    if (!game.user.isGM || !token?.uuid) return;
+    const primaryGmId = getSetting("primaryGmId", "");
+    const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}), primaryGmId);
+    for (const user of game.users ?? []) links[user.id] ??= [];
+    for (const existingUserId of Object.keys(links)) {
+        links[existingUserId] = links[existingUserId].filter((link) => link.tokenUuid !== token.uuid);
+    }
+
+    const user = game.users.get(userId);
+    if (user) {
+        links[user.id].push({
+            tokenUuid: token.uuid,
+            actorUuid: actorAssignmentUuid(token.actor, token.actorId),
+            actorId: token.actorId ?? token.actor?.id ?? null,
+            label: token.name ?? token.actor?.name ?? token.uuid,
+        });
+    }
+    await game.settings.set(MODULE_ID, "userTokenLinks", links);
+    if (user) {
+        ui.notifications.info(t("SMOOTHER_FIGHT.Settings.TokenAssigned", { token: token.name, user: user.name }));
+    } else {
+        ui.notifications.info(t("SMOOTHER_FIGHT.Settings.TokenAssignmentCleared", { token: token.name }));
+    }
+    scheduleRender();
+    canvas?.hud?.token?.render?.();
 }
 
 function getTargetForUser(user) {

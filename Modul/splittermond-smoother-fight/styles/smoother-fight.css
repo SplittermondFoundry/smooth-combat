@@ -862,6 +862,75 @@
     overscroll-behavior: contain;
 }
 
+.sf-sheet-assignments {
+    display: grid;
+    gap: 5px;
+    padding: 9px;
+    border: 1px solid rgba(108, 201, 193, 0.34);
+    border-radius: 4px;
+    background: rgba(108, 201, 193, 0.05);
+}
+
+.sf-sheet-assignments h3,
+.sf-token-assignment-heading {
+    margin: 0;
+    color: var(--color-text-primary);
+    font-size: 14px;
+}
+
+.sf-sheet-assignments > .notes,
+.sf-settings-list > .notes {
+    margin: 0 0 4px;
+}
+
+.sf-sheet-assignment-list {
+    display: grid;
+    gap: 4px;
+}
+
+.sf-sheet-assignment-row {
+    display: grid;
+    grid-template-columns: 34px minmax(120px, 1fr) minmax(190px, 1.2fr);
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+    padding: 4px;
+    border-radius: 3px;
+}
+
+.sf-sheet-assignment-row:hover {
+    background: rgba(108, 201, 193, 0.1);
+}
+
+.sf-sheet-assignment-row img {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--color-border-light-tertiary);
+    border-radius: 3px;
+    object-fit: cover;
+}
+
+.sf-sheet-assignment-row > span {
+    display: grid;
+    min-width: 0;
+}
+
+.sf-sheet-assignment-row strong,
+.sf-sheet-assignment-row small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sf-sheet-assignment-row small {
+    color: var(--color-text-subtle);
+}
+
+.sf-sheet-assignment-row select {
+    width: 100%;
+    min-width: 0;
+}
+
 .sf-settings-row {
     display: grid;
     grid-template-columns: minmax(150px, 0.7fr) minmax(250px, 1.3fr);
@@ -902,6 +971,27 @@
 .sf-settings-tokens input[data-automatic="true"] + span {
     color: var(--color-text-subtle);
     font-style: italic;
+}
+
+.sf-settings-tokens input[data-inherited="true"] + span {
+    color: var(--sf-teal);
+    font-style: italic;
+}
+
+.placeable-hud .sf-token-owner-control.active {
+    color: var(--sf-gold-bright);
+    box-shadow: 0 0 8px rgba(216, 168, 93, 0.7);
+}
+
+.sf-token-owner-dialog .form-group {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 8px;
+    align-items: center;
+}
+
+.sf-token-owner-dialog select {
+    width: 100%;
 }
 
 .sf-settings-user {

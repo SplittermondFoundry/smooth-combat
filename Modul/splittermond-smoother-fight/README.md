@@ -6,6 +6,9 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 
 - aktiver Combatant mit Tokenbild, VTD/KW/GW sowie Lebens- und Fokusleiste
 - Ziel des dem aktiven Token zugeordneten Spielers; verständlicher Hinweis, wenn kein Ziel gewählt wurde
+- dauerhafte Zuordnung von Charakter- und NSC-Bögen zu Benutzern, die auch für neu erstellte und nicht verknüpfte Tokens gilt
+- eindeutige Token-Ausnahmen sowie Schnellzuweisung über einen zusätzlichen Button im Token-HUD
+- frei bestimmbarer Haupt-GM für alle Bögen und Tokens ohne eigene Zuordnung
 - Aktionen für Owner und GMs: Fertigkeiten, Zauber, Angriffe, Ausrüstung und Aktive Abwehr
 - korrekte Splittermond-Vorbereitung für Fernkampfangriffe und Zauber
 - originale Splittermond-Angriffs- und Zauberkarten im HUD, einschließlich ihrer EG-, Fokus-, Tick-, Schaden- und Anwenden-Buttons
@@ -21,9 +24,9 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 
 ## Installation zum Entwickeln/Testen
 
-Den gesamten Ordner als `splittermond-smoother-fight` in Foundrys `Data/modules` ablegen oder verlinken. Danach Foundry neu starten, das Modul in der Welt aktivieren und unter **Einstellungen → Moduleinstellungen → Spieler und Tokens verknüpfen** die Zuordnungen festlegen.
+Den gesamten Ordner als `splittermond-smoother-fight` in Foundrys `Data/modules` ablegen oder verlinken. Danach Foundry neu starten, das Modul in der Welt aktivieren und unter **Einstellungen → Moduleinstellungen → Spieler, Bögen und Tokens verknüpfen** die Zuordnungen festlegen.
 
-Ohne manuelle Zuordnung wird der erste aktive Nicht-GM mit Owner-Rechten am Akteur verwendet. Einem Spieler können beliebig viele Tokens zugeordnet werden. Die Zuordnung speichert sowohl Token- als auch Akteursbezug; dadurch bleibt sie auch dann brauchbar, wenn derselbe Akteur auf einer späteren Szene mit einem neuen Token eingesetzt wird. Alte Einzelzuordnungen werden automatisch weiterverwendet.
+Eine direkte Token-Zuordnung hat Vorrang vor der Zuordnung seines Charakter- oder NSC-Bogens. Danach greift der festgelegte Haupt-GM und zuletzt die normalen Owner-Rechte des Akteurs. Jeder Bogen und jedes Token kann dabei höchstens einem Benutzer zugeordnet sein; ein Benutzer darf weiterhin beliebig viele davon besitzen. Alte Einzelzuordnungen werden automatisch weiterverwendet.
 
 ## Ablauf Aktive Abwehr
 

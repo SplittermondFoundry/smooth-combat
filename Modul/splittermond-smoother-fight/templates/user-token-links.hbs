@@ -13,6 +13,33 @@
     </section>
 
     <div class="sf-settings-list">
+        <section class="sf-sheet-assignments">
+            <h3><i class="fa-solid fa-address-card"></i> {{localize "SMOOTHER_FIGHT.Settings.SheetAssignments"}}</h3>
+            <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.SheetAssignmentsHint"}}</p>
+            <div class="sf-sheet-assignment-list">
+                {{#each actors}}
+                    <label class="sf-sheet-assignment-row">
+                        <img src="{{this.img}}" alt="">
+                        <span>
+                            <strong>{{this.name}}</strong>
+                            <small>{{this.typeLabel}}</small>
+                        </span>
+                        <select data-actor-uuid="{{this.uuid}}">
+                            <option value="">{{localize "SMOOTHER_FIGHT.Settings.NoSheetAssignment"}}</option>
+                            {{#each this.users}}
+                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}</option>
+                            {{/each}}
+                        </select>
+                    </label>
+                {{/each}}
+                {{#unless hasActors}}
+                    <p class="notification warning">{{localize "SMOOTHER_FIGHT.Settings.NoSheets"}}</p>
+                {{/unless}}
+            </div>
+        </section>
+
+        <h3 class="sf-token-assignment-heading"><i class="fa-solid fa-chess-pawn"></i> {{localize "SMOOTHER_FIGHT.Settings.TokenAssignments"}}</h3>
+        <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.TokenAssignmentsHint"}}</p>
         {{#each users}}
             <fieldset class="sf-settings-row">
                 <span class="sf-settings-user">
@@ -23,7 +50,7 @@
                 <span class="sf-settings-tokens">
                     {{#each this.tokens}}
                         <label>
-                            <input type="checkbox" data-user-id="{{../id}}" data-token-uuid="{{this.uuid}}" value="{{this.uuid}}" {{#if this.selected}}checked{{/if}} {{#if this.automatic}}data-automatic="true"{{/if}}>
+                            <input type="checkbox" data-user-id="{{../id}}" data-token-uuid="{{this.uuid}}" data-actor-uuid="{{this.actorUuid}}" value="{{this.uuid}}" {{#if this.selected}}checked{{/if}} {{#if this.inherited}}data-inherited="true"{{/if}} {{#if this.automatic}}data-automatic="true"{{/if}}>
                             <span>{{this.label}}</span>
                         </label>
                     {{/each}}

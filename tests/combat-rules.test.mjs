@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+    actorLinkUuid,
     calculateActiveDefenseValue,
     combatMessageKind,
     findDefensiveFeatureValue,
     fullyConsumedCost,
     linkMatchesCombatant,
+    normalizeActorUserLinks,
     normalizeUserTokenLinks,
     parseStatusEffectLabel,
     recalculateAttackReport,
@@ -110,6 +112,24 @@ test("a token can only be assigned once and explicit players win over the fallba
 
     assert.deepEqual(normalized.player.map((link) => link.tokenUuid), ["Scene.s1.Token.t1"]);
     assert.deepEqual(normalized.gm.map((link) => link.tokenUuid), ["Scene.s1.Token.t2"]);
+});
+
+test("actor assignments keep exactly one user per character or NPC sheet", () => {
+    assert.deepEqual(normalizeActorUserLinks({
+        "Actor.hero": "player1",
+        "Actor.npc": "player2",
+        "Actor.unassigned": "",
+        invalid: null,
+    }), {
+        "Actor.hero": "player1",
+        "Actor.npc": "player2",
+    });
+    assert.deepEqual(normalizeActorUserLinks([]), {});
+});
+
+test("unlinked synthetic tokens resolve to their stable source sheet UUID", () => {
+    assert.equal(actorLinkUuid("Actor.hero", "hero"), "Actor.hero");
+    assert.equal(actorLinkUuid("Scene.scene.Token.token.Actor.hero", "hero"), "Actor.hero");
 });
 
 test("attack, spell, and damage chat messages are classified as combat events", () => {
