@@ -3,25 +3,26 @@
 
     <div class="sf-settings-list">
         {{#each users}}
-            <label class="sf-settings-row">
+            <fieldset class="sf-settings-row">
                 <span class="sf-settings-user">
                     <span class="sf-user-dot {{#if this.active}}is-online{{/if}}"></span>
                     {{this.name}}
                     {{#if this.isGM}}<small>GM</small>{{/if}}
                 </span>
-                <select data-user-id="{{this.id}}">
-                    <option value="">{{localize "SMOOTHER_FIGHT.Settings.Automatic"}}</option>
-                    {{#each ../tokens}}
-                        <option value="{{this.uuid}}" {{#if (eq this.uuid ../selected)}}selected{{/if}}>
-                            {{this.label}}
-                        </option>
+                <span class="sf-settings-tokens">
+                    {{#each this.tokens}}
+                        <label>
+                            <input type="checkbox" data-user-id="{{../id}}" value="{{this.uuid}}" {{#if this.selected}}checked{{/if}}>
+                            <span>{{this.label}}</span>
+                        </label>
                     {{/each}}
-                </select>
-            </label>
+                    {{#unless this.tokens.length}}<small>{{localize "SMOOTHER_FIGHT.Settings.Automatic"}}</small>{{/unless}}
+                </span>
+            </fieldset>
         {{/each}}
     </div>
 
-    {{#unless tokens.length}}
+    {{#unless hasTokens}}
         <p class="notification warning">{{localize "SMOOTHER_FIGHT.Settings.NoTokens"}}</p>
     {{/unless}}
 

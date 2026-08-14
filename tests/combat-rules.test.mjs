@@ -4,6 +4,7 @@ import {
     calculateActiveDefenseValue,
     findDefensiveFeatureValue,
     linkMatchesCombatant,
+    normalizeUserTokenLinks,
     recalculateAttackReport,
     totalDegreesOfSuccess,
 } from "../Modul/splittermond-smoother-fight/scripts/combat-rules.js";
@@ -77,4 +78,19 @@ test("token mapping prefers exact token or actor matches", () => {
     assert.equal(linkMatchesCombatant({ tokenUuid: "Scene.s1.Token.t1" }, combatant), true);
     assert.equal(linkMatchesCombatant({ actorUuid: "Actor.a1" }, combatant), true);
     assert.equal(linkMatchesCombatant({ actorId: "other" }, combatant), false);
+});
+
+test("legacy single-token mappings are normalized to multiple-token lists", () => {
+    const normalized = normalizeUserTokenLinks({
+        user1: { tokenUuid: "Scene.s1.Token.t1", label: "Farruk" },
+        user2: [
+            { tokenUuid: "Scene.s1.Token.t2", label: "Stavi" },
+            { actorUuid: "Actor.a3", label: "Yi Mao" },
+        ],
+        empty: null,
+    });
+
+    assert.deepEqual(normalized.user1, [{ tokenUuid: "Scene.s1.Token.t1", label: "Farruk" }]);
+    assert.equal(normalized.user2.length, 2);
+    assert.deepEqual(normalized.empty, []);
 });

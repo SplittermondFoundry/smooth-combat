@@ -2,6 +2,7 @@ import {
     calculateActiveDefenseValue,
     findDefensiveFeatureValue,
     linkMatchesCombatant,
+    normalizeUserTokenLinks,
     recalculateAttackReport,
     totalDegreesOfSuccess,
 } from "./combat-rules.js";
@@ -15,6 +16,8 @@ const runtime = {
     renderTimer: null,
     targetByUser: new Map(),
     pendingDefense: null,
+    preparingSpellId: null,
+    hoveredToken: null,
     cardsCollapsed: false,
     startedAt: Date.now(),
 };
@@ -114,41 +117,46 @@ function registerSettingsMenu() {
 
         async _prepareContext(options) {
             const context = await super._prepareContext(options);
-            const links = getSetting("userTokenLinks", {});
+            const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}));
             const tokens = getSceneTokens().map((token) => ({
                 uuid: token.uuid,
                 actorUuid: token.actor?.uuid ?? null,
                 label: `${token.name} — ${token.actor?.name ?? "–"}`,
             }));
             const users = Array.from(game.users ?? []).map((user) => {
-                const link = links[user.id];
-                const matchingToken = tokens.find((token) =>
-                    token.uuid === link?.tokenUuid || (link?.actorUuid && token.actorUuid === link.actorUuid)
-                );
+                const userLinks = links[user.id] ?? [];
                 return {
                     id: user.id,
                     name: user.name,
                     active: user.active,
                     isGM: user.isGM,
-                    selected: matchingToken?.uuid ?? "",
+                    tokens: tokens.map((token) => ({
+                        ...token,
+                        selected: userLinks.some((link) =>
+                            link.tokenUuid === token.uuid ||
+                            (!tokens.some((candidate) => candidate.uuid === link.tokenUuid) && link.actorUuid && link.actorUuid === token.actorUuid)
+                        ),
+                    })),
                 };
             });
-            return { ...context, users, tokens };
+            return { ...context, users, hasTokens: tokens.length > 0 };
         }
 
         async _onRender(context, options) {
             await super._onRender(context, options);
             this.element.querySelector('[data-action="save-links"]')?.addEventListener("click", async () => {
                 const links = {};
-                for (const select of this.element.querySelectorAll("select[data-user-id]")) {
-                    if (!select.value) continue;
-                    const token = resolveToken(select.value);
-                    links[select.dataset.userId] = {
-                        tokenUuid: select.value,
+                for (const user of game.users ?? []) links[user.id] = [];
+                for (const checkbox of this.element.querySelectorAll('input[type="checkbox"][data-user-id]:checked')) {
+                    const token = resolveToken(checkbox.value);
+                    if (!token) continue;
+                    links[checkbox.dataset.userId] ??= [];
+                    links[checkbox.dataset.userId].push({
+                        tokenUuid: checkbox.value,
                         actorUuid: token?.actor?.uuid ?? null,
                         actorId: token?.actor?.id ?? null,
-                        label: token?.name ?? select.value,
-                    };
+                        label: token?.name ?? checkbox.value,
+                    });
                 }
                 await game.settings.set(MODULE_ID, "userTokenLinks", links);
                 ui.notifications.info(t("SMOOTHER_FIGHT.Settings.Saved"));
@@ -253,14 +261,17 @@ class SmootherFightHud {
         this.element.classList.toggle("is-hidden", !visible);
         syncSystemActionBar(visible);
         if (!visible) {
+            clearHoveredToken();
             this.element.replaceChildren();
             return;
         }
 
         const html = await buildHud(context);
         if (generation !== this.renderGeneration) return;
+        clearHoveredToken();
         this.element.innerHTML = html;
         enforceChatPermissions(this.element, context);
+        bindQuickTargetHover(this.element);
     }
 
     async onClick(event) {
@@ -330,12 +341,12 @@ async function buildHud(context) {
                     <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
                     <span class="sf-turn-target"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
                 </header>
-                ${canAct ? buildActionBar(context) : `<p class="sf-owner-note"><i class="fa-solid fa-lock"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoOwner"))}</p>`}
+                ${canAct ? await buildActionBar(context) : `<p class="sf-owner-note"><i class="fa-solid fa-lock"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoOwner"))}</p>`}
                 ${getSetting("showCards", true) ? buildCombatEvents(context) : ""}
             </main>
             ${target ? portraitPanel({ side: "target", token: target, actor: target.actor, eyebrow: t("SMOOTHER_FIGHT.HUD.Target") }) : noTargetPanel()}
         </div>
-        ${game.user.isGM ? buildGmQuickTargets(context) : ""}
+        ${canChooseTarget(context) ? buildQuickTargets(context) : ""}
     `;
 }
 
@@ -352,9 +363,9 @@ function portraitPanel({ side, token, actor, eyebrow, action = "" }) {
             </div>
             <div class="sf-portrait-name">${escapeHtml(token?.name ?? actor?.name ?? "–")}</div>
             <div class="sf-defense-row" aria-label="VTD, KW, GW">
-                <span><small>VTD</small>${defense}</span>
-                <span><small>KW</small>${body}</span>
-                <span><small>GW</small>${mind}</span>
+                <span><small>VTD</small>${escapeHtml(defense)}</span>
+                <span><small>KW</small>${escapeHtml(body)}</span>
+                <span><small>GW</small>${escapeHtml(mind)}</span>
             </div>
             ${resourceBars(actor)}
         </aside>
@@ -383,40 +394,49 @@ function resourceBars(actor) {
 
 function resourceBar(type, label, resource) {
     if (!resource) return "";
-    const value = Number(resource.value) || 0;
-    const max = Math.max(0, Number(resource.max) || 0);
+    const value = numericValue(resource.value);
+    const max = Math.max(0, numericValue(resource.max));
     const percent = max ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
     return `<div class="sf-resource sf-resource-${type}" title="${escapeAttr(`${label}: ${value}/${max}`)}">
         <span style="width:${percent}%"></span><small>${escapeHtml(label)} ${value}/${max}</small>
     </div>`;
 }
 
-function buildActionBar(context) {
+async function buildActionBar(context) {
     const actor = context.actor;
     const skills = Object.values(actor.skills ?? {})
-        .filter((skill) => Number(skill.points) > 0 || ["acrobatics", "athletics", "determination", "stealth", "perception", "endurance"].includes(skill.id))
-        .sort((a, b) => String(a.label).localeCompare(String(b.label), game.i18n.lang));
+        .filter((skill) => numericValue(skill.points) > 0 || ["acrobatics", "athletics", "determination", "stealth", "perception", "endurance"].includes(skill.id))
+        .sort((a, b) => displayLabel(a.label).localeCompare(displayLabel(b.label), game.i18n.lang));
     const spells = [...(actor.spells ?? [])].sort(sortByName);
     const attacks = [...(actor.attacks ?? [])].sort(sortByName);
+    const attackSpeeds = new Map(await Promise.all(attacks.map(async (attack) => [attack.id, await getAttackSpeed(attack)])));
     const equipment = Array.from(actor.items ?? []).filter((item) => ["weapon", "shield"].includes(item.type)).sort(sortByName);
     const preparedSpell = actor.getFlag?.("splittermond", "preparedSpell");
 
     return `<nav class="sf-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
         ${actionMenu("fa-solid fa-dice-d20", t("SMOOTHER_FIGHT.HUD.Skills"), skills.map((skill) => `
             <button type="button" data-sf-action="skill" data-skill-id="${escapeAttr(skill.id)}">
-                <span>${escapeHtml(skill.label)}</span><b>${Number(skill.value) || 0}</b>
+                <span>${escapeHtml(displayLabel(skill.label, skill.id))}</span><b>${escapeHtml(displayValue(skill.value))}</b>
             </button>`).join(""))}
         ${actionMenu("fa-solid fa-wand-sparkles", t("SMOOTHER_FIGHT.HUD.Spells"), spells.map((spell) => {
-            const prepared = preparedSpell === spell.id;
-            return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="${prepared ? "is-prepared" : ""}" ${spell.enoughFocus === false ? "disabled" : ""}>
-                <img src="${escapeAttr(spell.img)}" alt=""><span>${escapeHtml(spell.name)}<small>${escapeHtml(spell.skill?.label ?? "")} ${spell.skill?.value ?? ""}</small></span>
-                <b>${escapeHtml(prepared ? t("SMOOTHER_FIGHT.HUD.Cast") : (spell.castDuration?.display ?? spell.castDuration ?? ""))}</b>
+            const preparing = runtime.preparingSpellId === spell.id;
+            const prepared = !runtime.preparingSpellId && preparedSpell === spell.id;
+            const skillLabel = displayLabel(spell.skill?.label);
+            const skillValue = displayValue(spell.skill?.value, "");
+            const status = preparing
+                ? t("SMOOTHER_FIGHT.HUD.Preparing")
+                : prepared
+                    ? `${t("SMOOTHER_FIGHT.HUD.Prepared")} · ${t("SMOOTHER_FIGHT.HUD.Cast")}`
+                    : displayValue(spell.castDuration, "–");
+            return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="${prepared ? "is-prepared" : ""} ${preparing ? "is-preparing" : ""}" ${spell.enoughFocus === false || preparing ? "disabled" : ""}>
+                <img src="${escapeAttr(spell.img)}" alt=""><span>${escapeHtml(spell.name)}<small>${escapeHtml([skillLabel, skillValue].filter((value) => value !== "").join(" "))}</small></span>
+                <b>${escapeHtml(status)}</b>
             </button>`;
         }).join("") || emptyMenuText() )}
         ${actionMenu("fa-solid fa-hand-fist", t("SMOOTHER_FIGHT.HUD.Attacks"), `
             ${attacks.map((attack) => `<button type="button" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" class="${attack.isPrepared ? "is-prepared" : ""}">
-                <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml(attack.skill?.label ?? "")} ${attack.skill?.value ?? ""}</small></span>
-                <b>${escapeHtml(attack.isPrepared ? (attack.damage || "–") : `${attack.weaponSpeed ?? "–"} T`)}</b>
+                <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small></span>
+                <b>${escapeHtml(attack.isPrepared ? (displayValue(attack.damage, "–")) : `${attackSpeeds.get(attack.id) ?? "–"} T`)}</b>
             </button>`).join("") || emptyMenuText()}
             ${equipment.length ? `<h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Equip"))}</h4>${equipment.map((item) => `<button type="button" data-sf-action="toggle-equipped" data-item-id="${escapeAttr(item.id)}" class="${item.system?.equipped ? "is-equipped" : "is-unequipped"}">
                 <img src="${escapeAttr(item.img)}" alt=""><span>${escapeHtml(item.name)}</span><i class="fa-solid ${item.system?.equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i>
@@ -428,9 +448,9 @@ function buildActionBar(context) {
             defenseButton(actor, "mindresist", "GW"),
         ].join(""))}
         <div class="sf-defense-pills" aria-hidden="true">
-            <span>VTD <b>${getDerivedValue(actor, "defense")}</b></span>
-            <span>KW <b>${getDerivedValue(actor, "bodyresist")}</b></span>
-            <span>GW <b>${getDerivedValue(actor, "mindresist")}</b></span>
+            <span>VTD <b>${escapeHtml(getDerivedValue(actor, "defense"))}</b></span>
+            <span>KW <b>${escapeHtml(getDerivedValue(actor, "bodyresist"))}</b></span>
+            <span>GW <b>${escapeHtml(getDerivedValue(actor, "mindresist"))}</b></span>
         </div>
     </nav>`;
 }
@@ -446,7 +466,7 @@ function defenseButton(actor, type, abbreviation) {
     const options = actor.activeDefense?.[type] ?? [];
     const suffix = options.length > 1 ? `<small>${options.length} ${escapeHtml(t("SMOOTHER_FIGHT.HUD.Defense"))}</small>` : "";
     return `<button type="button" data-sf-action="defense" data-defense-type="${type}">
-        <span>${abbreviation}${suffix}</span><b>${getDerivedValue(actor, type)}</b>
+        <span>${abbreviation}${suffix}</span><b>${escapeHtml(getDerivedValue(actor, type))}</b>
     </button>`;
 }
 
@@ -493,7 +513,7 @@ function chatMessageHtml(message) {
     return `<article class="sf-chat-message message" data-message-id="${escapeAttr(message.id)}"><div class="message-content">${message.content ?? ""}</div></article>`;
 }
 
-function buildGmQuickTargets(context) {
+function buildQuickTargets(context) {
     const candidates = getCombatSceneTokens(context.combat).filter((token) => token.id !== context.token?.id);
     const body = candidates.length
         ? candidates.map((token) => `<button type="button" data-sf-action="set-target" data-token-uuid="${escapeAttr(token.uuid)}" class="${context.target?.uuid === token.uuid ? "is-current" : ""}">
@@ -501,7 +521,7 @@ function buildGmQuickTargets(context) {
             ${context.target?.uuid === token.uuid ? '<i class="fa-solid fa-crosshairs"></i>' : ""}
         </button>`).join("")
         : `<p>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoCombatants"))}</p>`;
-    return `<details class="sf-gm-targets">
+    return `<details class="sf-quick-targets">
         <summary><i class="fa-solid fa-crosshairs"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.QuickTarget"))}<i class="fa-solid fa-chevron-up"></i></summary>
         <div>${body}</div>
     </details>`;
@@ -520,8 +540,8 @@ function getHudContext() {
 }
 
 function getLinkedUser(combatant, actor) {
-    const links = getSetting("userTokenLinks", {});
-    const exact = Object.entries(links).find(([, link]) => linkMatchesCombatant(link, combatant));
+    const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}));
+    const exact = Object.entries(links).find(([, userLinks]) => userLinks.some((link) => linkMatchesCombatant(link, combatant)));
     if (exact) return game.users.get(exact[0]) ?? null;
 
     const users = Array.from(game.users ?? []);
@@ -609,7 +629,7 @@ async function performAttack(context, attackId) {
         const success = await context.actor.rollAttack(attackId);
         if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
     } else {
-        await context.actor.addTicks(attack.weaponSpeed, `${localizeSystem("splittermond.attack", "Angriff")}: ${attack.name}`);
+        await context.actor.addTicks(await getAttackSpeed(attack), `${localizeSystem("splittermond.attack", "Angriff")}: ${attack.name}`);
         await context.actor.setFlag("splittermond", "preparedAttack", attackId);
     }
     scheduleRender();
@@ -623,11 +643,20 @@ async function performSpell(context, spellId) {
         const success = await context.actor.rollSpell(spellId);
         if (success) await context.actor.setFlag("splittermond", "preparedSpell", null);
     } else {
-        await context.actor.addTicks(
-            spell.castDuration?.inTicks ?? Number(spell.castDuration) ?? 0,
-            `${localizeSystem("splittermond.castDuration", "Zauberdauer")}: ${spell.name}`
-        );
-        await context.actor.setFlag("splittermond", "preparedSpell", spellId);
+        runtime.preparingSpellId = spellId;
+        scheduleRender(0);
+        try {
+            const ticks = typeof spell.castDuration?.inTicks === "function"
+                ? await spell.castDuration.inTicks()
+                : numericValue(spell.castDuration);
+            await context.actor.addTicks(
+                ticks,
+                `${localizeSystem("splittermond.castDuration", "Zauberdauer")}: ${spell.name}`
+            );
+            await context.actor.setFlag("splittermond", "preparedSpell", spellId);
+        } finally {
+            runtime.preparingSpellId = null;
+        }
     }
     scheduleRender();
 }
@@ -647,10 +676,10 @@ async function requireOwner(context, callback) {
 }
 
 async function setTargetFromQuickMenu(context, uuid) {
-    if (!game.user.isGM) return;
+    if (!canChooseTarget(context)) return;
     const token = resolveToken(uuid);
     if (!token) return;
-    const recipient = context.linkedUser ?? game.user;
+    const recipient = game.user.isGM ? (context.linkedUser ?? game.user) : game.user;
     runtime.targetByUser.set(recipient.id, token.uuid);
 
     if (recipient.id === game.user.id) {
@@ -677,6 +706,51 @@ async function setTargetFromQuickMenu(context, uuid) {
 function setLocalTarget(tokenDocument) {
     const tokenObject = tokenDocument.object ?? canvas?.tokens?.get(tokenDocument.id);
     tokenObject?.setTarget(true, { user: game.user, releaseOthers: true, groupSelection: false });
+}
+
+function canChooseTarget(context) {
+    return Boolean(
+        game.user.isGM ||
+        context.linkedUser?.id === game.user.id ||
+        (!context.linkedUser && context.actor?.isOwner)
+    );
+}
+
+function bindQuickTargetHover(root) {
+    for (const button of root.querySelectorAll('.sf-quick-targets [data-sf-action="set-target"]')) {
+        const highlight = () => highlightToken(button.dataset.tokenUuid);
+        button.addEventListener("pointerenter", highlight);
+        button.addEventListener("focus", highlight);
+        button.addEventListener("pointerleave", clearHoveredToken);
+        button.addEventListener("blur", clearHoveredToken);
+    }
+}
+
+function highlightToken(uuid) {
+    const tokenDocument = resolveToken(uuid);
+    const tokenObject = tokenDocument?.object ?? canvas?.tokens?.get(tokenDocument?.id);
+    if (!tokenObject || runtime.hoveredToken?.object === tokenObject) return;
+    clearHoveredToken();
+    runtime.hoveredToken = { object: tokenObject, wasHovered: Boolean(tokenObject.hover) };
+    tokenObject.hover = true;
+    refreshTokenHover(tokenObject);
+}
+
+function clearHoveredToken() {
+    const state = runtime.hoveredToken;
+    if (!state) return;
+    runtime.hoveredToken = null;
+    state.object.hover = state.wasHovered;
+    refreshTokenHover(state.object);
+}
+
+function refreshTokenHover(tokenObject) {
+    try {
+        tokenObject.renderFlags?.set?.({ refreshState: true });
+        tokenObject.refresh?.();
+    } catch (error) {
+        console.debug(`${MODULE_ID} | Could not refresh token hover state`, error);
+    }
 }
 
 function publishOwnTarget(explicitUuid) {
@@ -1011,7 +1085,70 @@ function syncSystemActionBar(hudVisible) {
 }
 
 function getDerivedValue(actor, key) {
-    return Number(actor?.derivedValues?.[key]?.value ?? actor?.system?.derivedValues?.[key]?.value ?? 0);
+    return displayValue(actor?.derivedValues?.[key]?.value ?? actor?.system?.derivedValues?.[key]?.value, 0);
+}
+
+async function getAttackSpeed(attack) {
+    try {
+        if (typeof attack?.weaponSpeedAsync === "function") {
+            return numericValue(await attack.weaponSpeedAsync());
+        }
+    } catch (error) {
+        console.debug(`${MODULE_ID} | Could not calculate weapon speed for ${attack?.name ?? attack?.id}`, error);
+    }
+    return numericValue(attack?.weaponSpeed);
+}
+
+function numericValue(value, fallback = 0) {
+    const displayed = displayValue(value, "");
+    const numeric = typeof displayed === "number"
+        ? displayed
+        : Number.parseFloat(String(displayed).trim().replace(",", "."));
+    return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function displayValue(value, fallback = 0, seen = new Set()) {
+    if (value === null || value === undefined || value === "") return fallback;
+    if (typeof value === "string" || typeof value === "number") return value;
+    if (typeof value !== "object" || seen.has(value)) return fallback;
+    seen.add(value);
+
+    for (const key of ["display", "calculationValue", "value", "total"]) {
+        const candidate = value[key];
+        if (candidate !== undefined && candidate !== null && candidate !== value) {
+            const displayed = displayValue(candidate, "", seen);
+            if (displayed !== "") return displayed;
+        }
+    }
+    if (typeof value.calculateSync === "function") {
+        try {
+            return displayValue(value.calculateSync(), fallback, seen);
+        } catch {
+            return fallback;
+        }
+    }
+    return fallback;
+}
+
+function displayLabel(value, fallback = "", seen = new Set()) {
+    if (value === null || value === undefined || value === "") return fallback;
+    if (typeof value === "string") {
+        const localized = game.i18n.localize(value);
+        return localized === value ? value : localized;
+    }
+    if (typeof value === "number") return String(value);
+    if (typeof value !== "object" || seen.has(value)) return fallback;
+    seen.add(value);
+
+    for (const key of ["long", "full", "name", "label", "short", "display", "value"]) {
+        const candidate = value[key];
+        if (candidate !== undefined && candidate !== null && candidate !== value) {
+            const displayed = displayLabel(candidate, "", seen);
+            if (displayed) return displayed;
+        }
+    }
+    const stringified = value.toString?.();
+    return stringified && stringified !== "[object Object]" ? stringified : fallback;
 }
 
 function getSetting(key, fallback) {

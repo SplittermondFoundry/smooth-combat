@@ -79,6 +79,18 @@ export function linkMatchesCombatant(link, combatant) {
     );
 }
 
+export function normalizeUserTokenLinks(value) {
+    if (!value || typeof value !== "object") return {};
+
+    return Object.fromEntries(Object.entries(value).map(([userId, storedLinks]) => {
+        const links = (Array.isArray(storedLinks) ? storedLinks : [storedLinks])
+            .filter((link) => link && typeof link === "object")
+            .filter((link) => link.tokenUuid || link.actorUuid || link.actorId)
+            .map((link) => ({ ...link }));
+        return [userId, links];
+    }));
+}
+
 export function numberOr(value, fallback = 0) {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : fallback;

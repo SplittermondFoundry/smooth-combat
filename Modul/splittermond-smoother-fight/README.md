@@ -11,7 +11,7 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 - originale Splittermond-Chatkarten im HUD, einschließlich ihrer EG-, Tick-, Schaden- und Anwenden-Buttons
 - Gruppierung von Angriff und anschließendem Schaden zu einem Kampfereignis
 - erfolgreiche Aktive Abwehr erzeugt eine neue Angriffskarte mit neuer VTD/KW/GW und neu berechneten EG
-- GM-Quickmenü für alle Combatants der aktuellen Szene
+- Ziel-Quickmenü für den GM und den Owner des aktiven Tokens; beim Überfahren eines Eintrags wird dessen Token auf der Karte hervorgehoben
 - Socket-Synchronisierung, damit das Ziel des zugeordneten Spielers auf allen Clients sichtbar ist
 - optionales Ausblenden der normalen Splittermond-Aktionsleiste während eines Kampfes
 
@@ -19,7 +19,7 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 
 Den gesamten Ordner als `splittermond-smoother-fight` in Foundrys `Data/modules` ablegen oder verlinken. Danach Foundry neu starten, das Modul in der Welt aktivieren und unter **Einstellungen → Moduleinstellungen → Spieler und Tokens verknüpfen** die Zuordnungen festlegen.
 
-Ohne manuelle Zuordnung wird der erste aktive Nicht-GM mit Owner-Rechten am Akteur verwendet. Die manuelle Zuordnung speichert sowohl Token- als auch Akteursbezug; dadurch bleibt sie auch dann brauchbar, wenn derselbe Akteur auf einer späteren Szene mit einem neuen Token eingesetzt wird.
+Ohne manuelle Zuordnung wird der erste aktive Nicht-GM mit Owner-Rechten am Akteur verwendet. Einem Spieler können beliebig viele Tokens zugeordnet werden. Die Zuordnung speichert sowohl Token- als auch Akteursbezug; dadurch bleibt sie auch dann brauchbar, wenn derselbe Akteur auf einer späteren Szene mit einem neuen Token eingesetzt wird. Alte Einzelzuordnungen werden automatisch weiterverwendet.
 
 ## Ablauf Aktive Abwehr
 
