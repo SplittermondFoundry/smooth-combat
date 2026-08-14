@@ -238,6 +238,19 @@
     pointer-events: auto;
 }
 
+#splittermond-smoother-fight-hud .sf-target-column {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-self: end;
+    gap: 6px;
+    min-width: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-target-column > .sf-portrait {
+    width: 100%;
+}
+
 #splittermond-smoother-fight-hud .sf-portrait[role="button"] {
     cursor: pointer;
 }
@@ -764,14 +777,14 @@
 }
 
 #splittermond-smoother-fight-hud .sf-quick-targets {
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 6px);
+    position: relative;
+    width: 100%;
 }
 
 #splittermond-smoother-fight-hud .sf-quick-targets > summary {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     padding: 6px 9px;
     border: 1px solid var(--sf-line);
@@ -780,6 +793,7 @@
     background: var(--sf-bg);
     cursor: pointer;
     font-size: 11px;
+    white-space: nowrap;
 }
 
 #splittermond-smoother-fight-hud .sf-quick-targets > div {
@@ -1122,6 +1136,7 @@
     }
 
     #splittermond-smoother-fight-hud .sf-action-menu > summary span,
+    #splittermond-smoother-fight-hud .sf-quick-targets > summary span,
     #splittermond-smoother-fight-hud .sf-defense-pills {
         display: none;
     }

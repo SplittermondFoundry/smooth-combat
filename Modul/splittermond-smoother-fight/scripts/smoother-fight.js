@@ -592,9 +592,11 @@ async function buildHud(context) {
                 ${canAct ? await buildActionBar(context) : `<p class="sf-owner-note"><i class="fa-solid fa-lock"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoOwner"))}</p>`}
                 ${getSetting("showCards", true) ? buildCombatEvents(context) : ""}
             </main>
-            ${target ? portraitPanel({ side: "target", token: target, actor: target.actor, eyebrow: t("SMOOTHER_FIGHT.HUD.Target") }) : noTargetPanel()}
+            <div class="sf-target-column">
+                ${canChooseTarget(context) ? buildQuickTargets(context) : ""}
+                ${target ? portraitPanel({ side: "target", token: target, actor: target.actor, eyebrow: t("SMOOTHER_FIGHT.HUD.Target") }) : noTargetPanel()}
+            </div>
         </div>
-        ${canChooseTarget(context) ? buildQuickTargets(context) : ""}
     `;
 }
 
@@ -854,8 +856,9 @@ function buildQuickTargets(context) {
             ${context.target?.uuid === token.uuid ? '<i class="fa-solid fa-crosshairs"></i>' : ""}
         </button>`).join("")
         : `<p>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoCombatants"))}</p>`;
+    const label = t("SMOOTHER_FIGHT.HUD.QuickTarget");
     return `<details class="sf-quick-targets">
-        <summary><i class="fa-solid fa-crosshairs"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.QuickTarget"))}<i class="fa-solid fa-chevron-up"></i></summary>
+        <summary title="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-up"></i></summary>
         <div>${body}</div>
     </details>`;
 }
