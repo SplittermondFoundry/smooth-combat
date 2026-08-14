@@ -1,5 +1,6 @@
 import {
     calculateActiveDefenseValue,
+    combatMessageKind,
     findDefensiveFeatureValue,
     linkMatchesCombatant,
     normalizeUserTokenLinks,
@@ -100,7 +101,7 @@ function registerSettingsMenu() {
             id: "smoother-fight-user-token-links",
             classes: ["smoother-fight", "sf-settings"],
             tag: "div",
-            position: { width: 620, height: "auto" },
+            position: { width: 620, height: 720 },
             window: {
                 title: "SMOOTHER_FIGHT.Settings.LinksTitle",
                 icon: "fa-solid fa-link",
@@ -490,19 +491,21 @@ function buildCombatEvents(context) {
 }
 
 function buildEventGroup(group, isLatest) {
-    const attack = group.attack;
-    const context = getMessageContext(attack);
+    const primary = group.primary;
+    const context = getMessageContext(primary);
     const recalculated = context?.recalculatedFrom;
     const superseded = context?.supersededBy;
-    const badge = recalculated
+    const badge = group.kind === "spell"
+        ? `<span class="sf-event-badge is-spell"><i class="fa-solid fa-wand-sparkles"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Spells"))}</span>`
+        : recalculated
         ? `<span class="sf-event-badge is-defense"><i class="fa-solid fa-shield-halved"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseResult"))}</span>`
         : superseded
             ? `<span class="sf-event-badge is-muted">${escapeHtml(t("SMOOTHER_FIGHT.HUD.OriginalAttack"))}</span>`
             : "";
     return `<details class="sf-event-group" ${isLatest && !runtime.cardsCollapsed ? "open" : ""}>
-        <summary><span>${escapeHtml(attack.speaker?.alias ?? attack.author?.name ?? t("SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}<i class="fa-solid fa-chevron-down"></i></summary>
+        <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}<i class="fa-solid fa-chevron-down"></i></summary>
         <div class="sf-event-body">
-            ${chatMessageHtml(attack)}
+            ${chatMessageHtml(primary)}
             ${group.defenses.map((message) => `<div class="sf-associated-card"><h4><i class="fa-solid fa-shield"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseResult"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
             ${group.damages.map((message) => `<div class="sf-associated-card"><h4><i class="fa-solid fa-droplet"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Damage"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
         </div>
@@ -590,24 +593,31 @@ function tokenUuid(tokenOrObject) {
 function collectCombatEventGroups(context) {
     const messages = Array.from(game.messages?.contents ?? game.messages ?? []);
     const combatActorIds = new Set(Array.from(context.combat.combatants ?? []).map((c) => c.actorId).filter(Boolean));
-    const attacks = messages.filter((message) => {
-        if (!isAttackMessage(message)) return false;
+    const primaryMessages = messages.filter((message) => {
+        if (!isAttackMessage(message) && !isSpellMessage(message)) return false;
         const cardContext = getMessageContext(message);
         if (cardContext) return cardContext.combatId === context.combat.id;
         return Number(message.timestamp) >= runtime.startedAt && combatActorIds.has(message.speaker?.actor);
     });
 
-    const groups = attacks.map((attack) => ({ attack, damages: [], defenses: [] }));
+    const groups = primaryMessages.map((primary) => ({
+        primary,
+        kind: isSpellMessage(primary) ? "spell" : "attack",
+        damages: [],
+        defenses: [],
+    }));
     for (const message of messages) {
         if (!isDamageMessage(message) && !isDefenseMessage(message)) continue;
         const cardContext = getMessageContext(message);
         let group = cardContext?.attackMessageId
-            ? groups.find((candidate) => candidate.attack.id === cardContext.attackMessageId)
+            ? groups.find((candidate) => candidate.primary.id === cardContext.attackMessageId)
             : null;
         if (!group) {
             group = [...groups].reverse().find((candidate) =>
-                message.timestamp >= candidate.attack.timestamp &&
-                (isDefenseMessage(message) || message.speaker?.actor === candidate.attack.speaker?.actor)
+                message.timestamp >= candidate.primary.timestamp &&
+                (isDefenseMessage(message)
+                    ? candidate.kind === "attack"
+                    : message.speaker?.actor === candidate.primary.speaker?.actor)
             );
         }
         if (!group) continue;
@@ -768,14 +778,14 @@ function publishOwnTarget(explicitUuid) {
 
 async function onCreateChatMessage(message) {
     try {
-        if (isAttackMessage(message)) await attachAttackContext(message);
+        if (isAttackMessage(message) || isSpellMessage(message)) await attachCombatContext(message);
         if (isDefenseMessage(message)) await processDefenseMessage(message);
     } catch (error) {
         console.error(`${MODULE_ID} | Failed to process chat message`, error);
     }
 }
 
-async function attachAttackContext(message) {
+async function attachCombatContext(message) {
     if (getMessageContext(message) || !isOwnMessage(message)) return;
     const combat = game.combat;
     const speakerCombatant = Array.from(combat?.combatants ?? []).find((combatant) =>
@@ -1034,11 +1044,15 @@ function getDefenseCheck(message) {
 }
 
 function isAttackMessage(message) {
-    return message?.type === "attackRollMessage" || message?.system?.constructor?.name === "AttackRollMessage";
+    return combatMessageKind(message) === "attack";
+}
+
+function isSpellMessage(message) {
+    return combatMessageKind(message) === "spell";
 }
 
 function isDamageMessage(message) {
-    return message?.type === "damageMessage" || message?.system?.constructor?.name === "DamageMessage";
+    return combatMessageKind(message) === "damage";
 }
 
 function isDefenseMessage(message) {

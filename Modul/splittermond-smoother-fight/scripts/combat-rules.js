@@ -91,6 +91,15 @@ export function normalizeUserTokenLinks(value) {
     }));
 }
 
+export function combatMessageKind(message) {
+    const type = message?.type;
+    const modelName = message?.system?.constructor?.name;
+    if (type === "attackRollMessage" || modelName === "AttackRollMessage") return "attack";
+    if (type === "spellRollMessage" || modelName === "SpellRollMessage") return "spell";
+    if (type === "damageMessage" || modelName === "DamageMessage") return "damage";
+    return null;
+}
+
 export function numberOr(value, fallback = 0) {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : fallback;

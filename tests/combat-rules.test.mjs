@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
     calculateActiveDefenseValue,
+    combatMessageKind,
     findDefensiveFeatureValue,
     linkMatchesCombatant,
     normalizeUserTokenLinks,
@@ -93,4 +94,12 @@ test("legacy single-token mappings are normalized to multiple-token lists", () =
     assert.deepEqual(normalized.user1, [{ tokenUuid: "Scene.s1.Token.t1", label: "Farruk" }]);
     assert.equal(normalized.user2.length, 2);
     assert.deepEqual(normalized.empty, []);
+});
+
+test("attack, spell, and damage chat messages are classified as combat events", () => {
+    assert.equal(combatMessageKind({ type: "attackRollMessage" }), "attack");
+    assert.equal(combatMessageKind({ type: "spellRollMessage" }), "spell");
+    assert.equal(combatMessageKind({ system: { constructor: { name: "SpellRollMessage" } } }), "spell");
+    assert.equal(combatMessageKind({ type: "damageMessage" }), "damage");
+    assert.equal(combatMessageKind({ type: "simple" }), null);
 });

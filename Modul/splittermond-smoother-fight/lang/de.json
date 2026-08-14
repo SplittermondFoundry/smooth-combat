@@ -46,7 +46,7 @@
       "CombatEvents": "Kampfereignisse",
       "CollapseCards": "Karten einklappen",
       "ExpandCards": "Karten ausklappen",
-      "NoEvents": "Noch keine Angriffs- oder Schadenskarte in diesem Kampf.",
+      "NoEvents": "Noch keine Angriffs-, Zauber- oder Schadenskarte in diesem Kampf.",
       "Damage": "Schaden",
       "DefenseResult": "Aktive Abwehr",
       "Recalculated": "Neu berechnet gegen {defense}: {value}",

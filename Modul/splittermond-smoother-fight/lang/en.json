@@ -46,7 +46,7 @@
       "CombatEvents": "Combat events",
       "CollapseCards": "Collapse cards",
       "ExpandCards": "Expand cards",
-      "NoEvents": "No attack or damage card has been created in this combat yet.",
+      "NoEvents": "No attack, spell, or damage card has been created in this combat yet.",
       "Damage": "Damage",
       "DefenseResult": "Active defense",
       "Recalculated": "Recalculated against {defense}: {value}",
