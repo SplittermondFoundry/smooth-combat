@@ -41,6 +41,20 @@
     gap: 6px;
 }
 
+#splittermond-smoother-fight-hud .sf-shell.is-minimized {
+    display: block;
+    width: min(620px, 100%);
+    margin-inline: auto;
+}
+
+#splittermond-smoother-fight-hud .sf-shell.is-minimized .sf-center {
+    border-radius: 8px;
+}
+
+#splittermond-smoother-fight-hud .sf-shell.is-minimized .sf-turnline {
+    border-bottom: 0;
+}
+
 #splittermond-smoother-fight-hud .sf-center {
     min-width: 0;
     border: 1px solid var(--sf-line);
@@ -79,6 +93,27 @@
 #splittermond-smoother-fight-hud .sf-turn-target i {
     color: var(--sf-gold);
     margin-right: 3px;
+}
+
+#splittermond-smoother-fight-hud .sf-hud-toggle {
+    flex: 0 0 27px;
+    width: 27px;
+    height: 24px;
+    margin: 0 0 0 2px;
+    padding: 0;
+    border: 1px solid rgba(117, 191, 186, 0.28);
+    border-radius: 4px;
+    color: var(--sf-text);
+    background: rgba(108, 201, 193, 0.08);
+    font-size: 11px;
+    line-height: 1;
+    pointer-events: auto;
+}
+
+#splittermond-smoother-fight-hud .sf-hud-toggle:hover {
+    border-color: var(--sf-gold);
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.14);
 }
 
 #splittermond-smoother-fight-hud .sf-live-dot {
@@ -284,7 +319,7 @@
 
 #splittermond-smoother-fight-hud .sf-resource {
     position: relative;
-    height: 9px;
+    height: 13px;
     border-radius: 3px;
     overflow: hidden;
     background: #1b2626;
@@ -302,10 +337,23 @@
 
 #splittermond-smoother-fight-hud .sf-resource small {
     position: absolute;
-    inset: -2px 3px auto auto;
-    font-size: 8px;
-    line-height: 12px;
-    text-shadow: 0 1px 2px #000;
+    inset: 0 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 5px;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 13px;
+    text-shadow: 0 1px 3px #000, 0 0 2px #000;
+}
+
+#splittermond-smoother-fight-hud .sf-resource small b {
+    color: #fff;
+    font-size: 10px;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
 }
 
 #splittermond-smoother-fight-hud .sf-no-target {
@@ -624,6 +672,17 @@
 
 #splittermond-smoother-fight-hud .sf-chat-message .message-content {
     overflow: visible;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-actions {
+    position: sticky;
+    z-index: 3;
+    top: 0;
+    margin: -4px -4px 8px;
+    padding: 4px 4px 7px;
+    border-bottom: 1px solid rgba(117, 191, 186, 0.22);
+    background: linear-gradient(to bottom, rgba(5, 15, 18, 0.98) 64%, rgba(5, 15, 18, 0.84));
+    box-shadow: 0 7px 12px rgba(5, 15, 18, 0.5);
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message button {

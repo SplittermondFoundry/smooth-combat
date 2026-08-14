@@ -69,6 +69,13 @@ function registerSettings() {
         default: true,
         onChange: rerender,
     });
+    game.settings.register(MODULE_ID, "minimized", {
+        scope: "client",
+        config: false,
+        type: Boolean,
+        default: false,
+        onChange: rerender,
+    });
     game.settings.register(MODULE_ID, "maxCards", {
         name: "SMOOTHER_FIGHT.Settings.MaxCardsName",
         hint: "SMOOTHER_FIGHT.Settings.MaxCardsHint",
@@ -363,6 +370,9 @@ class SmootherFightHud {
                     runtime.cardsCollapsed = !runtime.cardsCollapsed;
                     scheduleRender(0);
                     break;
+                case "toggle-hud":
+                    await game.settings.set(MODULE_ID, "minimized", !getSetting("minimized", false));
+                    break;
             }
         } catch (error) {
             console.error(`${MODULE_ID} | HUD action failed`, error);
@@ -379,6 +389,24 @@ async function buildHud(context) {
     const targetLine = target
         ? t("SMOOTHER_FIGHT.HUD.PlayerTargetName", { user: userName, target: target.name })
         : t("SMOOTHER_FIGHT.HUD.NoTargetDetail");
+    const minimized = getSetting("minimized", false);
+    const hudToggle = buildHudToggle(minimized);
+
+    if (minimized) {
+        return `
+            <div class="sf-shell is-minimized">
+                <main class="sf-center">
+                    <header class="sf-turnline">
+                        <span class="sf-live-dot"></span>
+                        <strong>${escapeHtml(actor.name)}</strong>
+                        <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
+                        <span class="sf-turn-target"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
+                        ${hudToggle}
+                    </header>
+                </main>
+            </div>
+        `;
+    }
 
     return `
         <div class="sf-shell">
@@ -389,6 +417,7 @@ async function buildHud(context) {
                     <strong>${escapeHtml(actor.name)}</strong>
                     <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
                     <span class="sf-turn-target"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
+                    ${hudToggle}
                 </header>
                 ${canAct ? buildCombatControls(context) : ""}
                 ${canAct ? await buildActionBar(context) : `<p class="sf-owner-note"><i class="fa-solid fa-lock"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoOwner"))}</p>`}
@@ -398,6 +427,12 @@ async function buildHud(context) {
         </div>
         ${canChooseTarget(context) ? buildQuickTargets(context) : ""}
     `;
+}
+
+function buildHudToggle(minimized) {
+    const label = t(minimized ? "SMOOTHER_FIGHT.HUD.ExpandHud" : "SMOOTHER_FIGHT.HUD.MinimizeHud");
+    const icon = minimized ? "fa-window-maximize" : "fa-window-minimize";
+    return `<button type="button" class="sf-hud-toggle" data-sf-action="toggle-hud" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid ${icon}"></i></button>`;
 }
 
 function portraitPanel({ side, token, actor, eyebrow, action = "" }) {
@@ -448,7 +483,7 @@ function resourceBar(type, label, resource) {
     const max = Math.max(0, numericValue(resource.max));
     const percent = max ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
     return `<div class="sf-resource sf-resource-${type}" title="${escapeAttr(`${label}: ${value}/${max}`)}">
-        <span style="width:${percent}%"></span><small>${escapeHtml(label)} ${value}/${max}</small>
+        <span style="width:${percent}%"></span><small><span>${escapeHtml(label)}</span><b>${value}/${max}</b></small>
     </div>`;
 }
 
@@ -606,8 +641,21 @@ function chatMessageHtml(message) {
         const fumble = getFumbleData(message) ?? createMagicFumbleData(message, content);
         if (fumble) content = decorateMagicFumbleCard(content, fumble);
     }
+    content = promoteChatCardActions(content);
     content = scopeChatCardIds(content, message.id);
     return `<article class="sf-chat-message message" data-message-id="${escapeAttr(message.id)}"><div class="message-content">${content}</div></article>`;
+}
+
+function promoteChatCardActions(content) {
+    const template = document.createElement("template");
+    template.innerHTML = content ?? "";
+    for (const actions of template.content.querySelectorAll(".actions.splittermond-chat-action-container")) {
+        actions.classList.add("sf-promoted-actions");
+        actions.parentElement?.prepend(actions);
+    }
+    const wrapper = document.createElement("div");
+    wrapper.append(template.content.cloneNode(true));
+    return wrapper.innerHTML;
 }
 
 function scopeChatCardIds(content, messageId) {

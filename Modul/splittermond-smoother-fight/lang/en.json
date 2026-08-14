@@ -67,6 +67,8 @@
       "CombatEvents": "Combat events",
       "CollapseCards": "Collapse cards",
       "ExpandCards": "Expand cards",
+      "MinimizeHud": "Minimize combat HUD",
+      "ExpandHud": "Expand combat HUD",
       "NoEvents": "No attack, spell, fumble, or damage card has been created in this combat yet.",
       "Damage": "Damage",
       "MagicFumble": "Magic fumble",

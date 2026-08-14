@@ -67,6 +67,8 @@
       "CombatEvents": "Kampfereignisse",
       "CollapseCards": "Karten einklappen",
       "ExpandCards": "Karten ausklappen",
+      "MinimizeHud": "Kampf-HUD minimieren",
+      "ExpandHud": "Kampf-HUD ausklappen",
       "NoEvents": "Noch keine Angriffs-, Zauber-, Patzer- oder Schadenskarte in diesem Kampf.",
       "Damage": "Schaden",
       "MagicFumble": "Zauberpatzer",
