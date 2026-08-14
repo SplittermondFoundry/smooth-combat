@@ -4,8 +4,10 @@ import {
     calculateActiveDefenseValue,
     combatMessageKind,
     findDefensiveFeatureValue,
+    fullyConsumedCost,
     linkMatchesCombatant,
     normalizeUserTokenLinks,
+    parseStatusEffectLabel,
     recalculateAttackReport,
     totalDegreesOfSuccess,
 } from "../Modul/splittermond-smoother-fight/scripts/combat-rules.js";
@@ -102,4 +104,14 @@ test("attack, spell, and damage chat messages are classified as combat events", 
     assert.equal(combatMessageKind({ system: { constructor: { name: "SpellRollMessage" } } }), "spell");
     assert.equal(combatMessageKind({ type: "damageMessage" }), "damage");
     assert.equal(combatMessageKind({ type: "simple" }), null);
+});
+
+test("status effect labels split the condition name from its level", () => {
+    assert.deepEqual(parseStatusEffectLabel("Erschöpft 2"), { name: "Erschöpft", level: 2 });
+    assert.deepEqual(parseStatusEffectLabel("Angsterfüllt"), { name: "Angsterfüllt", level: 1 });
+});
+
+test("fumble health loss uses Splittermond's fully consumed cost notation", () => {
+    assert.equal(fullyConsumedCost(6), "6V6");
+    assert.equal(fullyConsumedCost(0), "0");
 });

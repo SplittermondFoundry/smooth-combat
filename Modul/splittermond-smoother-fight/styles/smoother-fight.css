@@ -89,6 +89,109 @@
     box-shadow: 0 0 0 4px rgba(108, 201, 193, 0.12), 0 0 10px var(--sf-teal);
 }
 
+#splittermond-smoother-fight-hud .sf-combat-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px 8px;
+    min-height: 36px;
+    padding: 4px 7px;
+    border-bottom: 1px solid var(--sf-line);
+    background: rgba(0, 0, 0, 0.12);
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls button {
+    width: auto;
+    min-width: 27px;
+    min-height: 26px;
+    margin: 0;
+    padding: 3px 7px;
+    border: 1px solid rgba(117, 191, 186, 0.22);
+    border-radius: 4px;
+    color: var(--sf-text);
+    background: rgba(108, 201, 193, 0.06);
+    font-size: 10px;
+    line-height: 1;
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls button:hover:not(:disabled),
+#splittermond-smoother-fight-hud .sf-combat-controls button.is-active {
+    border-color: rgba(216, 168, 93, 0.55);
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.12);
+}
+
+#splittermond-smoother-fight-hud .sf-tick-buttons,
+#splittermond-smoother-fight-hud .sf-pause-buttons,
+#splittermond-smoother-fight-hud .sf-tracker-buttons {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-buttons > span {
+    color: var(--sf-muted);
+    font-size: 9px;
+    text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-pause-buttons button,
+#splittermond-smoother-fight-hud .sf-prepared-spell button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+#splittermond-smoother-fight-hud .sf-prepared-spell {
+    display: flex;
+    align-items: center;
+    flex: 1 1 230px;
+    gap: 6px;
+    min-width: 0;
+    padding-left: 5px;
+    border-left: 1px solid var(--sf-line);
+}
+
+#splittermond-smoother-fight-hud .sf-prepared-spell img {
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 3px;
+    object-fit: cover;
+}
+
+#splittermond-smoother-fight-hud .sf-prepared-spell > span {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-prepared-spell small {
+    color: var(--sf-gold);
+    font-size: 8px;
+    text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-prepared-spell strong {
+    overflow: hidden;
+    color: var(--sf-text);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-icon-button {
+    padding-inline: 6px;
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls .is-danger:hover,
+#splittermond-smoother-fight-hud .sf-combat-controls .is-cancel:hover {
+    border-color: var(--sf-danger);
+    color: #ffaaa3;
+    background: rgba(198, 93, 85, 0.16);
+}
+
 #splittermond-smoother-fight-hud .sf-portrait {
     position: relative;
     min-height: 174px;
@@ -547,6 +650,42 @@
 
 #splittermond-smoother-fight-hud .sf-associated-card > h4 i {
     margin-right: 4px;
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card.is-fumble {
+    border-left: 2px solid var(--sf-danger);
+    padding-left: 6px;
+}
+
+.sf-fumble-actions {
+    display: grid;
+    gap: 5px;
+    margin-top: 8px;
+    padding: 7px;
+    border: 1px solid rgba(198, 93, 85, 0.48);
+    border-radius: 4px;
+    background: rgba(198, 93, 85, 0.09);
+}
+
+.sf-fumble-actions > strong {
+    color: #a7342d;
+    font-size: 11px;
+}
+
+.sf-fumble-actions > strong i,
+.sf-fumble-actions button i {
+    margin-right: 5px;
+}
+
+.sf-fumble-actions button {
+    width: 100%;
+    min-height: 28px;
+    margin: 0;
+}
+
+.sf-fumble-actions button.is-applied {
+    opacity: 0.55;
+    filter: grayscale(0.6);
 }
 
 .sf-chat-recalculated {

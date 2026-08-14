@@ -100,6 +100,21 @@ export function combatMessageKind(message) {
     return null;
 }
 
+export function parseStatusEffectLabel(value) {
+    const label = String(value ?? "").trim();
+    if (!label) return { name: "", level: 0 };
+    const match = label.match(/^(.*?)(?:\s+(\d+))?$/u);
+    return {
+        name: (match?.[1] ?? label).trim(),
+        level: Math.max(1, Number.parseInt(match?.[2] ?? "1", 10) || 1),
+    };
+}
+
+export function fullyConsumedCost(value) {
+    const amount = Math.max(0, Math.round(numberOr(value)));
+    return amount > 0 ? `${amount}V${amount}` : "0";
+}
+
 export function numberOr(value, fallback = 0) {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : fallback;

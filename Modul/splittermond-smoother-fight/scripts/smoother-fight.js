@@ -2,8 +2,10 @@ import {
     calculateActiveDefenseValue,
     combatMessageKind,
     findDefensiveFeatureValue,
+    fullyConsumedCost,
     linkMatchesCombatant,
     normalizeUserTokenLinks,
+    parseStatusEffectLabel,
     recalculateAttackReport,
     totalDegreesOfSuccess,
 } from "./combat-rules.js";
@@ -11,6 +13,7 @@ import {
 const MODULE_ID = "splittermond-smoother-fight";
 const SOCKET = `module.${MODULE_ID}`;
 const SYSTEM_SOCKET = "system.splittermond";
+const COMBAT_PAUSE = Object.freeze({ wait: 10000, keepReady: 20000 });
 
 const runtime = {
     hud: null,
@@ -196,7 +199,8 @@ function registerHooks() {
     rerenderHooks.forEach((hook) => Hooks.on(hook, scheduleRender));
 
     Hooks.on("targetToken", (user, token, targeted) => {
-        const remaining = Array.from(user.targets ?? []);
+        const changedUuid = tokenUuid(token);
+        const remaining = Array.from(user.targets ?? []).filter((candidate) => tokenUuid(candidate) !== changedUuid);
         const target = targeted ? token : remaining.at(-1) ?? null;
         const uuid = tokenUuid(target);
         runtime.targetByUser.set(user.id, uuid);
@@ -211,8 +215,8 @@ function registerHooks() {
     Hooks.on("updateChatMessage", scheduleRender);
     Hooks.on("deleteChatMessage", scheduleRender);
 
-    Hooks.on("renderChatMessageHTML", (message, html) => captureSystemActiveDefense(message, html));
-    Hooks.on("renderChatMessage", (message, html) => captureSystemActiveDefense(message, asElement(html)));
+    Hooks.on("renderChatMessageHTML", (message, html) => prepareRenderedChatMessage(message, html));
+    Hooks.on("renderChatMessage", (message, html) => prepareRenderedChatMessage(message, asElement(html)));
 }
 
 function registerSocket() {
@@ -272,6 +276,7 @@ class SmootherFightHud {
         clearHoveredToken();
         this.element.innerHTML = html;
         enforceChatPermissions(this.element, context);
+        enforceFumbleActionState(this.element);
         bindQuickTargetHover(this.element);
     }
 
@@ -302,6 +307,33 @@ class SmootherFightHud {
                 case "spell":
                     await requireOwner(context, () => performSpell(context, target.dataset.spellId));
                     break;
+                case "cast-prepared-spell":
+                    await requireOwner(context, () => performSpell(context, target.dataset.spellId));
+                    break;
+                case "cancel-prepared-spell":
+                    await requireOwner(context, () => cancelPreparedSpell(context));
+                    break;
+                case "add-ticks":
+                    await requireOwner(context, () => addCombatTicks(context, target.dataset.ticks));
+                    break;
+                case "pause-combatant":
+                    await requireOwner(context, () => pauseCombatant(context, target.dataset.pauseType));
+                    break;
+                case "resume-combatant":
+                    await requireOwner(context, () => resumeCombatant(context));
+                    break;
+                case "focus-combatant":
+                    focusCombatantToken(context);
+                    break;
+                case "toggle-combatant-hidden":
+                    await requireGm(() => context.combatant.update({ hidden: !context.combatant.hidden }));
+                    break;
+                case "toggle-combatant-defeated":
+                    await requireGm(() => context.combatant.update({ defeated: !context.combatant.isDefeated }));
+                    break;
+                case "remove-combatant":
+                    await requireGm(() => removeCombatant(context));
+                    break;
                 case "defense":
                     await requireOwner(context, () => context.actor.activeDefenseDialog(target.dataset.defenseType));
                     break;
@@ -329,7 +361,7 @@ async function buildHud(context) {
     const tick = combat.currentTick ?? Math.round(Number(combatant.initiative) || 0);
     const userName = linkedUser?.name ?? t("SMOOTHER_FIGHT.HUD.AutomaticOwner");
     const targetLine = target
-        ? t("SMOOTHER_FIGHT.HUD.PlayerTarget", { user: userName })
+        ? t("SMOOTHER_FIGHT.HUD.PlayerTargetName", { user: userName, target: target.name })
         : t("SMOOTHER_FIGHT.HUD.NoTargetDetail");
 
     return `
@@ -342,6 +374,7 @@ async function buildHud(context) {
                     <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
                     <span class="sf-turn-target"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
                 </header>
+                ${canAct ? buildCombatControls(context) : ""}
                 ${canAct ? await buildActionBar(context) : `<p class="sf-owner-note"><i class="fa-solid fa-lock"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoOwner"))}</p>`}
                 ${getSetting("showCards", true) ? buildCombatEvents(context) : ""}
             </main>
@@ -403,16 +436,54 @@ function resourceBar(type, label, resource) {
     </div>`;
 }
 
+function buildCombatControls(context) {
+    const initiative = Number(context.combatant.initiative);
+    const paused = Number.isFinite(initiative) && initiative >= COMBAT_PAUSE.wait;
+    const preparedSpellId = context.actor.getFlag?.("splittermond", "preparedSpell");
+    const preparedSpell = context.actor.spells?.find((spell) => spell.id === preparedSpellId) ?? null;
+    const tickButtons = [1, 2, 3, 5].map((ticks) => `
+        <button type="button" data-sf-action="add-ticks" data-ticks="${ticks}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks }))}">+${ticks} T</button>
+    `).join("");
+    const pauseButtons = paused
+        ? `<button type="button" data-sf-action="resume-combatant" class="is-resume" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Resume"))}"><i class="fa-solid fa-play-circle"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Resume"))}</span></button>`
+        : `<button type="button" data-sf-action="pause-combatant" data-pause-type="wait" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Wait"))}"><i class="fa-solid fa-hourglass-half"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Wait"))}</span></button>
+           <button type="button" data-sf-action="pause-combatant" data-pause-type="keepReady" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.KeepReady"))}"><i class="fa-solid fa-hand"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.KeepReady"))}</span></button>`;
+    const prepared = preparedSpell ? `
+        <div class="sf-prepared-spell">
+            <img src="${escapeAttr(preparedSpell.img ?? "icons/svg/daze.svg")}" alt="">
+            <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.PreparedSpell"))}</small><strong>${escapeHtml(preparedSpell.name)}</strong></span>
+            <button type="button" data-sf-action="cast-prepared-spell" data-spell-id="${escapeAttr(preparedSpell.id)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Cast"))}"><i class="fa-solid fa-wand-sparkles"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Cast"))}</button>
+            <button type="button" data-sf-action="cancel-prepared-spell" class="is-cancel" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CancelSpell"))}"><i class="fa-solid fa-xmark"></i></button>
+        </div>` : "";
+    const gmControls = game.user.isGM ? `
+        <button type="button" data-sf-action="toggle-combatant-hidden" class="sf-icon-button ${context.combatant.hidden ? "is-active" : ""}" title="${escapeAttr(t(context.combatant.hidden ? "SMOOTHER_FIGHT.HUD.ShowCombatant" : "SMOOTHER_FIGHT.HUD.HideCombatant"))}"><i class="fa-solid ${context.combatant.hidden ? "fa-eye" : "fa-eye-slash"}"></i></button>
+        <button type="button" data-sf-action="toggle-combatant-defeated" class="sf-icon-button ${context.combatant.isDefeated ? "is-active" : ""}" title="${escapeAttr(t(context.combatant.isDefeated ? "SMOOTHER_FIGHT.HUD.RestoreCombatant" : "SMOOTHER_FIGHT.HUD.MarkDefeated"))}"><i class="fa-solid fa-skull"></i></button>
+        <button type="button" data-sf-action="remove-combatant" class="sf-icon-button is-danger" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveCombatant"))}"><i class="fa-solid fa-circle-minus"></i></button>
+    ` : "";
+
+    return `<section class="sf-combat-controls" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CombatControls"))}">
+        <div class="sf-tick-buttons"><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Advance"))}</span>${tickButtons}<button type="button" data-sf-action="add-ticks" data-ticks="custom" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CustomTicks"))}">+X</button></div>
+        <div class="sf-pause-buttons">${pauseButtons}</div>
+        ${prepared}
+        <div class="sf-tracker-buttons">
+            <button type="button" data-sf-action="focus-combatant" class="sf-icon-button" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.FocusCombatant"))}"><i class="fa-solid fa-bullseye"></i></button>
+            ${gmControls}
+        </div>
+    </section>`;
+}
+
 async function buildActionBar(context) {
     const actor = context.actor;
+    const preparedSpell = actor.getFlag?.("splittermond", "preparedSpell");
     const skills = Object.values(actor.skills ?? {})
         .filter((skill) => numericValue(skill.points) > 0 || ["acrobatics", "athletics", "determination", "stealth", "perception", "endurance"].includes(skill.id))
         .sort((a, b) => displayLabel(a.label).localeCompare(displayLabel(b.label), game.i18n.lang));
-    const spells = [...(actor.spells ?? [])].sort(sortByName);
+    const spells = [...(actor.spells ?? [])].sort((a, b) =>
+        Number(b.id === preparedSpell) - Number(a.id === preparedSpell) || sortByName(a, b)
+    );
     const attacks = [...(actor.attacks ?? [])].sort(sortByName);
     const attackSpeeds = new Map(await Promise.all(attacks.map(async (attack) => [attack.id, await getAttackSpeed(attack)])));
     const equipment = Array.from(actor.items ?? []).filter((item) => ["weapon", "shield"].includes(item.type)).sort(sortByName);
-    const preparedSpell = actor.getFlag?.("splittermond", "preparedSpell");
 
     return `<nav class="sf-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
         ${actionMenu("fa-solid fa-dice-d20", t("SMOOTHER_FIGHT.HUD.Skills"), skills.map((skill) => `
@@ -508,6 +579,7 @@ function buildEventGroup(group, isLatest) {
             ${chatMessageHtml(primary)}
             ${group.defenses.map((message) => `<div class="sf-associated-card"><h4><i class="fa-solid fa-shield"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseResult"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
             ${group.damages.map((message) => `<div class="sf-associated-card"><h4><i class="fa-solid fa-droplet"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Damage"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
+            ${group.fumbles.map((message) => `<div class="sf-associated-card is-fumble"><h4><i class="fa-solid fa-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MagicFumble"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
         </div>
     </details>`;
 }
@@ -557,7 +629,8 @@ function getTargetForUser(user) {
     let uuid = runtime.targetByUser.get(user.id);
     if (user.id === game.user.id) {
         const localTarget = Array.from(user.targets ?? []).at(-1);
-        uuid = tokenUuid(localTarget) ?? uuid;
+        uuid = tokenUuid(localTarget);
+        runtime.targetByUser.set(user.id, uuid || null);
     }
     return uuid ? resolveToken(uuid) : null;
 }
@@ -605,23 +678,30 @@ function collectCombatEventGroups(context) {
         kind: isSpellMessage(primary) ? "spell" : "attack",
         damages: [],
         defenses: [],
+        fumbles: [],
     }));
     for (const message of messages) {
-        if (!isDamageMessage(message) && !isDefenseMessage(message)) continue;
+        if (!isDamageMessage(message) && !isDefenseMessage(message) && !isMagicFumbleMessage(message)) continue;
+        const fumble = getFumbleData(message);
         const cardContext = getMessageContext(message);
-        let group = cardContext?.attackMessageId
+        let group = fumble?.sourceMessageId
+            ? groups.find((candidate) => candidate.primary.id === fumble.sourceMessageId)
+            : cardContext?.attackMessageId
             ? groups.find((candidate) => candidate.primary.id === cardContext.attackMessageId)
             : null;
         if (!group) {
             group = [...groups].reverse().find((candidate) =>
                 message.timestamp >= candidate.primary.timestamp &&
-                (isDefenseMessage(message)
+                (isMagicFumbleMessage(message)
+                    ? candidate.kind === "spell" && message.speaker?.actor === candidate.primary.speaker?.actor
+                    : isDefenseMessage(message)
                     ? candidate.kind === "attack"
                     : message.speaker?.actor === candidate.primary.speaker?.actor)
             );
         }
         if (!group) continue;
-        (isDamageMessage(message) ? group.damages : group.defenses).push(message);
+        if (isMagicFumbleMessage(message)) group.fumbles.push(message);
+        else (isDamageMessage(message) ? group.damages : group.defenses).push(message);
     }
 
     const max = Number(getSetting("maxCards", 3)) || 3;
@@ -669,6 +749,71 @@ async function performSpell(context, spellId) {
         }
     }
     scheduleRender();
+}
+
+async function cancelPreparedSpell(context) {
+    await context.actor.setFlag("splittermond", "preparedSpell", null);
+    runtime.preparingSpellId = null;
+    ui.notifications.info(t("SMOOTHER_FIGHT.HUD.SpellCancelled"));
+    scheduleRender(0);
+}
+
+async function addCombatTicks(context, requestedTicks) {
+    if (Number(context.combatant.initiative) >= COMBAT_PAUSE.wait) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.ResumeFirst"));
+        return;
+    }
+    if (requestedTicks === "custom") {
+        await context.actor.addTicks(3, t("SMOOTHER_FIGHT.HUD.CustomTicksPrompt", { name: context.actor.name }), true);
+    } else {
+        const ticks = Math.max(1, Number.parseInt(requestedTicks, 10) || 0);
+        await context.combat.setInitiative(context.combatant.id, Math.round(Number(context.combatant.initiative) || 0) + ticks);
+    }
+    scheduleRender(0);
+}
+
+async function pauseCombatant(context, pauseType) {
+    const value = COMBAT_PAUSE[pauseType];
+    if (!value) return;
+    await context.combat.setInitiative(context.combatant.id, value);
+    scheduleRender(0);
+}
+
+async function resumeCombatant(context) {
+    const wasReady = Number(context.combatant.initiative) === COMBAT_PAUSE.keepReady;
+    const tick = Number.parseInt(context.combat.round, 10) || Number.parseInt(context.combat.currentTick, 10) || 0;
+    await context.combat.setInitiative(context.combatant.id, tick, wasReady);
+    scheduleRender(0);
+}
+
+function focusCombatantToken(context) {
+    const object = context.token?.object ?? canvas?.tokens?.get(context.token?.id);
+    if (!object?.center) return;
+    canvas?.animatePan?.({ x: object.center.x, y: object.center.y });
+    canvas?.ping?.(object.center);
+}
+
+async function requireGm(callback) {
+    if (!game.user.isGM) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.GmOnly"));
+        return;
+    }
+    return callback();
+}
+
+async function removeCombatant(context) {
+    const confirmed = await confirmAction(
+        t("SMOOTHER_FIGHT.HUD.RemoveCombatant"),
+        t("SMOOTHER_FIGHT.HUD.RemoveCombatantConfirm", { name: context.combatant.name })
+    );
+    if (confirmed) await context.combatant.delete();
+}
+
+async function confirmAction(title, content) {
+    const DialogV2 = foundry?.applications?.api?.DialogV2;
+    if (DialogV2?.confirm) return DialogV2.confirm({ window: { title }, content: `<p>${escapeHtml(content)}</p>` });
+    if (globalThis.Dialog?.confirm) return Dialog.confirm({ title, content: `<p>${escapeHtml(content)}</p>` });
+    return false;
 }
 
 async function toggleEquipped(actor, itemId) {
@@ -779,6 +924,7 @@ function publishOwnTarget(explicitUuid) {
 async function onCreateChatMessage(message) {
     try {
         if (isAttackMessage(message) || isSpellMessage(message)) await attachCombatContext(message);
+        if (isMagicFumbleMessage(message)) await attachMagicFumbleActions(message);
         if (isDefenseMessage(message)) await processDefenseMessage(message);
     } catch (error) {
         console.error(`${MODULE_ID} | Failed to process chat message`, error);
@@ -815,6 +961,220 @@ function captureSystemActiveDefense(message, html) {
         button.dataset.smootherFightCaptured = "true";
         button.addEventListener("click", () => rememberPendingDefense(message), { capture: true });
     }
+}
+
+function prepareRenderedChatMessage(message, html) {
+    if (!html) return;
+    if (isMagicFumbleMessage(message) && !getFumbleData(message)) void attachMagicFumbleActions(message, html);
+    captureSystemActiveDefense(message, html);
+    bindMagicFumbleActions(message, html);
+}
+
+async function attachMagicFumbleActions(message, renderedRoot = null) {
+    if (!(game.user.isGM || isOwnMessage(message)) || getFumbleData(message)) return;
+    const renderedContent = renderedRoot
+        ? (renderedRoot.matches?.(".message-content") ? renderedRoot : renderedRoot.querySelector?.(".message-content"))
+        : null;
+    const extracted = extractMagicFumbleEffects(renderedContent ?? message.content);
+    if (!extracted.damage && !extracted.conditions.length) return;
+    const actor = resolveSpeakerActor(message);
+    const sourceMessage = [...Array.from(game.messages?.contents ?? [])].reverse().find((candidate) =>
+        candidate.id !== message.id &&
+        isSpellMessage(candidate) &&
+        candidate.speaker?.actor === message.speaker?.actor &&
+        Number(candidate.timestamp) <= Number(message.timestamp)
+    );
+    const fumble = {
+        actorUuid: actor?.uuid ?? null,
+        actorName: actor?.name ?? message.speaker?.alias ?? "",
+        sourceMessageId: sourceMessage?.id ?? null,
+        damage: extracted.damage,
+        conditions: extracted.conditions,
+        conditionMode: extracted.conditionMode,
+        damageApplied: false,
+        conditionsApplied: false,
+    };
+    const content = decorateMagicFumbleCard(renderedContent?.innerHTML ?? message.content, fumble);
+    await message.update({ content, [`flags.${MODULE_ID}.fumble`]: fumble });
+}
+
+function extractMagicFumbleEffects(contentOrRoot) {
+    let root = contentOrRoot;
+    if (typeof contentOrRoot === "string") {
+        const template = document.createElement("template");
+        template.innerHTML = contentOrRoot;
+        root = template.content;
+    }
+    const active = root?.querySelector?.(".fumble-table-result-item-active");
+    if (!active) return { damage: 0, conditions: [], conditionMode: "all" };
+    const inlineRoll = active.querySelector(".inline-roll, [data-roll]");
+    const damageMatch = inlineRoll?.textContent?.trim().match(/-?\d+/u);
+    const damage = Math.max(0, Number.parseInt(damageMatch?.[0] ?? "0", 10) || 0);
+    const conditions = [];
+    for (const link of active.querySelectorAll("a[data-uuid], a[data-pack], a.content-link")) {
+        const pack = link.dataset.pack ?? "";
+        const uuid = link.dataset.uuid ?? (pack && link.dataset.id ? `Compendium.${pack}.Item.${link.dataset.id}` : "");
+        if (!uuid.includes("splittermond.statuseffects") && !pack.includes("splittermond.statuseffects")) continue;
+        const parsed = parseStatusEffectLabel(link.textContent);
+        if (!parsed.name) continue;
+        conditions.push({ uuid: uuid || null, name: parsed.name, level: parsed.level });
+    }
+    const conditionMode = /\b(?:oder|or)\b/iu.test(active.textContent ?? "") ? "choose" : "all";
+    return { damage, conditions, conditionMode };
+}
+
+function decorateMagicFumbleCard(content, fumble) {
+    if (String(content).includes("sf-fumble-actions")) return content;
+    const template = document.createElement("template");
+    template.innerHTML = content ?? "";
+    const table = template.content.querySelector(".fumble-table-result");
+    if (!table) return content;
+    const conditionNames = fumble.conditions.map((condition) => `${condition.name} ${condition.level}`).join(", ");
+    const conditionActions = fumble.conditionMode === "choose"
+        ? fumble.conditions.map((condition, index) => `<button type="button" data-sf-fumble-action="condition:${index}"><i class="fa-solid fa-person-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleCondition", { condition: `${condition.name} ${condition.level}` }))}</button>`).join("")
+        : fumble.conditions.length
+            ? `<button type="button" data-sf-fumble-action="conditions" title="${escapeAttr(conditionNames)}"><i class="fa-solid fa-person-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleConditions", { count: fumble.conditions.length }))}</button>`
+            : "";
+    const actions = `<div class="sf-fumble-actions">
+        <strong><i class="fa-solid fa-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumble"))}</strong>
+        ${fumble.damage ? `<button type="button" data-sf-fumble-action="damage"><i class="fa-solid fa-heart-crack"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleDamage", { damage: fumble.damage }))}</button>` : ""}
+        ${conditionActions}
+    </div>`;
+    table.insertAdjacentHTML("afterend", actions);
+    const wrapper = document.createElement("div");
+    wrapper.append(template.content.cloneNode(true));
+    return wrapper.innerHTML;
+}
+
+function bindMagicFumbleActions(message, html) {
+    applyFumbleActionState(message, html);
+    for (const button of html.querySelectorAll("[data-sf-fumble-action]")) {
+        if (button.dataset.smootherFightBound) continue;
+        button.dataset.smootherFightBound = "true";
+        button.addEventListener("click", async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            await handleMagicFumbleAction(message, button.dataset.sfFumbleAction);
+        });
+    }
+}
+
+function enforceFumbleActionState(root) {
+    for (const element of root.querySelectorAll(".sf-chat-message")) {
+        const message = game.messages.get(element.dataset.messageId);
+        if (message) applyFumbleActionState(message, element);
+    }
+}
+
+function applyFumbleActionState(message, root) {
+    const fumble = getFumbleData(message);
+    if (!fumble) return;
+    const actor = resolveFumbleActor(message, fumble);
+    const allowed = Boolean(game.user.isGM || actor?.isOwner);
+    for (const button of root.querySelectorAll("[data-sf-fumble-action]")) {
+        const applied = button.dataset.sfFumbleAction === "damage" ? fumble.damageApplied : fumble.conditionsApplied;
+        button.disabled = applied || !allowed;
+        button.classList.toggle("is-applied", Boolean(applied));
+        if (applied) button.title = t("SMOOTHER_FIGHT.HUD.AlreadyApplied");
+    }
+}
+
+async function handleMagicFumbleAction(message, action) {
+    const fumble = getFumbleData(message);
+    if (!fumble) return;
+    const actor = resolveFumbleActor(message, fumble);
+    if (!actor || !(game.user.isGM || actor.isOwner)) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.FumbleNotAllowed"));
+        return;
+    }
+    const updated = { ...fumble };
+    if (action === "damage" && !updated.damageApplied && updated.damage > 0) {
+        await actor.consumeCost("health", fullyConsumedCost(updated.damage), t("SMOOTHER_FIGHT.HUD.MagicFumble"));
+        updated.damageApplied = true;
+        ui.notifications.info(t("SMOOTHER_FIGHT.HUD.FumbleDamageApplied", { damage: updated.damage, name: actor.name }));
+    }
+    if ((action === "conditions" || action.startsWith("condition:")) && !updated.conditionsApplied && updated.conditions.length) {
+        const selectedConditions = action.startsWith("condition:")
+            ? [updated.conditions[Number.parseInt(action.split(":")[1], 10)]].filter(Boolean)
+            : updated.conditions;
+        await applyFumbleConditions(actor, selectedConditions);
+        updated.conditionsApplied = true;
+        ui.notifications.info(t("SMOOTHER_FIGHT.HUD.FumbleConditionsApplied", { name: actor.name }));
+    }
+    await safeSetFlag(message, "fumble", updated);
+    scheduleRender(0);
+}
+
+async function applyFumbleConditions(actor, conditions) {
+    for (const condition of conditions) {
+        const existing = Array.from(actor.items ?? []).find((item) =>
+            item.type === "statuseffect" && item.name.localeCompare(condition.name, game.i18n.lang, { sensitivity: "base" }) === 0
+        );
+        if (existing) {
+            const current = Math.max(0, numericValue(existing.system?.level));
+            await existing.update({ "system.level": current + condition.level });
+            continue;
+        }
+        const sourceItem = await resolveStatusEffectSource(condition);
+        if (!sourceItem) throw new Error(`Status effect not found: ${condition.name}`);
+        const source = cloneData(sourceItem.toObject());
+        delete source._id;
+        source.system ??= {};
+        source.system.level = condition.level;
+        await actor.createEmbeddedDocuments("Item", [source]);
+    }
+}
+
+async function resolveStatusEffectSource(condition) {
+    if (condition.uuid) {
+        let item = null;
+        try {
+            item = globalThis.fromUuidSync?.(condition.uuid) ?? await globalThis.fromUuid?.(condition.uuid);
+        } catch (error) {
+            console.debug(`${MODULE_ID} | Could not resolve ${condition.uuid} synchronously`, error);
+            item = await globalThis.fromUuid?.(condition.uuid);
+        }
+        if (item) return item;
+    }
+    const pack = game.packs.get("splittermond.statuseffects");
+    if (!pack) return null;
+    const index = await pack.getIndex({ fields: ["name"] });
+    const entry = index.find((candidate) => candidate.name.localeCompare(condition.name, game.i18n.lang, { sensitivity: "base" }) === 0);
+    return entry ? pack.getDocument(entry._id) : null;
+}
+
+function resolveSpeakerActor(message) {
+    const scene = message.speaker?.scene ? game.scenes.get(message.speaker.scene) : null;
+    const tokenActor = message.speaker?.token ? scene?.tokens?.get(message.speaker.token)?.actor : null;
+    return tokenActor ?? (message.speaker?.actor ? game.actors.get(message.speaker.actor) : null);
+}
+
+function resolveFumbleActor(message, fumble) {
+    if (fumble.actorUuid) {
+        try {
+            const actor = globalThis.fromUuidSync?.(fumble.actorUuid);
+            if (actor) return actor;
+        } catch (error) {
+            console.debug(`${MODULE_ID} | Could not resolve fumble actor ${fumble.actorUuid}`, error);
+        }
+    }
+    return resolveSpeakerActor(message);
+}
+
+function getFumbleData(message) {
+    return message?.getFlag?.(MODULE_ID, "fumble") ?? message?.flags?.[MODULE_ID]?.fumble ?? null;
+}
+
+function isMagicFumbleMessage(message) {
+    const content = String(message?.content ?? "");
+    if (!content.includes("fumble-table-result")) return false;
+    const formula = String(message?.rolls?.[0]?.formula ?? "");
+    const labels = [
+        localizeSystem("splittermond.magicFumbleSorcerer", "Zauberpatzer (Zauberer)"),
+        localizeSystem("splittermond.magicFumblePriest", "Zauberpatzer (Priester)"),
+        localizeSystem("splittermond.focusCosts", "Fokuskosten"),
+    ];
+    return labels.some((label) => content.includes(label) || formula.includes(label));
 }
 
 function rememberPendingDefense(message, targetOverride = null) {
@@ -961,6 +1321,12 @@ async function handleChatCardAction(event, button) {
     const messageElement = button.closest(".sf-chat-message");
     const message = game.messages.get(messageElement?.dataset.messageId);
     if (!message || button.disabled) return;
+    const fumbleAction = button.dataset.sfFumbleAction;
+    if (fumbleAction) {
+        event.preventDefault();
+        await handleMagicFumbleAction(message, fumbleAction);
+        return;
+    }
     const localAction = button.dataset.localaction ?? button.dataset.localAction;
     const remoteAction = button.dataset.action;
     if (!localAction && !remoteAction) return;
@@ -1016,7 +1382,7 @@ function enforceChatPermissions(root, hudContext) {
     for (const element of root.querySelectorAll(".sf-chat-message")) {
         const message = game.messages.get(element.dataset.messageId);
         if (!message) continue;
-        const speakerActor = message.speaker?.actor ? game.actors.get(message.speaker.actor) : null;
+        const speakerActor = resolveSpeakerActor(message);
         const mayChange = game.user.isGM || speakerActor?.isOwner || message.author?.id === game.user.id;
         if (!mayChange) {
             element.querySelectorAll("[data-action]:not([data-localaction]):not([data-local-action])").forEach((button) => button.remove());
