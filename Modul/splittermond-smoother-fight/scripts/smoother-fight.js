@@ -661,8 +661,6 @@ function resourceBar(type, label, resource) {
 function buildCombatControls(context) {
     const initiative = Number(context.combatant.initiative);
     const paused = Number.isFinite(initiative) && initiative >= COMBAT_PAUSE.wait;
-    const preparedSpellId = context.actor.getFlag?.("splittermond", "preparedSpell");
-    const preparedSpell = context.actor.spells?.find((spell) => spell.id === preparedSpellId) ?? null;
     const tickButtons = [1, 2, 3, 5, 10].map((ticks) => `
         <button type="button" data-sf-action="add-ticks" data-ticks="${ticks}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks }))}">+${ticks} T</button>
     `).join("");
@@ -670,13 +668,6 @@ function buildCombatControls(context) {
         ? `<button type="button" data-sf-action="resume-combatant" class="is-resume" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Resume"))}"><i class="fa-solid fa-play-circle"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Resume"))}</span></button>`
         : `<button type="button" data-sf-action="pause-combatant" data-pause-type="wait" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Wait"))}"><i class="fa-solid fa-hourglass-half"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Wait"))}</span></button>
            <button type="button" data-sf-action="pause-combatant" data-pause-type="keepReady" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.KeepReady"))}"><i class="fa-solid fa-hand"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.KeepReady"))}</span></button>`;
-    const prepared = preparedSpell ? `
-        <div class="sf-prepared-spell">
-            <img src="${escapeAttr(preparedSpell.img ?? "icons/svg/daze.svg")}" alt="">
-            <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.PreparedSpell"))}</small><strong>${escapeHtml(preparedSpell.name)}</strong></span>
-            <button type="button" data-sf-action="cast-prepared-spell" data-spell-id="${escapeAttr(preparedSpell.id)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Cast"))}"><i class="fa-solid fa-wand-sparkles"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Cast"))}</button>
-            <button type="button" data-sf-action="cancel-prepared-spell" class="is-cancel" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CancelSpell"))}"><i class="fa-solid fa-xmark"></i></button>
-        </div>` : "";
     const gmControls = game.user.isGM ? `
         <button type="button" data-sf-action="toggle-combatant-hidden" class="sf-icon-button ${context.combatant.hidden ? "is-active" : ""}" title="${escapeAttr(t(context.combatant.hidden ? "SMOOTHER_FIGHT.HUD.ShowCombatant" : "SMOOTHER_FIGHT.HUD.HideCombatant"))}"><i class="fa-solid ${context.combatant.hidden ? "fa-eye" : "fa-eye-slash"}"></i></button>
         <button type="button" data-sf-action="toggle-combatant-defeated" class="sf-icon-button ${context.combatant.isDefeated ? "is-active" : ""}" title="${escapeAttr(t(context.combatant.isDefeated ? "SMOOTHER_FIGHT.HUD.RestoreCombatant" : "SMOOTHER_FIGHT.HUD.MarkDefeated"))}"><i class="fa-solid fa-skull"></i></button>
@@ -686,7 +677,6 @@ function buildCombatControls(context) {
     return `<section class="sf-combat-controls" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CombatControls"))}">
         <div class="sf-tick-buttons"><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Advance"))}</span>${tickButtons}<button type="button" data-sf-action="add-ticks" data-ticks="custom" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CustomTicks"))}">+X</button></div>
         <div class="sf-pause-buttons">${pauseButtons}</div>
-        ${prepared}
         <div class="sf-tracker-buttons">
             <button type="button" data-sf-action="focus-combatant" class="sf-icon-button" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.FocusCombatant"))}"><i class="fa-solid fa-bullseye"></i></button>
             ${gmControls}
@@ -696,13 +686,14 @@ function buildCombatControls(context) {
 
 async function buildActionBar(context) {
     const actor = context.actor;
-    const preparedSpell = actor.getFlag?.("splittermond", "preparedSpell");
+    const preparedSpellId = actor.getFlag?.("splittermond", "preparedSpell");
     const skills = Object.values(actor.skills ?? {})
         .filter((skill) => numericValue(skill.points) > 0 || ["acrobatics", "athletics", "determination", "stealth", "perception", "endurance"].includes(skill.id))
         .sort((a, b) => displayLabel(a.label).localeCompare(displayLabel(b.label), game.i18n.lang));
     const spells = [...(actor.spells ?? [])].sort((a, b) =>
-        Number(b.id === preparedSpell) - Number(a.id === preparedSpell) || sortByName(a, b)
+        Number(b.id === preparedSpellId) - Number(a.id === preparedSpellId) || sortByName(a, b)
     );
+    const preparedSpell = spells.find((spell) => spell.id === preparedSpellId) ?? null;
     const attacks = [...(actor.attacks ?? [])].sort(sortByName);
     const attackSpeeds = new Map(await Promise.all(attacks.map(async (attack) => [attack.id, await getAttackSpeed(attack)])));
     const equipment = Array.from(actor.items ?? []).filter((item) => ["weapon", "shield"].includes(item.type)).sort(sortByName);
@@ -712,21 +703,18 @@ async function buildActionBar(context) {
             <button type="button" data-sf-action="skill" data-skill-id="${escapeAttr(skill.id)}">
                 <span>${escapeHtml(displayLabel(skill.label, skill.id))}</span><b>${escapeHtml(displayValue(skill.value))}</b>
             </button>`).join(""))}
-        ${actionMenu("fa-solid fa-wand-sparkles", t("SMOOTHER_FIGHT.HUD.Spells"), spells.map((spell) => {
+        ${preparedSpell ? preparedSpellMenu(preparedSpell) : actionMenu("fa-solid fa-wand-sparkles", t("SMOOTHER_FIGHT.HUD.Spells"), spells.map((spell) => {
             const preparing = runtime.preparingSpellId === spell.id;
-            const prepared = !runtime.preparingSpellId && preparedSpell === spell.id;
             const skillLabel = displayLabel(spell.skill?.label);
             const skillValue = displayValue(spell.skill?.value, "");
             const status = preparing
                 ? t("SMOOTHER_FIGHT.HUD.Preparing")
-                : prepared
-                    ? `${t("SMOOTHER_FIGHT.HUD.Prepared")} · ${t("SMOOTHER_FIGHT.HUD.Cast")}`
-                    : displayValue(spell.castDuration, "–");
-            return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="${prepared ? "is-prepared" : ""} ${preparing ? "is-preparing" : ""}" ${spell.enoughFocus === false || preparing ? "disabled" : ""}>
+                : displayValue(spell.castDuration, "–");
+            return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="${preparing ? "is-preparing" : ""}" ${spell.enoughFocus === false || preparing ? "disabled" : ""}>
                 <img src="${escapeAttr(spell.img)}" alt=""><span>${escapeHtml(spell.name)}<small>${escapeHtml([skillLabel, skillValue].filter((value) => value !== "").join(" "))}</small></span>
                 <b>${escapeHtml(status)}</b>
             </button>`;
-        }).join("") || emptyMenuText() )}
+        }).join("") || emptyMenuText())}
         ${actionMenu("fa-solid fa-hand-fist", t("SMOOTHER_FIGHT.HUD.Attacks"), `
             ${attacks.map((attack) => `<button type="button" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" class="${attack.isPrepared ? "is-prepared" : ""}">
                 <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small></span>
@@ -754,6 +742,19 @@ function actionMenu(icon, label, body) {
         <summary><i class="${icon}"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-up sf-chevron"></i></summary>
         <div class="sf-action-popover">${body}</div>
     </details>`;
+}
+
+function preparedSpellMenu(spell) {
+    const cast = t("SMOOTHER_FIGHT.HUD.Cast");
+    const cancel = t("SMOOTHER_FIGHT.HUD.CancelSpell");
+    return `<div class="sf-action-menu sf-prepared-spell-menu">
+        <button type="button" class="sf-prepared-spell-cast" data-sf-action="cast-prepared-spell" data-spell-id="${escapeAttr(spell.id)}" title="${escapeAttr(`${spell.name}: ${cast}`)}">
+            <img src="${escapeAttr(spell.img ?? "icons/svg/daze.svg")}" alt="">
+            <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.PreparedSpell"))}</small><strong>${escapeHtml(spell.name)}</strong></span>
+            <b><i class="fa-solid fa-wand-sparkles"></i><span>${escapeHtml(cast)}</span></b>
+        </button>
+        <button type="button" class="sf-prepared-spell-cancel" data-sf-action="cancel-prepared-spell" title="${escapeAttr(cancel)}" aria-label="${escapeAttr(cancel)}"><i class="fa-solid fa-xmark"></i></button>
+    </div>`;
 }
 
 function defenseButton(actor, type, abbreviation) {
