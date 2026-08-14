@@ -238,6 +238,22 @@ function registerSocket() {
             if (!target) return;
             setLocalTarget(target);
             publishOwnTarget(target.uuid);
+            return;
+        }
+
+        if (payload.type === "recalculate-defense" && payload.recipientId === game.user.id && game.user.isGM) {
+            const sender = game.users.get(payload.senderId);
+            const message = game.messages.get(payload.defenseMessageId);
+            const authorId = message?.author?.id ?? message?.user?.id ?? message?.user;
+            if (!sender || !message || (!sender.isGM && authorId !== sender.id)) return;
+
+            const pending = normalizePendingDefense(payload.pending);
+            const attack = game.messages.get(pending?.attackMessageId);
+            const target = resolveToken(pending?.targetTokenUuid);
+            if (!pending || !attack || !isAttackMessage(attack)) return;
+            if (!sender.isGM && !target?.actor?.testUserPermission?.(sender, "OWNER")) return;
+
+            await processDefenseMessage(message, pending, { allowForeign: true });
         }
     });
 }
@@ -585,7 +601,12 @@ function buildEventGroup(group, isLatest) {
 }
 
 function chatMessageHtml(message) {
-    return `<article class="sf-chat-message message" data-message-id="${escapeAttr(message.id)}"><div class="message-content">${message.content ?? ""}</div></article>`;
+    let content = message.content ?? "";
+    if (isMagicFumbleMessage(message)) {
+        const fumble = getFumbleData(message) ?? createMagicFumbleData(message, content);
+        if (fumble) content = decorateMagicFumbleCard(content, fumble);
+    }
+    return `<article class="sf-chat-message message" data-message-id="${escapeAttr(message.id)}"><div class="message-content">${content}</div></article>`;
 }
 
 function buildQuickTargets(context) {
@@ -959,7 +980,14 @@ function captureSystemActiveDefense(message, html) {
     for (const button of html.querySelectorAll('[data-localaction="activeDefense" i], [data-local-action="activeDefense" i]')) {
         if (button.dataset.smootherFightCaptured) continue;
         button.dataset.smootherFightCaptured = "true";
-        button.addEventListener("click", () => rememberPendingDefense(message), { capture: true });
+        button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            void beginActiveDefense(message).catch((error) => {
+                console.error(`${MODULE_ID} | Active defense failed`, error);
+                ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+            });
+        }, { capture: true });
     }
 }
 
@@ -975,8 +1003,16 @@ async function attachMagicFumbleActions(message, renderedRoot = null) {
     const renderedContent = renderedRoot
         ? (renderedRoot.matches?.(".message-content") ? renderedRoot : renderedRoot.querySelector?.(".message-content"))
         : null;
-    const extracted = extractMagicFumbleEffects(renderedContent ?? message.content);
-    if (!extracted.damage && !extracted.conditions.length) return;
+    const fumble = createMagicFumbleData(message, renderedContent ?? message.content);
+    if (!fumble) return;
+    const content = decorateMagicFumbleCard(renderedContent?.innerHTML ?? message.content, fumble);
+    if (renderedContent) renderedContent.innerHTML = content;
+    await message.update({ content, [`flags.${MODULE_ID}.fumble`]: fumble });
+}
+
+function createMagicFumbleData(message, contentOrRoot = message.content) {
+    const extracted = extractMagicFumbleEffects(contentOrRoot);
+    if (!extracted.damage && !extracted.conditions.length) return null;
     const actor = resolveSpeakerActor(message);
     const sourceMessage = [...Array.from(game.messages?.contents ?? [])].reverse().find((candidate) =>
         candidate.id !== message.id &&
@@ -984,7 +1020,7 @@ async function attachMagicFumbleActions(message, renderedRoot = null) {
         candidate.speaker?.actor === message.speaker?.actor &&
         Number(candidate.timestamp) <= Number(message.timestamp)
     );
-    const fumble = {
+    return {
         actorUuid: actor?.uuid ?? null,
         actorName: actor?.name ?? message.speaker?.alias ?? "",
         sourceMessageId: sourceMessage?.id ?? null,
@@ -994,8 +1030,6 @@ async function attachMagicFumbleActions(message, renderedRoot = null) {
         damageApplied: false,
         conditionsApplied: false,
     };
-    const content = decorateMagicFumbleCard(renderedContent?.innerHTML ?? message.content, fumble);
-    await message.update({ content, [`flags.${MODULE_ID}.fumble`]: fumble });
 }
 
 function extractMagicFumbleEffects(contentOrRoot) {
@@ -1067,7 +1101,7 @@ function enforceFumbleActionState(root) {
 }
 
 function applyFumbleActionState(message, root) {
-    const fumble = getFumbleData(message);
+    const fumble = getFumbleData(message) ?? createMagicFumbleData(message);
     if (!fumble) return;
     const actor = resolveFumbleActor(message, fumble);
     const allowed = Boolean(game.user.isGM || actor?.isOwner);
@@ -1080,7 +1114,7 @@ function applyFumbleActionState(message, root) {
 }
 
 async function handleMagicFumbleAction(message, action) {
-    const fumble = getFumbleData(message);
+    const fumble = getFumbleData(message) ?? createMagicFumbleData(message);
     if (!fumble) return;
     const actor = resolveFumbleActor(message, fumble);
     if (!actor || !(game.user.isGM || actor.isOwner)) {
@@ -1179,7 +1213,10 @@ function isMagicFumbleMessage(message) {
 
 function rememberPendingDefense(message, targetOverride = null) {
     const context = getMessageContext(message);
-    const target = targetOverride ?? resolveToken(context?.targetTokenUuid) ?? getHudContext()?.target;
+    const target = targetOverride
+        ?? resolveToken(context?.targetTokenUuid)
+        ?? getControlledTokenDocument()
+        ?? getHudContext()?.target;
     runtime.pendingDefense = {
         attackMessageId: message.id,
         targetTokenUuid: target?.uuid ?? null,
@@ -1189,12 +1226,31 @@ function rememberPendingDefense(message, targetOverride = null) {
     return target;
 }
 
-async function processDefenseMessage(message) {
-    if (!isOwnMessage(message) || !getSetting("defenseRecalculation", true)) return;
+function getControlledTokenDocument() {
+    const controlled = Array.from(canvas?.tokens?.controlled ?? []);
+    return controlled.at(-1)?.document ?? null;
+}
+
+function normalizePendingDefense(value) {
+    if (!value || typeof value !== "object" || typeof value.attackMessageId !== "string") return null;
+    return {
+        attackMessageId: value.attackMessageId,
+        targetTokenUuid: typeof value.targetTokenUuid === "string" ? value.targetTokenUuid : null,
+        targetActorUuid: typeof value.targetActorUuid === "string" ? value.targetActorUuid : null,
+        expiresAt: Number(value.expiresAt) || Date.now() + 60 * 1000,
+    };
+}
+
+function getActiveGm() {
+    return Array.from(game.users ?? []).find((user) => user.isGM && user.active) ?? null;
+}
+
+async function processDefenseMessage(message, pendingOverride = null, { allowForeign = false } = {}) {
+    if ((!allowForeign && !isOwnMessage(message)) || !getSetting("defenseRecalculation", true)) return;
     const check = getDefenseCheck(message);
     if (!check?.succeeded) return;
 
-    let pending = runtime.pendingDefense;
+    let pending = normalizePendingDefense(pendingOverride) ?? runtime.pendingDefense;
     if (!pending || pending.expiresAt < Date.now()) pending = findPendingAttackForDefense(message);
     if (!pending?.attackMessageId) return;
     const alreadyRecalculated = Array.from(game.messages?.contents ?? []).some((candidate) =>
@@ -1213,6 +1269,24 @@ async function processDefenseMessage(message) {
         targetTokenUuid: pending.targetTokenUuid,
         targetActorUuid: pending.targetActorUuid,
     });
+
+    if (!game.user.isGM) {
+        const gm = getActiveGm();
+        runtime.pendingDefense = null;
+        if (!gm) {
+            ui.notifications.warn(localizeSystem("splittermond.chatCard.noGMConnected", "Kein GM verbunden."));
+            return;
+        }
+        game.socket.emit(SOCKET, {
+            type: "recalculate-defense",
+            senderId: game.user.id,
+            recipientId: gm.id,
+            defenseMessageId: message.id,
+            pending,
+        });
+        return;
+    }
+
     const newAttack = await recreateAttackAfterDefense(pending.attackMessageId, message, check);
     runtime.pendingDefense = null;
     if (newAttack) scheduleRender(0);
@@ -1389,7 +1463,7 @@ function enforceChatPermissions(root, hudContext) {
         }
 
         const context = getMessageContext(message);
-        const defenseTarget = resolveToken(context?.targetTokenUuid) ?? hudContext.target;
+        const defenseTarget = resolveToken(context?.targetTokenUuid) ?? getControlledTokenDocument() ?? hudContext.target;
         const mayDefend = game.user.isGM || defenseTarget?.actor?.isOwner;
         if (!mayDefend || context?.supersededBy || context?.recalculatedFrom) {
             element.querySelectorAll('[data-localaction="activeDefense" i], [data-local-action="activeDefense" i]').forEach((button) => {
