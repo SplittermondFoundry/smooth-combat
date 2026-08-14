@@ -14,6 +14,7 @@ import {
     parseStatusEffectLabel,
     recalculateAttackReport,
     totalDegreesOfSuccess,
+    withTemporarySetValues,
 } from "../Modul/splittermond-smoother-fight/scripts/combat-rules.js";
 
 function attackReport(overrides = {}) {
@@ -143,6 +144,19 @@ test("health and focus require observer permission unless the viewer is a GM", (
     assert.equal(mayViewActorResources(false, false), false);
     assert.equal(mayViewActorResources(false, true), true);
     assert.equal(mayViewActorResources(true, false), true);
+});
+
+test("temporary system targets are restored after applying linked-target damage", async () => {
+    const targets = new Set(["original"]);
+    await withTemporarySetValues(targets, ["linked"], async () => {
+        assert.deepEqual([...targets], ["linked"]);
+    });
+    assert.deepEqual([...targets], ["original"]);
+
+    await assert.rejects(withTemporarySetValues(targets, ["linked"], async () => {
+        throw new Error("damage failed");
+    }));
+    assert.deepEqual([...targets], ["original"]);
 });
 
 test("attack, spell, and damage chat messages are classified as combat events", () => {

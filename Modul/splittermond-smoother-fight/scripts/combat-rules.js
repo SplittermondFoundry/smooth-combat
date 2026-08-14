@@ -140,6 +140,18 @@ export function mayViewActorResources(isGm, hasObserverPermission) {
     return Boolean(isGm || hasObserverPermission);
 }
 
+export async function withTemporarySetValues(targetSet, values, callback) {
+    const original = Array.from(targetSet ?? []);
+    targetSet.clear();
+    for (const value of values) targetSet.add(value);
+    try {
+        return await callback();
+    } finally {
+        targetSet.clear();
+        for (const value of original) targetSet.add(value);
+    }
+}
+
 export function combatMessageKind(message) {
     const type = message?.type;
     const modelName = message?.system?.constructor?.name;

@@ -12,6 +12,7 @@ import {
     parseStatusEffectLabel,
     recalculateAttackReport,
     totalDegreesOfSuccess,
+    withTemporarySetValues,
 } from "./combat-rules.js";
 
 const MODULE_ID = "splittermond-smoother-fight";
@@ -1843,6 +1844,11 @@ async function handleChatCardAction(event, button) {
 
         const action = localAction || remoteAction;
         const actionData = { ...button.dataset, action };
+        if (localAction && String(action).toLocaleLowerCase() === "applydamagetousertargets") {
+            await applyDamageToLinkedTarget(message, actionData);
+            scheduleRender();
+            return;
+        }
         if (localAction) {
             await message.system.handleGenericAction(actionData);
         } else if (!game.user.isGM) {
@@ -1867,6 +1873,43 @@ async function handleChatCardAction(event, button) {
         console.error(`${MODULE_ID} | Chat card action failed`, error);
         ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
     }
+}
+
+async function applyDamageToLinkedTarget(message, actionData) {
+    const target = resolveDamageApplicationTarget(message);
+    const tokenObject = target?.object ?? canvas?.tokens?.get(target?.id);
+    const currentTargets = game.user?.targets;
+    if (!target || !tokenObject || !currentTargets?.clear || !currentTargets?.add) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageTargetMissing"));
+        return;
+    }
+
+    await withTemporarySetValues(currentTargets, [tokenObject], () =>
+        message.system.handleGenericAction({ ...actionData, action: "applyDamageToTargets" })
+    );
+}
+
+function resolveDamageApplicationTarget(message) {
+    const directTargetUuid = getMessageContext(message)?.targetTokenUuid;
+    if (directTargetUuid) {
+        const directTarget = resolveToken(directTargetUuid);
+        return directTarget && (game.user.isGM || !directTarget.hidden) ? directTarget : null;
+    }
+
+    const hudContext = getHudContext();
+    if (!hudContext) return null;
+    const group = collectCombatEventGroups(hudContext).find((candidate) =>
+        candidate.damages.some((damage) => damage.id === message.id)
+    );
+    const attackTargetUuid = getMessageContext(group?.primary)?.targetTokenUuid;
+    if (attackTargetUuid) {
+        const attackTarget = resolveToken(attackTargetUuid);
+        return attackTarget && (game.user.isGM || !attackTarget.hidden) ? attackTarget : null;
+    }
+
+    const speakerActor = resolveSpeakerActor(message);
+    const sameActiveActor = speakerActor?.id && speakerActor.id === hudContext.actor?.id;
+    return sameActiveActor ? hudContext.target : null;
 }
 
 async function beginActiveDefense(message) {

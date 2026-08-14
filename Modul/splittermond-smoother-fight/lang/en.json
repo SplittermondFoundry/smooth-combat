@@ -116,6 +116,7 @@
       "OriginalAttack": "Replaced by active defense",
       "TargetChanged": "Target changed to {target}.",
       "SelectTargetFirst": "Select a target first.",
+      "DamageTargetMissing": "The target stored for this attack is no longer available.",
       "ActionFailed": "The action could not be completed. See the console for details.",
       "DefenseNotAllowed": "You do not own the selected target.",
       "WaitingForDefense": "Rolling active defense for {target} …",

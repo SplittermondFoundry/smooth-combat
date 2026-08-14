@@ -116,6 +116,7 @@
       "OriginalAttack": "Durch Aktive Abwehr ersetzt",
       "TargetChanged": "Ziel auf {target} gesetzt.",
       "SelectTargetFirst": "Bitte zuerst ein Ziel auswählen.",
+      "DamageTargetMissing": "Das für diesen Angriff gespeicherte Ziel ist nicht mehr verfügbar.",
       "ActionFailed": "Die Aktion konnte nicht ausgeführt werden. Details stehen in der Konsole.",
       "DefenseNotAllowed": "Du hast keine Owner-Rechte für das ausgewählte Ziel.",
       "WaitingForDefense": "Aktive Abwehr wird für {target} ausgeführt …",
