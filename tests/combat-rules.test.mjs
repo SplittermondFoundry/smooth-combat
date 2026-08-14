@@ -8,6 +8,7 @@ import {
     fullyConsumedCost,
     linkMatchesCombatant,
     normalizeActorUserLinks,
+    normalizeSearchText,
     normalizeUserTokenLinks,
     parseStatusEffectLabel,
     recalculateAttackReport,
@@ -130,6 +131,11 @@ test("actor assignments keep exactly one user per character or NPC sheet", () =>
 test("unlinked synthetic tokens resolve to their stable source sheet UUID", () => {
     assert.equal(actorLinkUuid("Actor.hero", "hero"), "Actor.hero");
     assert.equal(actorLinkUuid("Scene.scene.Token.token.Actor.hero", "hero"), "Actor.hero");
+});
+
+test("sheet search is case- and accent-insensitive", () => {
+    assert.equal(normalizeSearchText("  Äijagar  "), "aijagar");
+    assert.equal(normalizeSearchText("GRAULWURM"), "graulwurm");
 });
 
 test("attack, spell, and damage chat messages are classified as combat events", () => {

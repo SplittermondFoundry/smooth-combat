@@ -128,6 +128,14 @@ export function actorLinkUuid(actorUuid, actorId = null) {
     return actorId ? `Actor.${actorId}` : actorUuid ?? "";
 }
 
+export function normalizeSearchText(value) {
+    return String(value ?? "")
+        .normalize("NFD")
+        .replace(/\p{M}/gu, "")
+        .toLocaleLowerCase("de")
+        .trim();
+}
+
 export function combatMessageKind(message) {
     const type = message?.type;
     const modelName = message?.system?.constructor?.name;

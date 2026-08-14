@@ -16,22 +16,42 @@
         <section class="sf-sheet-assignments">
             <h3><i class="fa-solid fa-address-card"></i> {{localize "SMOOTHER_FIGHT.Settings.SheetAssignments"}}</h3>
             <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.SheetAssignmentsHint"}}</p>
-            <div class="sf-sheet-assignment-list">
-                {{#each actors}}
-                    <label class="sf-sheet-assignment-row">
-                        <img src="{{this.img}}" alt="">
-                        <span>
-                            <strong>{{this.name}}</strong>
-                            <small>{{this.typeLabel}}</small>
-                        </span>
-                        <select data-actor-uuid="{{this.uuid}}">
-                            <option value="">{{localize "SMOOTHER_FIGHT.Settings.NoSheetAssignment"}}</option>
-                            {{#each this.users}}
-                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}</option>
-                            {{/each}}
-                        </select>
-                    </label>
+            <label class="sf-sheet-search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" data-role="actor-search" placeholder="{{localize "SMOOTHER_FIGHT.Settings.SearchSheets"}}" autocomplete="off">
+            </label>
+            <div class="sf-sheet-assignment-groups">
+                {{#each actorGroups}}
+                    {{#if this.count}}
+                        <details class="sf-actor-group" data-actor-group="{{this.id}}" {{#if this.open}}open{{/if}}>
+                            <summary>
+                                <span><i class="{{this.icon}}"></i> {{this.label}}</span>
+                                <span class="sf-actor-group-meta">
+                                    <span data-role="actor-group-count">{{this.count}}</span>
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </span>
+                            </summary>
+                            <div class="sf-sheet-assignment-list">
+                                {{#each this.actors}}
+                                    <label class="sf-sheet-assignment-row" data-actor-row data-search="{{this.name}}">
+                                        <img src="{{this.img}}" alt="">
+                                        <span>
+                                            <strong>{{this.name}}</strong>
+                                            <small>{{this.typeLabel}}</small>
+                                        </span>
+                                        <select data-actor-uuid="{{this.uuid}}">
+                                            <option value="">{{localize "SMOOTHER_FIGHT.Settings.NoSheetAssignment"}}</option>
+                                            {{#each this.users}}
+                                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}</option>
+                                            {{/each}}
+                                        </select>
+                                    </label>
+                                {{/each}}
+                            </div>
+                        </details>
+                    {{/if}}
                 {{/each}}
+                <p class="notification warning" data-role="no-actor-search-results" hidden>{{localize "SMOOTHER_FIGHT.Settings.NoSearchResults"}}</p>
                 {{#unless hasActors}}
                     <p class="notification warning">{{localize "SMOOTHER_FIGHT.Settings.NoSheets"}}</p>
                 {{/unless}}

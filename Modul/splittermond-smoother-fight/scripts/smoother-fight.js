@@ -6,6 +6,7 @@ import {
     fullyConsumedCost,
     linkMatchesCombatant,
     normalizeActorUserLinks,
+    normalizeSearchText,
     normalizeUserTokenLinks,
     parseStatusEffectLabel,
     recalculateAttackReport,
@@ -198,6 +199,7 @@ function registerSettingsMenu() {
                     uuid: actor.uuid,
                     name: actor.name,
                     img: actor.img ?? "icons/svg/mystery-man.svg",
+                    type: actor.type,
                     typeLabel: actor.type === "npc"
                         ? t("SMOOTHER_FIGHT.Settings.NpcSheet")
                         : t("SMOOTHER_FIGHT.Settings.CharacterSheet"),
@@ -208,11 +210,27 @@ function registerSettingsMenu() {
                         selected: actorLinks[actor.uuid] === user.id,
                     })),
                 }));
+            const actorGroups = [
+                {
+                    id: "character",
+                    label: t("SMOOTHER_FIGHT.Settings.PlayerCharacters"),
+                    icon: "fa-solid fa-user-shield",
+                    open: true,
+                    actors: actors.filter((actor) => actor.type === "character"),
+                },
+                {
+                    id: "npc",
+                    label: t("SMOOTHER_FIGHT.Settings.Npcs"),
+                    icon: "fa-solid fa-dragon",
+                    open: false,
+                    actors: actors.filter((actor) => actor.type === "npc"),
+                },
+            ].map((group) => ({ ...group, count: group.actors.length }));
             return {
                 ...context,
                 users,
                 gms,
-                actors,
+                actorGroups,
                 hasActors: actors.length > 0,
                 hasTokens: tokens.length > 0,
             };
@@ -223,6 +241,37 @@ function registerSettingsMenu() {
             const primaryGmSelect = this.element.querySelector('[data-role="primary-gm"]');
             const actorAssignmentSelects = () => Array.from(this.element.querySelectorAll('select[data-actor-uuid]'));
             const assignmentInputs = () => Array.from(this.element.querySelectorAll('input[type="checkbox"][data-user-id][data-token-uuid]'));
+            const actorSearchInput = this.element.querySelector('[data-role="actor-search"]');
+            const actorGroups = Array.from(this.element.querySelectorAll('[data-actor-group]'));
+            const noSearchResults = this.element.querySelector('[data-role="no-actor-search-results"]');
+            const openBeforeSearch = new Map();
+            let searchActive = false;
+            const refreshActorSearch = () => {
+                const query = normalizeSearchText(actorSearchInput?.value);
+                if (query && !searchActive) {
+                    for (const group of actorGroups) openBeforeSearch.set(group.dataset.actorGroup, group.open);
+                }
+                let totalMatches = 0;
+                for (const group of actorGroups) {
+                    const rows = Array.from(group.querySelectorAll('[data-actor-row]'));
+                    let visibleCount = 0;
+                    for (const row of rows) {
+                        const visible = !query || normalizeSearchText(row.dataset.search).includes(query);
+                        row.hidden = !visible;
+                        if (visible) visibleCount += 1;
+                    }
+                    totalMatches += visibleCount;
+                    const count = group.querySelector('[data-role="actor-group-count"]');
+                    if (count) count.textContent = query ? `${visibleCount}/${rows.length}` : String(rows.length);
+                    group.hidden = Boolean(query && visibleCount === 0);
+                    if (query && visibleCount > 0) group.open = true;
+                    if (!query && searchActive) group.open = openBeforeSearch.get(group.dataset.actorGroup) ?? group.open;
+                }
+                if (noSearchResults) noSearchResults.hidden = !query || totalMatches > 0;
+                searchActive = Boolean(query);
+                if (!query) openBeforeSearch.clear();
+            };
+            actorSearchInput?.addEventListener("input", refreshActorSearch);
             const refreshFallbackAssignments = () => {
                 for (const input of assignmentInputs()) {
                     if (input.dataset.automatic !== "true" && input.dataset.inherited !== "true") continue;
