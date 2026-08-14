@@ -441,7 +441,7 @@ function buildCombatControls(context) {
     const paused = Number.isFinite(initiative) && initiative >= COMBAT_PAUSE.wait;
     const preparedSpellId = context.actor.getFlag?.("splittermond", "preparedSpell");
     const preparedSpell = context.actor.spells?.find((spell) => spell.id === preparedSpellId) ?? null;
-    const tickButtons = [1, 2, 3, 5].map((ticks) => `
+    const tickButtons = [1, 2, 3, 5, 10].map((ticks) => `
         <button type="button" data-sf-action="add-ticks" data-ticks="${ticks}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks }))}">+${ticks} T</button>
     `).join("");
     const pauseButtons = paused
