@@ -297,7 +297,7 @@ class SmootherFightHud {
     }
 
     async onClick(event) {
-        const target = event.target.closest("[data-sf-action], .sf-chat-message button, .sf-chat-message [role=button]");
+        const target = event.target.closest("[data-sf-action], .sf-chat-message .splittermond-chat-action, .sf-chat-message button, .sf-chat-message [role=button]");
         if (!target || !this.element.contains(target)) return;
 
         const action = target.dataset.sfAction;
@@ -606,7 +606,27 @@ function chatMessageHtml(message) {
         const fumble = getFumbleData(message) ?? createMagicFumbleData(message, content);
         if (fumble) content = decorateMagicFumbleCard(content, fumble);
     }
+    content = scopeChatCardIds(content, message.id);
     return `<article class="sf-chat-message message" data-message-id="${escapeAttr(message.id)}"><div class="message-content">${content}</div></article>`;
+}
+
+function scopeChatCardIds(content, messageId) {
+    const template = document.createElement("template");
+    template.innerHTML = content ?? "";
+    const idMap = new Map();
+    for (const element of template.content.querySelectorAll("[id]")) {
+        const originalId = element.id;
+        const scopedId = `${MODULE_ID}-${messageId}-${originalId}`;
+        idMap.set(originalId, scopedId);
+        element.id = scopedId;
+    }
+    for (const label of template.content.querySelectorAll("label[for]")) {
+        const scopedId = idMap.get(label.htmlFor);
+        if (scopedId) label.htmlFor = scopedId;
+    }
+    const wrapper = document.createElement("div");
+    wrapper.append(template.content.cloneNode(true));
+    return wrapper.innerHTML;
 }
 
 function buildQuickTargets(context) {
