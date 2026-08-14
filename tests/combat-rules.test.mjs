@@ -81,6 +81,7 @@ test("token mapping prefers exact token or actor matches", () => {
     assert.equal(linkMatchesCombatant({ tokenUuid: "Scene.s1.Token.t1" }, combatant), true);
     assert.equal(linkMatchesCombatant({ actorUuid: "Actor.a1" }, combatant), true);
     assert.equal(linkMatchesCombatant({ actorId: "other" }, combatant), false);
+    assert.equal(linkMatchesCombatant({ tokenUuid: "Scene.s1.Token.t2", actorUuid: "Actor.a1" }, combatant), false);
 });
 
 test("legacy single-token mappings are normalized to multiple-token lists", () => {
@@ -96,6 +97,19 @@ test("legacy single-token mappings are normalized to multiple-token lists", () =
     assert.deepEqual(normalized.user1, [{ tokenUuid: "Scene.s1.Token.t1", label: "Farruk" }]);
     assert.equal(normalized.user2.length, 2);
     assert.deepEqual(normalized.empty, []);
+});
+
+test("a token can only be assigned once and explicit players win over the fallback GM", () => {
+    const normalized = normalizeUserTokenLinks({
+        gm: [
+            { tokenUuid: "Scene.s1.Token.t1", label: "Farruk" },
+            { tokenUuid: "Scene.s1.Token.t2", label: "Stavi" },
+        ],
+        player: [{ tokenUuid: "Scene.s1.Token.t1", label: "Farruk" }],
+    }, "gm");
+
+    assert.deepEqual(normalized.player.map((link) => link.tokenUuid), ["Scene.s1.Token.t1"]);
+    assert.deepEqual(normalized.gm.map((link) => link.tokenUuid), ["Scene.s1.Token.t2"]);
 });
 
 test("attack, spell, and damage chat messages are classified as combat events", () => {

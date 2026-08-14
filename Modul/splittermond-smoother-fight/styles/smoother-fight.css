@@ -826,6 +826,31 @@
     min-height: 0;
 }
 
+.sf-primary-gm-setting {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.7fr) minmax(250px, 1.3fr);
+    gap: 6px 12px;
+    align-items: center;
+    padding: 9px;
+    border: 1px solid rgba(216, 168, 93, 0.46);
+    border-radius: 4px;
+    background: rgba(216, 168, 93, 0.08);
+}
+
+.sf-primary-gm-setting > label {
+    color: var(--color-text-primary);
+    font-weight: 700;
+}
+
+.sf-primary-gm-setting > select {
+    width: 100%;
+}
+
+.sf-primary-gm-setting > .notes {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
 .sf-settings-list {
     display: grid;
     gap: 6px;
@@ -872,6 +897,11 @@
 
 .sf-settings-tokens label:hover {
     background: rgba(108, 201, 193, 0.1);
+}
+
+.sf-settings-tokens input[data-automatic="true"] + span {
+    color: var(--color-text-subtle);
+    font-style: italic;
 }
 
 .sf-settings-user {

@@ -101,6 +101,13 @@ function registerSettings() {
         default: {},
         onChange: rerender,
     });
+    game.settings.register(MODULE_ID, "primaryGmId", {
+        scope: "world",
+        config: false,
+        type: String,
+        default: "",
+        onChange: rerender,
+    });
 }
 
 function registerSettingsMenu() {
@@ -128,14 +135,25 @@ function registerSettingsMenu() {
 
         async _prepareContext(options) {
             const context = await super._prepareContext(options);
-            const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}));
+            const primaryGmId = getSetting("primaryGmId", "");
+            const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}), primaryGmId);
             const tokens = getSceneTokens().map((token) => ({
                 uuid: token.uuid,
                 actorUuid: token.actor?.uuid ?? null,
+                actorId: token.actor?.id ?? null,
                 label: `${token.name} — ${token.actor?.name ?? "–"}`,
             }));
-            const users = Array.from(game.users ?? []).map((user) => {
-                const userLinks = links[user.id] ?? [];
+            const allUsers = Array.from(game.users ?? []);
+            const orderedUserIds = allUsers
+                .map((user) => user.id)
+                .sort((leftId, rightId) => leftId === primaryGmId ? 1 : rightId === primaryGmId ? -1 : 0);
+            const ownerByToken = new Map(tokens.map((token) => {
+                const ownerId = orderedUserIds.find((userId) =>
+                    (links[userId] ?? []).some((link) => settingsLinkMatchesToken(link, token, tokens))
+                );
+                return [token.uuid, ownerId ?? null];
+            }));
+            const users = allUsers.map((user) => {
                 return {
                     id: user.id,
                     name: user.name,
@@ -143,24 +161,65 @@ function registerSettingsMenu() {
                     isGM: user.isGM,
                     tokens: tokens.map((token) => ({
                         ...token,
-                        selected: userLinks.some((link) =>
-                            link.tokenUuid === token.uuid ||
-                            (!tokens.some((candidate) => candidate.uuid === link.tokenUuid) && link.actorUuid && link.actorUuid === token.actorUuid)
-                        ),
+                        selected: ownerByToken.get(token.uuid) === user.id || (!ownerByToken.get(token.uuid) && primaryGmId === user.id),
+                        automatic: !ownerByToken.get(token.uuid) && primaryGmId === user.id,
                     })),
                 };
             });
-            return { ...context, users, hasTokens: tokens.length > 0 };
+            const gms = allUsers.filter((user) => user.isGM).map((user) => ({
+                id: user.id,
+                name: user.name,
+                selected: user.id === primaryGmId,
+            }));
+            return { ...context, users, gms, hasTokens: tokens.length > 0 };
         }
 
         async _onRender(context, options) {
             await super._onRender(context, options);
+            const primaryGmSelect = this.element.querySelector('[data-role="primary-gm"]');
+            const assignmentInputs = () => Array.from(this.element.querySelectorAll('input[type="checkbox"][data-user-id][data-token-uuid]'));
+            const refreshAutomaticAssignments = () => {
+                for (const input of assignmentInputs()) {
+                    if (input.dataset.automatic !== "true") continue;
+                    input.checked = false;
+                    delete input.dataset.automatic;
+                }
+                const primaryGmId = primaryGmSelect?.value ?? "";
+                if (!primaryGmId) return;
+                const tokenUuids = new Set(assignmentInputs().map((input) => input.dataset.tokenUuid));
+                for (const tokenUuid of tokenUuids) {
+                    const inputs = assignmentInputs().filter((input) => input.dataset.tokenUuid === tokenUuid);
+                    if (inputs.some((input) => input.checked)) continue;
+                    const fallback = inputs.find((input) => input.dataset.userId === primaryGmId);
+                    if (!fallback) continue;
+                    fallback.checked = true;
+                    fallback.dataset.automatic = "true";
+                }
+            };
+            for (const checkbox of assignmentInputs()) {
+                checkbox.addEventListener("change", () => {
+                    if (checkbox.checked) {
+                        for (const other of assignmentInputs()) {
+                            if (other !== checkbox && other.dataset.tokenUuid === checkbox.dataset.tokenUuid) other.checked = false;
+                        }
+                    }
+                    refreshAutomaticAssignments();
+                });
+            }
+            primaryGmSelect?.addEventListener("change", refreshAutomaticAssignments);
             this.element.querySelector('[data-action="save-links"]')?.addEventListener("click", async () => {
                 const links = {};
                 for (const user of game.users ?? []) links[user.id] = [];
-                for (const checkbox of this.element.querySelectorAll('input[type="checkbox"][data-user-id]:checked')) {
+                const primaryGmId = primaryGmSelect?.value ?? "";
+                const claimed = new Set();
+                const checked = assignmentInputs()
+                    .filter((checkbox) => checkbox.checked && checkbox.dataset.automatic !== "true")
+                    .sort((left, right) => left.dataset.userId === primaryGmId ? 1 : right.dataset.userId === primaryGmId ? -1 : 0);
+                for (const checkbox of checked) {
+                    if (claimed.has(checkbox.dataset.tokenUuid)) continue;
                     const token = resolveToken(checkbox.value);
                     if (!token) continue;
+                    claimed.add(checkbox.dataset.tokenUuid);
                     links[checkbox.dataset.userId] ??= [];
                     links[checkbox.dataset.userId].push({
                         tokenUuid: checkbox.value,
@@ -169,6 +228,7 @@ function registerSettingsMenu() {
                         label: token?.name ?? checkbox.value,
                     });
                 }
+                await game.settings.set(MODULE_ID, "primaryGmId", primaryGmId);
                 await game.settings.set(MODULE_ID, "userTokenLinks", links);
                 ui.notifications.info(t("SMOOTHER_FIGHT.Settings.Saved"));
                 this.close();
@@ -704,13 +764,29 @@ function getHudContext() {
 }
 
 function getLinkedUser(combatant, actor) {
-    const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}));
-    const exact = Object.entries(links).find(([, userLinks]) => userLinks.some((link) => linkMatchesCombatant(link, combatant)));
-    if (exact) return game.users.get(exact[0]) ?? null;
+    const primaryGmId = getSetting("primaryGmId", "");
+    const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}), primaryGmId);
+    const assignments = Object.entries(links).sort(([leftId], [rightId]) =>
+        leftId === primaryGmId ? 1 : rightId === primaryGmId ? -1 : 0
+    );
+    const exact = assignments.find(([, userLinks]) => userLinks.some((link) => linkMatchesCombatant(link, combatant)));
+    const explicitlyLinkedUser = exact ? game.users.get(exact[0]) : null;
+    if (explicitlyLinkedUser) return explicitlyLinkedUser;
+
+    const primaryGm = game.users.get(primaryGmId);
+    if (primaryGm?.isGM) return primaryGm;
 
     const users = Array.from(game.users ?? []);
     const owners = users.filter((user) => !user.isGM && actor.testUserPermission?.(user, "OWNER"));
     return owners.find((user) => user.active) ?? owners[0] ?? (game.user.isGM ? game.user : null);
+}
+
+function settingsLinkMatchesToken(link, token, sceneTokens) {
+    if (link.tokenUuid === token.uuid) return true;
+    const linkedTokenStillExists = sceneTokens.some((candidate) => candidate.uuid === link.tokenUuid);
+    if (linkedTokenStillExists) return false;
+    if (link.actorUuid && token.actorUuid) return link.actorUuid === token.actorUuid;
+    return Boolean(link.actorId && token.actorId && link.actorId === token.actorId);
 }
 
 function getTargetForUser(user) {

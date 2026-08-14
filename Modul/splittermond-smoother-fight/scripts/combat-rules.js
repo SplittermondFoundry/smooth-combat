@@ -72,23 +72,42 @@ export function linkMatchesCombatant(link, combatant) {
     const tokenUuid = combatant.token?.uuid ?? combatant.tokenUuid ?? null;
     const actorUuid = combatant.actor?.uuid ?? combatant.actorUuid ?? null;
     const actorId = combatant.actor?.id ?? combatant.actorId ?? null;
-    return Boolean(
-        (link.tokenUuid && tokenUuid && link.tokenUuid === tokenUuid) ||
-        (link.actorUuid && actorUuid && link.actorUuid === actorUuid) ||
-        (link.actorId && actorId && link.actorId === actorId)
-    );
+    if (link.tokenUuid && tokenUuid) return link.tokenUuid === tokenUuid;
+    if (link.actorUuid && actorUuid) return link.actorUuid === actorUuid;
+    return Boolean(link.actorId && actorId && link.actorId === actorId);
 }
 
-export function normalizeUserTokenLinks(value) {
+export function normalizeUserTokenLinks(value, fallbackUserId = null) {
     if (!value || typeof value !== "object") return {};
 
-    return Object.fromEntries(Object.entries(value).map(([userId, storedLinks]) => {
+    const normalized = Object.fromEntries(Object.entries(value).map(([userId, storedLinks]) => {
         const links = (Array.isArray(storedLinks) ? storedLinks : [storedLinks])
             .filter((link) => link && typeof link === "object")
             .filter((link) => link.tokenUuid || link.actorUuid || link.actorId)
             .map((link) => ({ ...link }));
         return [userId, links];
     }));
+    const result = Object.fromEntries(Object.keys(normalized).map((userId) => [userId, []]));
+    const entries = Object.entries(normalized).sort(([leftId], [rightId]) => {
+        if (!fallbackUserId) return 0;
+        if (leftId === fallbackUserId) return 1;
+        if (rightId === fallbackUserId) return -1;
+        return 0;
+    });
+    const claimed = new Set();
+    for (const [userId, links] of entries) {
+        for (const link of links) {
+            const key = link.tokenUuid
+                ? `token:${link.tokenUuid}`
+                : link.actorUuid
+                    ? `actor:${link.actorUuid}`
+                    : `actor-id:${link.actorId}`;
+            if (claimed.has(key)) continue;
+            claimed.add(key);
+            result[userId].push(link);
+        }
+    }
+    return result;
 }
 
 export function combatMessageKind(message) {

@@ -1,6 +1,17 @@
 <form class="sf-settings-form">
     <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.LinksHint"}}</p>
 
+    <section class="sf-primary-gm-setting">
+        <label for="smoother-fight-primary-gm">{{localize "SMOOTHER_FIGHT.Settings.PrimaryGm"}}</label>
+        <select id="smoother-fight-primary-gm" data-role="primary-gm">
+            <option value="">{{localize "SMOOTHER_FIGHT.Settings.NoPrimaryGm"}}</option>
+            {{#each gms}}
+                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>
+            {{/each}}
+        </select>
+        <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.PrimaryGmHint"}}</p>
+    </section>
+
     <div class="sf-settings-list">
         {{#each users}}
             <fieldset class="sf-settings-row">
@@ -12,7 +23,7 @@
                 <span class="sf-settings-tokens">
                     {{#each this.tokens}}
                         <label>
-                            <input type="checkbox" data-user-id="{{../id}}" value="{{this.uuid}}" {{#if this.selected}}checked{{/if}}>
+                            <input type="checkbox" data-user-id="{{../id}}" data-token-uuid="{{this.uuid}}" value="{{this.uuid}}" {{#if this.selected}}checked{{/if}} {{#if this.automatic}}data-automatic="true"{{/if}}>
                             <span>{{this.label}}</span>
                         </label>
                     {{/each}}
