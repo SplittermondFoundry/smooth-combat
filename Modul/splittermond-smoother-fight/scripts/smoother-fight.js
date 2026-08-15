@@ -27,6 +27,7 @@ const runtime = {
     pendingDefense: null,
     preparingSpellId: null,
     hoveredToken: null,
+    spellTooltip: null,
     cardsCollapsed: false,
     startedAt: Date.now(),
 };
@@ -386,11 +387,14 @@ function registerHooks() {
     });
 
     Hooks.on("createChatMessage", (message) => {
-        void onCreateChatMessage(message);
+        void onCreateChatMessage(message).finally(() => scheduleRender(0));
         scheduleRender();
     });
     Hooks.on("updateChatMessage", scheduleRender);
     Hooks.on("deleteChatMessage", scheduleRender);
+    Hooks.on("diceSoNiceRollComplete", (messageId) => {
+        if (game.messages?.get?.(messageId)) scheduleRender(0);
+    });
 
     Hooks.on("renderChatMessageHTML", (message, html) => prepareRenderedChatMessage(message, html));
     Hooks.on("renderChatMessage", (message, html) => prepareRenderedChatMessage(message, asElement(html)));
@@ -450,6 +454,7 @@ class SmootherFightHud {
         this.element.setAttribute("aria-live", "polite");
         document.body.append(this.element);
         this.element.addEventListener("click", (event) => void this.onClick(event));
+        this.element.addEventListener("contextmenu", (event) => this.onContextMenu(event));
     }
 
     async render() {
@@ -461,6 +466,7 @@ class SmootherFightHud {
         syncSystemActionBar(visible);
         if (!visible) {
             clearHoveredToken();
+            clearSpellTooltip();
             this.element.replaceChildren();
             return;
         }
@@ -468,15 +474,33 @@ class SmootherFightHud {
         const html = await buildHud(context);
         if (generation !== this.renderGeneration) return;
         clearHoveredToken();
+        clearSpellTooltip();
         this.element.innerHTML = html;
         enforceChatPermissions(this.element, context);
         enforceFumbleActionState(this.element);
         bindQuickTargetHover(this.element);
+        bindSpellTooltips(this.element, context);
+    }
+
+    onContextMenu(event) {
+        const target = event.target.closest("[data-spell-id], [data-attack-id], [data-item-id]");
+        if (!target || !this.element.contains(target) || !target.closest(".sf-actions")) return;
+        const context = getHudContext();
+        const item = context ? resolveActionItem(context.actor, target) : null;
+        if (!item?.sheet) return;
+        event.preventDefault();
+        event.stopPropagation();
+        clearSpellTooltip();
+        item.sheet.render({ force: true });
     }
 
     async onClick(event) {
         const target = event.target.closest("[data-sf-action], .sf-chat-message .splittermond-chat-action, .sf-chat-message button, .sf-chat-message [role=button]");
         if (!target || !this.element.contains(target)) return;
+        if (target.getAttribute("aria-disabled") === "true") {
+            event.preventDefault();
+            return;
+        }
 
         const action = target.dataset.sfAction;
         if (!action && target.closest(".sf-chat-message")) {
@@ -716,20 +740,22 @@ async function buildActionBar(context) {
             const preparing = runtime.preparingSpellId === spell.id;
             const skillLabel = displayLabel(spell.skill?.label);
             const skillValue = displayValue(spell.skill?.value, "");
+            const skill = [skillLabel, skillValue].filter((value) => value !== "").join(" ");
+            const focus = t("SMOOTHER_FIGHT.HUD.FocusCosts", { costs: spellFocusCosts(spell) });
             const status = preparing
                 ? t("SMOOTHER_FIGHT.HUD.Preparing")
                 : displayValue(spell.castDuration, "–");
-            return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="${preparing ? "is-preparing" : ""}" ${spell.enoughFocus === false || preparing ? "disabled" : ""}>
-                <img src="${escapeAttr(spell.img)}" alt=""><span>${escapeHtml(spell.name)}<small>${escapeHtml([skillLabel, skillValue].filter((value) => value !== "").join(" "))}</small></span>
+            return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="sf-spell-action ${preparing ? "is-preparing" : ""}" ${spell.enoughFocus === false || preparing ? 'aria-disabled="true"' : ""}>
+                <img src="${escapeAttr(spell.img)}" alt=""><span>${escapeHtml(spell.name)}<small>${escapeHtml([skill, focus].filter(Boolean).join(" · "))}</small></span>
                 <b>${escapeHtml(status)}</b>
             </button>`;
         }).join("") || emptyMenuText())}
         ${actionMenu("fa-solid fa-hand-fist", t("SMOOTHER_FIGHT.HUD.Attacks"), `
-            ${attacks.map((attack) => `<button type="button" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" class="${attack.isPrepared ? "is-prepared" : ""}">
+            ${attacks.map((attack) => `<button type="button" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" class="${attack.isPrepared ? "is-prepared" : ""}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
                 <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small></span>
                 <b>${escapeHtml(attack.isPrepared ? (displayValue(attack.damage, "–")) : `${attackSpeeds.get(attack.id) ?? "–"} T`)}</b>
             </button>`).join("") || emptyMenuText()}
-            ${equipment.length ? `<h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Equip"))}</h4>${equipment.map((item) => `<button type="button" data-sf-action="toggle-equipped" data-item-id="${escapeAttr(item.id)}" class="${item.system?.equipped ? "is-equipped" : "is-unequipped"}">
+            ${equipment.length ? `<h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Equip"))}</h4>${equipment.map((item) => `<button type="button" data-sf-action="toggle-equipped" data-item-id="${escapeAttr(item.id)}" class="${item.system?.equipped ? "is-equipped" : "is-unequipped"}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
                 <img src="${escapeAttr(item.img)}" alt=""><span>${escapeHtml(item.name)}</span><i class="fa-solid ${item.system?.equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i>
             </button>`).join("")}` : ""}
         `)}
@@ -757,13 +783,118 @@ function preparedSpellMenu(spell) {
     const cast = t("SMOOTHER_FIGHT.HUD.Cast");
     const cancel = t("SMOOTHER_FIGHT.HUD.CancelSpell");
     return `<div class="sf-action-menu sf-prepared-spell-menu">
-        <button type="button" class="sf-prepared-spell-cast" data-sf-action="cast-prepared-spell" data-spell-id="${escapeAttr(spell.id)}" title="${escapeAttr(`${spell.name}: ${cast}`)}">
+        <button type="button" class="sf-prepared-spell-cast sf-spell-action" data-sf-action="cast-prepared-spell" data-spell-id="${escapeAttr(spell.id)}" aria-label="${escapeAttr(`${spell.name}: ${cast}`)}">
             <img src="${escapeAttr(spell.img ?? "icons/svg/daze.svg")}" alt="">
             <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.PreparedSpell"))}</small><strong>${escapeHtml(spell.name)}</strong></span>
             <b><i class="fa-solid fa-wand-sparkles"></i><span>${escapeHtml(cast)}</span></b>
         </button>
         <button type="button" class="sf-prepared-spell-cancel" data-sf-action="cancel-prepared-spell" title="${escapeAttr(cancel)}" aria-label="${escapeAttr(cancel)}"><i class="fa-solid fa-xmark"></i></button>
     </div>`;
+}
+
+function spellFocusCosts(spell) {
+    return displayLabel(spell?.costs ?? spell?.system?.costs, "–");
+}
+
+function resolveActionItem(actor, element) {
+    const spellId = element?.dataset?.spellId;
+    if (spellId) {
+        return actor?.spells?.find((spell) => spell.id === spellId)
+            ?? actor?.items?.get?.(spellId)
+            ?? null;
+    }
+
+    const attackId = element?.dataset?.attackId;
+    if (attackId) {
+        const attack = actor?.attacks?.find((candidate) => candidate.id === attackId);
+        return attack?.item ?? actor?.items?.get?.(attackId) ?? null;
+    }
+
+    const itemId = element?.dataset?.itemId;
+    return itemId ? actor?.items?.get?.(itemId) ?? null : null;
+}
+
+function bindSpellTooltips(root, context) {
+    for (const button of root.querySelectorAll("[data-spell-id]")) {
+        const spell = resolveActionItem(context.actor, button);
+        if (!spell) continue;
+        button.addEventListener("mouseenter", () => showSpellTooltip(button, spell));
+        button.addEventListener("mouseleave", () => clearSpellTooltip(button));
+        button.addEventListener("focus", () => showSpellTooltip(button, spell));
+        button.addEventListener("blur", () => clearSpellTooltip(button));
+    }
+}
+
+function showSpellTooltip(anchor, spell) {
+    if (runtime.spellTooltip?.anchor === anchor) return;
+    clearSpellTooltip();
+
+    const description = itemPlainText(spell.description ?? spell.system?.description);
+    const enhancement = itemPlainText(spell.enhancementDescription ?? spell.system?.enhancementDescription);
+    const enhancementCosts = displayLabel(spell.enhancementCosts ?? spell.system?.enhancementCosts, "–");
+    const tooltip = document.createElement("aside");
+    tooltip.id = `${MODULE_ID}-spell-tooltip`;
+    tooltip.className = "sf-spell-tooltip";
+    tooltip.setAttribute("role", "tooltip");
+    tooltip.innerHTML = `
+        <header>
+            <img src="${escapeAttr(spell.img ?? "icons/svg/book.svg")}" alt="">
+            <span><strong>${escapeHtml(spell.name)}</strong><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.FocusCosts", { costs: spellFocusCosts(spell) }))}</small></span>
+        </header>
+        <section>
+            <h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SpellDescription"))}</h4>
+            <p>${escapeHtml(description || t("SMOOTHER_FIGHT.HUD.NoSpellDescription"))}</p>
+        </section>
+        <section>
+            <h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SpellEnhancement"))}<span>${escapeHtml(enhancementCosts)}</span></h4>
+            <p>${escapeHtml(enhancement || t("SMOOTHER_FIGHT.HUD.NoSpellEnhancement"))}</p>
+        </section>
+        <footer><i class="fa-solid fa-arrow-pointer"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}</footer>
+    `;
+    document.body.append(tooltip);
+    anchor.setAttribute("aria-describedby", tooltip.id);
+    runtime.spellTooltip = { anchor, element: tooltip };
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const gap = 10;
+    const viewportGap = 8;
+    let left = anchorRect.right + gap;
+    if (left + tooltipRect.width > window.innerWidth - viewportGap) {
+        left = anchorRect.left - tooltipRect.width - gap;
+    }
+    left = Math.max(viewportGap, Math.min(left, window.innerWidth - tooltipRect.width - viewportGap));
+    const top = Math.max(
+        viewportGap,
+        Math.min(anchorRect.top, window.innerHeight - tooltipRect.height - viewportGap),
+    );
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+    tooltip.classList.add("is-visible");
+}
+
+function clearSpellTooltip(anchor = null) {
+    const state = runtime.spellTooltip;
+    if (!state || (anchor && state.anchor !== anchor)) return;
+    runtime.spellTooltip = null;
+    state.anchor?.removeAttribute?.("aria-describedby");
+    state.element?.remove?.();
+}
+
+function itemPlainText(value) {
+    const source = String(value ?? "").trim();
+    if (!source) return "";
+    const template = document.createElement("template");
+    template.innerHTML = source
+        .replace(/<br\s*\/?\s*>/giu, "\n")
+        .replace(/<\/(?:p|div|li|h[1-6])>/giu, "\n");
+    return String(template.content.textContent ?? "")
+        .replace(/\u00a0/gu, " ")
+        .replace(/[ \t]+\n/gu, "\n")
+        .replace(/\n[ \t]+/gu, "\n")
+        .replace(/\n{3,}/gu, "\n\n")
+        .replace(/[ \t]{2,}/gu, " ")
+        .trim();
 }
 
 function defenseButton(actor, type, abbreviation) {
@@ -1118,6 +1249,7 @@ function collectCombatEventGroups(context) {
     const messages = Array.from(game.messages?.contents ?? game.messages ?? []);
     const combatActorIds = new Set(Array.from(context.combat.combatants ?? []).map((c) => c.actorId).filter(Boolean));
     const primaryMessages = messages.filter((message) => {
+        if (isDiceAnimationPending(message)) return false;
         if (!isAttackMessage(message) && !isSpellMessage(message)) return false;
         const cardContext = getMessageContext(message);
         if (cardContext) return cardContext.combatId === context.combat.id;
@@ -1132,6 +1264,7 @@ function collectCombatEventGroups(context) {
         fumbles: [],
     }));
     for (const message of messages) {
+        if (isDiceAnimationPending(message)) continue;
         if (!isDamageMessage(message) && !isDefenseMessage(message) && !isMagicFumbleMessage(message)) continue;
         const fumble = getFumbleData(message);
         const cardContext = getMessageContext(message);
@@ -1374,12 +1507,41 @@ function publishOwnTarget(explicitUuid) {
 
 async function onCreateChatMessage(message) {
     try {
+        await waitForDiceSoNice(message);
         if (isAttackMessage(message) || isSpellMessage(message)) await attachCombatContext(message);
         if (isMagicFumbleMessage(message)) await attachMagicFumbleActions(message);
         if (isDefenseMessage(message)) await processDefenseMessage(message);
     } catch (error) {
         console.error(`${MODULE_ID} | Failed to process chat message`, error);
     }
+}
+
+async function waitForDiceSoNice(message) {
+    if (!game.modules?.get?.("dice-so-nice")?.active) return;
+    await Promise.resolve();
+    if (!isDiceAnimationPending(message)) return;
+
+    await new Promise((resolve) => {
+        let timeoutId = null;
+        let hookId = null;
+        const finish = () => {
+            if (timeoutId) clearTimeout(timeoutId);
+            if (hookId !== null) Hooks.off("diceSoNiceRollComplete", hookId);
+            resolve();
+        };
+        hookId = Hooks.on("diceSoNiceRollComplete", (messageId) => {
+            if (messageId !== message.id) return;
+            queueMicrotask(() => {
+                if (!isDiceAnimationPending(message)) finish();
+            });
+        });
+        timeoutId = setTimeout(finish, 30000);
+        if (!isDiceAnimationPending(message)) finish();
+    });
+}
+
+function isDiceAnimationPending(message) {
+    return Boolean(message?._dice3danimating || Number(message?._dice3dPendingRenders) > 0);
 }
 
 async function attachCombatContext(message) {

@@ -15,7 +15,7 @@
       "LinksMenuName": "Spieler, Bögen und Tokens verknüpfen",
       "LinksMenuLabel": "Token-Zuordnung",
       "LinksMenuHint": "Verknüpft Charakter-/NSC-Bögen und einzelne Tokens mit ihren Spielern.",
-      "LinksTitle": "Smoother Fight: Spieler, Bögen und Tokens",
+      "LinksTitle": "Smoother Fight – Spieler, Bögen und Tokens",
       "LinksHint": "Bogen-Zuordnungen gelten automatisch für jedes daraus erstellte Token. Direkte Token-Zuordnungen dienen als Ausnahme und haben Vorrang.",
       "PrimaryGm": "Haupt-GM",
       "PrimaryGmHint": "Nicht ausdrücklich zugeordnete Tokens verwenden automatisch die Zielauswahl dieses GMs.",
@@ -122,7 +122,13 @@
       "WaitingForDefense": "Aktive Abwehr wird für {target} ausgeführt …",
       "LinkedUserOffline": "Der zugeordnete Spieler ist nicht verbunden. Das letzte bekannte Ziel wird verwendet.",
       "Health": "LP",
-      "Focus": "FO"
+      "Focus": "FO",
+      "FocusCosts": "Fokus {costs}",
+      "SpellDescription": "Beschreibung",
+      "SpellEnhancement": "Verstärkung",
+      "NoSpellDescription": "Keine Beschreibung hinterlegt.",
+      "NoSpellEnhancement": "Keine Verstärkungsoption hinterlegt.",
+      "OpenItemHint": "Rechtsklick: Gegenstand öffnen"
     }
   }
 }

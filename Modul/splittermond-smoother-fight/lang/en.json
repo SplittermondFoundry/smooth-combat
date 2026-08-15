@@ -15,7 +15,7 @@
       "LinksMenuName": "Link users, sheets, and tokens",
       "LinksMenuLabel": "Token assignment",
       "LinksMenuHint": "Links character/NPC sheets and individual tokens to their users.",
-      "LinksTitle": "Smoother Fight: users, sheets, and tokens",
+      "LinksTitle": "Smoother Fight – users, sheets, and tokens",
       "LinksHint": "Sheet assignments automatically apply to every token created from that sheet. Direct token assignments are exceptions and take priority.",
       "PrimaryGm": "Primary GM",
       "PrimaryGmHint": "Tokens without an explicit assignment automatically use this GM's target selection.",
@@ -122,7 +122,13 @@
       "WaitingForDefense": "Rolling active defense for {target} …",
       "LinkedUserOffline": "The assigned player is offline. The last known target is used.",
       "Health": "HP",
-      "Focus": "FO"
+      "Focus": "FO",
+      "FocusCosts": "Focus {costs}",
+      "SpellDescription": "Description",
+      "SpellEnhancement": "Enhancement",
+      "NoSpellDescription": "No description provided.",
+      "NoSpellEnhancement": "No enhancement option provided.",
+      "OpenItemHint": "Right-click: open item"
     }
   }
 }

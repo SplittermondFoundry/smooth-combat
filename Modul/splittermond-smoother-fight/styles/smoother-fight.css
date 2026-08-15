@@ -578,7 +578,8 @@
     color: var(--sf-gold-bright);
 }
 
-#splittermond-smoother-fight-hud .sf-action-popover button:disabled {
+#splittermond-smoother-fight-hud .sf-action-popover button:disabled,
+#splittermond-smoother-fight-hud .sf-action-popover button[aria-disabled="true"] {
     opacity: 0.38;
 }
 
@@ -626,6 +627,103 @@
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
+}
+
+body > .sf-spell-tooltip {
+    position: fixed;
+    z-index: 200;
+    width: min(340px, calc(100vw - 16px));
+    max-height: min(520px, calc(100vh - 16px));
+    overflow: auto;
+    padding: 10px;
+    border: 1px solid rgba(216, 168, 93, 0.55);
+    border-radius: 7px;
+    color: #e9f1ef;
+    background: rgba(5, 15, 18, 0.985);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.56), inset 0 1px rgba(255, 255, 255, 0.04);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(3px);
+    transition: opacity 90ms ease, transform 90ms ease;
+}
+
+body > .sf-spell-tooltip.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+body > .sf-spell-tooltip header {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(117, 191, 186, 0.2);
+}
+
+body > .sf-spell-tooltip header img {
+    width: 38px;
+    height: 38px;
+    border: 0;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+body > .sf-spell-tooltip header span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+body > .sf-spell-tooltip header strong {
+    color: #f2ce87;
+    font: 700 15px/1.2 var(--font-secondary, serif);
+}
+
+body > .sf-spell-tooltip header small {
+    margin-top: 3px;
+    color: #75bfb8;
+    font-size: 10px;
+}
+
+body > .sf-spell-tooltip section {
+    margin-top: 9px;
+}
+
+body > .sf-spell-tooltip h4 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 0 4px;
+    color: #d8a85d;
+    font-size: 10px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+body > .sf-spell-tooltip h4 span {
+    color: #f2ce87;
+    text-transform: none;
+}
+
+body > .sf-spell-tooltip p {
+    margin: 0;
+    color: #d6dfdd;
+    font-size: 11px;
+    line-height: 1.42;
+    white-space: pre-line;
+}
+
+body > .sf-spell-tooltip footer {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 9px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(117, 191, 186, 0.14);
+    color: #8ba3a0;
+    font-size: 9px;
 }
 
 #splittermond-smoother-fight-hud .sf-defense-pills {
