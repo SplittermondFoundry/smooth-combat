@@ -567,9 +567,10 @@
 #splittermond-smoother-fight-hud .sf-action-popover button,
 #splittermond-smoother-fight-hud .sf-quick-targets > div button {
     width: 100%;
+    height: auto;
     min-height: 35px;
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 8px;
     margin: 0;
@@ -610,6 +611,9 @@
 #splittermond-smoother-fight-hud .sf-action-popover button span {
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    padding-block: 2px;
+    line-height: 1.15;
 }
 
 #splittermond-smoother-fight-hud .sf-action-popover button small {
