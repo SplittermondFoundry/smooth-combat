@@ -922,6 +922,18 @@ body > .sf-spell-tooltip footer {
     cursor: pointer;
 }
 
+#splittermond-smoother-fight-hud .sf-check-result-grid > .roll-summary.sf-expanded-roll-result {
+    cursor: default;
+}
+
+#splittermond-smoother-fight-hud .sf-check-result-grid > .roll-summary.sf-expanded-roll-result > .dice-tooltip {
+    display: block !important;
+    width: 100%;
+    height: auto !important;
+    margin-top: 8px;
+    overflow: visible !important;
+}
+
 #splittermond-smoother-fight-hud .sf-check-result-grid > [data-sf-label]::before {
     content: attr(data-sf-label);
     position: absolute;

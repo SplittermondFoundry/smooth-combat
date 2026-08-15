@@ -1029,6 +1029,9 @@ function arrangeCheckResults(root) {
         const roll = card.querySelector(":scope > .roll-summary");
         const degrees = card.querySelector(":scope > .degree-of-success");
         if (!roll || !degrees || roll.closest(".sf-check-result-grid")) continue;
+        if (card.matches(".attack, .spell")) {
+            roll.classList.add("expanded", "sf-expanded-roll-result");
+        }
         const summary = document.createElement("div");
         summary.className = "sf-check-result-grid";
         roll.dataset.sfLabel = t("SMOOTHER_FIGHT.HUD.RollResult");
