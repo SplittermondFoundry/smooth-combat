@@ -474,6 +474,8 @@ class SmootherFightHud {
         this.element.classList.toggle("is-hidden", !visible);
         syncSystemActionBar(visible);
         if (!visible) {
+            delete this.element.dataset.activeCombatantId;
+            delete this.element.dataset.activeActorId;
             clearHoveredToken();
             clearSpellTooltip();
             this.element.replaceChildren();
@@ -485,6 +487,8 @@ class SmootherFightHud {
         clearHoveredToken();
         clearSpellTooltip();
         this.element.innerHTML = html;
+        this.element.dataset.activeCombatantId = context.combatant.id ?? "";
+        this.element.dataset.activeActorId = context.actor.id ?? "";
         enforceChatPermissions(this.element, context);
         enforceFumbleActionState(this.element);
         bindQuickTargetHover(this.element);
@@ -959,7 +963,9 @@ function buildEventGroup(group, isLatest, hudContext) {
     const defenseBadge = defenseAlert
         ? `<span class="sf-event-badge is-defense-alert"><i class="fa-solid fa-shield-halved"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseAvailable"))}</span>`
         : "";
-    return `<details class="sf-event-group ${defenseAlert ? "is-defense-alert" : ""}" data-event-id="${escapeAttr(primary.id)}" ${isLatest && !runtime.cardsCollapsed ? "open" : ""}>
+    const belongsToActiveCombatant = messageBelongsToCombatant(primary, hudContext.combatant, context);
+    const open = isLatest && belongsToActiveCombatant && !runtime.cardsCollapsed ? "open" : "";
+    return `<details class="sf-event-group ${defenseAlert ? "is-defense-alert" : ""}" data-event-id="${escapeAttr(primary.id)}" data-event-combatant-id="${escapeAttr(context?.combatantId ?? "")}" data-event-actor-id="${escapeAttr(primary.speaker?.actor ?? "")}" ${open}>
         <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}${defenseBadge}<i class="fa-solid fa-chevron-down"></i></summary>
         <div class="sf-event-body">
             ${chatMessageHtml(primary)}
@@ -988,6 +994,8 @@ function captureHudViewState(root) {
     const groups = Array.from(scroller.querySelectorAll(".sf-event-group[data-event-id]"));
     return {
         scrollTop: scroller.scrollTop,
+        activeCombatantId: root.dataset.activeCombatantId || null,
+        activeActorId: root.dataset.activeActorId || null,
         eventIds: new Set(groups.map((group) => group.dataset.eventId)),
         openEventIds: new Set(groups.filter((group) => group.open).map((group) => group.dataset.eventId)),
     };
@@ -1000,7 +1008,16 @@ function restoreHudViewState(root, state) {
 
     const groups = Array.from(scroller.querySelectorAll(".sf-event-group[data-event-id]"));
     const currentEventIds = groups.map((group) => group.dataset.eventId);
-    const openEventIds = resolveCombatEventOpenIds(state.eventIds, state.openEventIds, currentEventIds);
+    const eventCombatantIds = new Map(groups.map((group) => [group.dataset.eventId, group.dataset.eventCombatantId || null]));
+    const eventActorIds = new Map(groups.map((group) => [group.dataset.eventId, group.dataset.eventActorId || null]));
+    const openEventIds = resolveCombatEventOpenIds(state.eventIds, state.openEventIds, currentEventIds, {
+        previousCombatantId: state.activeCombatantId,
+        currentCombatantId: root.dataset.activeCombatantId || null,
+        previousActorId: state.activeActorId,
+        currentActorId: root.dataset.activeActorId || null,
+        eventCombatantIds,
+        eventActorIds,
+    });
     groups.forEach((group) => {
         group.open = openEventIds.has(group.dataset.eventId);
     });
@@ -1012,6 +1029,13 @@ function restoreHudViewState(root, state) {
     };
     restoreScroll();
     requestAnimationFrame(restoreScroll);
+}
+
+function messageBelongsToCombatant(message, combatant, messageContext = getMessageContext(message)) {
+    if (!message || !combatant) return false;
+    if (messageContext?.combatantId) return messageContext.combatantId === combatant.id;
+    if (message.speaker?.token && combatant.tokenId) return message.speaker.token === combatant.tokenId;
+    return Boolean(message.speaker?.actor && message.speaker.actor === combatant.actorId);
 }
 
 function chatMessageHtml(message) {

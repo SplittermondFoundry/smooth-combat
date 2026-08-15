@@ -157,13 +157,35 @@ export function hasSplittermondCheckUpdate(changes) {
     return Boolean(splittermond && typeof splittermond === "object" && Object.hasOwn(splittermond, "check"));
 }
 
-export function resolveCombatEventOpenIds(previousEventIds, previousOpenEventIds, currentEventIds) {
+export function resolveCombatEventOpenIds(previousEventIds, previousOpenEventIds, currentEventIds, turn = {}) {
     const previous = new Set(previousEventIds ?? []);
     const previouslyOpen = new Set(previousOpenEventIds ?? []);
     const current = Array.from(currentEventIds ?? []);
     const newEventIds = current.filter((eventId) => !previous.has(eventId));
-    if (newEventIds.length) return new Set([newEventIds.at(-1)]);
-    return new Set(current.filter((eventId) => previouslyOpen.has(eventId)));
+    const open = newEventIds.length
+        ? new Set([newEventIds.at(-1)])
+        : new Set(current.filter((eventId) => previouslyOpen.has(eventId)));
+
+    const previousCombatantId = turn.previousCombatantId ?? null;
+    const currentCombatantId = turn.currentCombatantId ?? null;
+    if (!previousCombatantId || !currentCombatantId || previousCombatantId === currentCombatantId) return open;
+
+    const latestEventId = current.at(-1);
+    if (!latestEventId) return open;
+    const eventCombatantId = mapValue(turn.eventCombatantIds, latestEventId);
+    const eventActorId = mapValue(turn.eventActorIds, latestEventId);
+    const belongsToPrevious = eventCombatantId
+        ? eventCombatantId === previousCombatantId
+        : Boolean(eventActorId && eventActorId === turn.previousActorId);
+    const belongsToCurrent = eventCombatantId
+        ? eventCombatantId === currentCombatantId
+        : Boolean(eventActorId && eventActorId === turn.currentActorId);
+    if (belongsToPrevious && !belongsToCurrent) open.delete(latestEventId);
+    return open;
+}
+
+function mapValue(values, key) {
+    return values?.get?.(key) ?? values?.[key] ?? null;
 }
 
 export async function withTemporarySetValues(targetSet, values, callback) {

@@ -177,6 +177,35 @@ test("a new combat event closes older cards and opens only the newest event", ()
     );
 });
 
+test("the latest event closes when its combatant is no longer active", () => {
+    const turn = {
+        previousCombatantId: "combatant-1",
+        currentCombatantId: "combatant-2",
+        eventCombatantIds: new Map([
+            ["attack-old", "combatant-3"],
+            ["attack-current", "combatant-1"],
+        ]),
+    };
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["attack-old", "attack-current"],
+            ["attack-old", "attack-current"],
+            ["attack-old", "attack-current"],
+            turn
+        )],
+        ["attack-old"]
+    );
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["attack-old"],
+            ["attack-old"],
+            ["attack-old", "attack-next"],
+            { ...turn, eventCombatantIds: new Map([["attack-next", "combatant-2"]]) }
+        )],
+        ["attack-next"]
+    );
+});
+
 test("temporary system targets are restored after applying linked-target damage", async () => {
     const targets = new Set(["original"]);
     await withTemporarySetValues(targets, ["linked"], async () => {
