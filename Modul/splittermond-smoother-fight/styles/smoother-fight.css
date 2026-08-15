@@ -988,15 +988,22 @@ body > .sf-spell-tooltip footer {
     width: 100%;
 }
 
-#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-actions {
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls {
     position: sticky;
     z-index: 3;
     top: 0;
+    display: grid;
+    gap: 6px;
     margin: -4px -4px 8px;
     padding: 4px 4px 7px;
     border-bottom: 1px solid rgba(117, 191, 186, 0.22);
     background: linear-gradient(to bottom, rgba(5, 15, 18, 0.98) 64%, rgba(5, 15, 18, 0.84));
     box-shadow: 0 7px 12px rgba(5, 15, 18, 0.5);
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls > .sf-promoted-actions,
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls > .sf-promoted-degree-options {
+    margin: 0;
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message button {

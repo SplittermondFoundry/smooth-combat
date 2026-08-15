@@ -1055,8 +1055,20 @@ function promoteChatCardActions(content) {
     template.innerHTML = content ?? "";
     arrangeCheckResults(template.content);
     for (const actions of template.content.querySelectorAll(".splittermond.check > .actions, .actions.splittermond-chat-action-container")) {
+        const precedingOptions = actions.previousElementSibling;
+        const degreeOptions = precedingOptions?.matches(".splittermond-chat-action-container.chat-card-segment")
+            && precedingOptions.querySelector(".splittermond-chat-action")
+            ? precedingOptions
+            : null;
+        const promotedControls = document.createElement("div");
+        promotedControls.className = "sf-promoted-controls";
         actions.classList.add("sf-promoted-actions");
-        actions.parentElement?.prepend(actions);
+        actions.parentElement?.prepend(promotedControls);
+        promotedControls.append(actions);
+        if (degreeOptions) {
+            degreeOptions.classList.add("sf-promoted-degree-options");
+            promotedControls.append(degreeOptions);
+        }
     }
     const wrapper = document.createElement("div");
     wrapper.append(template.content.cloneNode(true));
@@ -2304,6 +2316,7 @@ function enforceChatPermissions(root, hudContext) {
             });
         }
         element.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action)), .sf-promoted-actions:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
+        element.querySelectorAll(".sf-promoted-controls:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
     }
 }
 
