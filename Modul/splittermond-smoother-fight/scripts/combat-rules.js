@@ -29,6 +29,10 @@ export function isDefenderMasteryName(value) {
     return /^(?:verteidiger|defender)(?:\s*\(|$)/u.test(name);
 }
 
+export function isTargetDependentDifficulty(value) {
+    return ["VTD", "KW", "GW"].includes(String(value ?? "").trim().toUpperCase());
+}
+
 export function recalculateAttackReport(report, difficulty, config = {}) {
     const settings = { ...DEFAULT_CHECK_CONFIG, ...config };
     const cloned = clone(report);

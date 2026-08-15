@@ -7,6 +7,7 @@ import {
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
     isDefenderMasteryName,
+    isTargetDependentDifficulty,
     isOffensiveCombatMessage,
     linkMatchesCombatant,
     mayUseRemoteChatActions,
@@ -1692,6 +1693,10 @@ async function performAttack(context, attackId) {
 async function performSpell(context, spellId) {
     const spell = context.actor.spells?.find((candidate) => candidate.id === spellId);
     if (!spell) return;
+    if (isTargetDependentDifficulty(spell.difficulty ?? spell.system?.difficulty) && !context.target) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
+        return;
+    }
     const prepared = context.actor.getFlag("splittermond", "preparedSpell") === spellId;
     if (prepared) {
         const success = await context.actor.rollSpell(spellId);

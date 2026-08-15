@@ -9,6 +9,7 @@ import {
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
     isDefenderMasteryName,
+    isTargetDependentDifficulty,
     isOffensiveCombatMessage,
     linkMatchesCombatant,
     mayUseRemoteChatActions,
@@ -61,6 +62,15 @@ test("the Defender mastery is recognized with an optional threshold suffix", () 
     assert.equal(isDefenderMasteryName("Verteidiger"), true);
     assert.equal(isDefenderMasteryName("Verteidiger (Schwelle 1)"), true);
     assert.equal(isDefenderMasteryName("Magischer Verteidiger"), false);
+});
+
+test("only resistance-based spell difficulties require a target", () => {
+    assert.equal(isTargetDependentDifficulty("VTD"), true);
+    assert.equal(isTargetDependentDifficulty(" kw "), true);
+    assert.equal(isTargetDependentDifficulty("gw"), true);
+    assert.equal(isTargetDependentDifficulty(23), false);
+    assert.equal(isTargetDependentDifficulty("20"), false);
+    assert.equal(isTargetDependentDifficulty(""), false);
 });
 
 test("attack is recalculated against the improved defense", () => {
