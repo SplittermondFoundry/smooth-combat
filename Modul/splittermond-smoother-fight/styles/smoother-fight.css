@@ -1030,6 +1030,24 @@ body > .sf-spell-tooltip footer {
     }
 }
 
+/* Firefox can flash white compositor tiles when animated filters overlap backdrop-filter layers. */
+@supports (-moz-appearance: none) {
+    #splittermond-smoother-fight-hud.sf-hud {
+        filter: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-center,
+    #splittermond-smoother-fight-hud .sf-portrait {
+        backdrop-filter: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-action-menu.is-defense-alert > summary,
+    #splittermond-smoother-fight-hud .sf-event-group.is-defense-alert .sf-chat-message [data-localaction="activeDefense" i],
+    #splittermond-smoother-fight-hud .sf-event-group.is-defense-alert .sf-chat-message [data-local-action="activeDefense" i] {
+        animation: none;
+    }
+}
+
 #splittermond-smoother-fight-hud .sf-chat-message .chat-message-header img {
     width: 36px;
     height: 36px;
