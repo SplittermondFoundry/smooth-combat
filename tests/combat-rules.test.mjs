@@ -6,6 +6,7 @@ import {
     combatMessageKind,
     findDefensiveFeatureValue,
     fullyConsumedCost,
+    hasSplittermondCheckUpdate,
     linkMatchesCombatant,
     mayUseRemoteChatActions,
     mayViewActorResources,
@@ -152,6 +153,15 @@ test("remote chat actions match Splittermond's owner, author, and GM permissions
     assert.equal(mayUseRemoteChatActions(false, true, false), true);
     assert.equal(mayUseRemoteChatActions(false, false, true), true);
     assert.equal(mayUseRemoteChatActions(true, false, false), true);
+});
+
+test("Splittermond check updates are detected for flat and nested Foundry changes", () => {
+    assert.equal(hasSplittermondCheckUpdate({ "flags.splittermond.check": { succeeded: true } }), true);
+    assert.equal(hasSplittermondCheckUpdate({ "flags.splittermond.check.succeeded": true }), true);
+    assert.equal(hasSplittermondCheckUpdate({ flags: { splittermond: { check: { succeeded: true } } } }), true);
+    assert.equal(hasSplittermondCheckUpdate({ flags: { "splittermond.check": { succeeded: true } } }), true);
+    assert.equal(hasSplittermondCheckUpdate({ flags: { "splittermond-smoother-fight": { context: {} } } }), false);
+    assert.equal(hasSplittermondCheckUpdate({ content: "updated card" }), false);
 });
 
 test("temporary system targets are restored after applying linked-target damage", async () => {

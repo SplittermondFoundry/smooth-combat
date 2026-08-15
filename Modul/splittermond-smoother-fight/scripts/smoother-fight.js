@@ -4,6 +4,7 @@ import {
     combatMessageKind,
     findDefensiveFeatureValue,
     fullyConsumedCost,
+    hasSplittermondCheckUpdate,
     linkMatchesCombatant,
     mayUseRemoteChatActions,
     mayViewActorResources,
@@ -26,6 +27,7 @@ const runtime = {
     renderTimer: null,
     targetByUser: new Map(),
     pendingDefense: null,
+    processingDefenseMessages: new Set(),
     preparingSpellId: null,
     hoveredToken: null,
     spellTooltip: null,
@@ -391,7 +393,10 @@ function registerHooks() {
         void onCreateChatMessage(message).finally(() => scheduleRender(0));
         scheduleRender();
     });
-    Hooks.on("updateChatMessage", scheduleRender);
+    Hooks.on("updateChatMessage", (message, changes) => {
+        void onUpdateChatMessage(message, changes).finally(() => scheduleRender(0));
+        scheduleRender();
+    });
     Hooks.on("deleteChatMessage", scheduleRender);
     Hooks.on("diceSoNiceRollComplete", (messageId) => {
         if (game.messages?.get?.(messageId)) scheduleRender(0);
@@ -1579,6 +1584,15 @@ async function onCreateChatMessage(message) {
     }
 }
 
+async function onUpdateChatMessage(message, changes) {
+    if (!hasSplittermondCheckUpdate(changes) || !isDefenseMessage(message)) return;
+    try {
+        await processDefenseMessage(message);
+    } catch (error) {
+        console.error(`${MODULE_ID} | Failed to process updated defense message`, error);
+    }
+}
+
 async function waitForDiceSoNice(message) {
     if (!game.modules?.get?.("dice-so-nice")?.active) return;
     await Promise.resolve();
@@ -1901,20 +1915,25 @@ function getActiveGm() {
 }
 
 async function processDefenseMessage(message, pendingOverride = null, { allowForeign = false } = {}) {
+    if (runtime.processingDefenseMessages.has(message.id)) return null;
+    runtime.processingDefenseMessages.add(message.id);
+    try {
+        return await processDefenseMessageOnce(message, pendingOverride, { allowForeign });
+    } finally {
+        runtime.processingDefenseMessages.delete(message.id);
+    }
+}
+
+async function processDefenseMessageOnce(message, pendingOverride = null, { allowForeign = false } = {}) {
     if ((!allowForeign && !isOwnMessage(message)) || !getSetting("defenseRecalculation", true)) return;
     const check = getDefenseCheck(message);
-    if (!check?.succeeded) return;
+    if (!check) return;
 
-    let pending = normalizePendingDefense(pendingOverride) ?? runtime.pendingDefense;
+    let pending = normalizePendingDefense(pendingOverride)
+        ?? normalizePendingDefense(getMessageContext(message))
+        ?? runtime.pendingDefense;
     if (!pending || pending.expiresAt < Date.now()) pending = findPendingAttackForDefense(message);
     if (!pending?.attackMessageId) return;
-    const alreadyRecalculated = Array.from(game.messages?.contents ?? []).some((candidate) =>
-        getMessageContext(candidate)?.recalculatedFrom === pending.attackMessageId
-    );
-    if (alreadyRecalculated) {
-        runtime.pendingDefense = null;
-        return;
-    }
 
     const target = resolveToken(pending.targetTokenUuid);
     if (target?.actor && message.speaker?.actor && target.actor.id !== message.speaker.actor) return;
@@ -1924,6 +1943,15 @@ async function processDefenseMessage(message, pendingOverride = null, { allowFor
         targetTokenUuid: pending.targetTokenUuid,
         targetActorUuid: pending.targetActorUuid,
     });
+    if (!check.succeeded) return;
+
+    const alreadyRecalculated = Array.from(game.messages?.contents ?? []).some((candidate) =>
+        getMessageContext(candidate)?.recalculatedFrom === pending.attackMessageId
+    );
+    if (alreadyRecalculated) {
+        runtime.pendingDefense = null;
+        return;
+    }
 
     if (!game.user.isGM) {
         const gm = getActiveGm();

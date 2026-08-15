@@ -144,6 +144,19 @@ export function mayUseRemoteChatActions(isGm, ownsSpeakerActor, isMessageAuthor)
     return Boolean(isGm || ownsSpeakerActor || isMessageAuthor);
 }
 
+export function hasSplittermondCheckUpdate(changes) {
+    if (!changes || typeof changes !== "object" || Array.isArray(changes)) return false;
+    if (Object.keys(changes).some((key) =>
+        key === "flags.splittermond.check" || key.startsWith("flags.splittermond.check.")
+    )) return true;
+
+    const flags = changes.flags;
+    if (!flags || typeof flags !== "object" || Array.isArray(flags)) return false;
+    if (Object.hasOwn(flags, "splittermond.check")) return true;
+    const splittermond = flags.splittermond;
+    return Boolean(splittermond && typeof splittermond === "object" && Object.hasOwn(splittermond, "check"));
+}
+
 export async function withTemporarySetValues(targetSet, values, callback) {
     const original = Array.from(targetSet ?? []);
     targetSet.clear();
