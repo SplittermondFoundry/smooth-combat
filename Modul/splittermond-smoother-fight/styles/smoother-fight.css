@@ -893,6 +893,84 @@ body > .sf-spell-tooltip footer {
     overflow: visible;
 }
 
+#splittermond-smoother-fight-hud .sf-check-result-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 4px 0 10px;
+}
+
+#splittermond-smoother-fight-hud .sf-check-result-grid > .roll-summary,
+#splittermond-smoother-fight-hud .sf-check-result-grid > .degree-of-success {
+    position: relative;
+    min-width: 0;
+    min-height: 86px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 0 !important;
+    padding: 24px 8px 9px !important;
+    border: 1px solid rgba(117, 191, 186, 0.3);
+    border-radius: 5px;
+    background: linear-gradient(150deg, rgba(255, 255, 255, 0.055), rgba(9, 31, 34, 0.52));
+    text-align: center;
+}
+
+#splittermond-smoother-fight-hud .sf-check-result-grid > .roll-summary {
+    border-color: rgba(216, 168, 93, 0.43);
+    cursor: pointer;
+}
+
+#splittermond-smoother-fight-hud .sf-check-result-grid > [data-sf-label]::before {
+    content: attr(data-sf-label);
+    position: absolute;
+    top: 6px;
+    left: 7px;
+    color: var(--sf-muted);
+    font-family: var(--font-primary, "Signika", sans-serif);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-check-result-grid .roll-total {
+    color: var(--sf-gold-bright);
+    font-size: 29px;
+    font-weight: 800;
+    line-height: 1;
+    text-shadow: 0 0 10px rgba(216, 168, 93, 0.24);
+}
+
+#splittermond-smoother-fight-hud .sf-check-result-grid > .degree-of-success {
+    color: var(--sf-text);
+    font-size: 11px;
+    line-height: 1.25;
+}
+
+#splittermond-smoother-fight-hud .sf-check-result-grid > .degree-of-success > div {
+    margin-bottom: 4px;
+    color: var(--sf-gold-bright);
+    font-size: 15px;
+    line-height: 1;
+}
+
+#splittermond-smoother-fight-hud .sf-check-result-grid > .degree-of-success > strong {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--sf-teal);
+    font-size: 20px;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 0 0 10px rgba(108, 201, 193, 0.25);
+}
+
+#splittermond-smoother-fight-hud .sf-check-result-grid .dice-tooltip {
+    width: 100%;
+}
+
 #splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-actions {
     position: sticky;
     z-index: 3;

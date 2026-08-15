@@ -96,6 +96,8 @@
       "PlayerTargetName": "Target of {user}: {target}",
       "AutomaticOwner": "automatic by ownership",
       "CombatEvents": "Combat events",
+      "RollResult": "Roll result",
+      "DegreesOfSuccess": "Degrees of success",
       "CollapseCards": "Collapse cards",
       "ExpandCards": "Expand cards",
       "MinimizeHud": "Minimize combat HUD",

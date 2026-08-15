@@ -1008,6 +1008,7 @@ function chatMessageHtml(message) {
 function promoteChatCardActions(content) {
     const template = document.createElement("template");
     template.innerHTML = content ?? "";
+    arrangeCheckResults(template.content);
     for (const actions of template.content.querySelectorAll(".actions.splittermond-chat-action-container")) {
         actions.classList.add("sf-promoted-actions");
         actions.parentElement?.prepend(actions);
@@ -1015,6 +1016,20 @@ function promoteChatCardActions(content) {
     const wrapper = document.createElement("div");
     wrapper.append(template.content.cloneNode(true));
     return wrapper.innerHTML;
+}
+
+function arrangeCheckResults(root) {
+    for (const card of root.querySelectorAll(".splittermond.check")) {
+        const roll = card.querySelector(":scope > .roll-summary");
+        const degrees = card.querySelector(":scope > .degree-of-success");
+        if (!roll || !degrees || roll.closest(".sf-check-result-grid")) continue;
+        const summary = document.createElement("div");
+        summary.className = "sf-check-result-grid";
+        roll.dataset.sfLabel = t("SMOOTHER_FIGHT.HUD.RollResult");
+        degrees.dataset.sfLabel = t("SMOOTHER_FIGHT.HUD.DegreesOfSuccess");
+        roll.before(summary);
+        summary.append(roll, degrees);
+    }
 }
 
 function scopeChatCardIds(content, messageId) {
@@ -2058,6 +2073,9 @@ async function handleChatCardAction(event, button) {
             scheduleRender();
             return;
         }
+        if (!localAction && String(action).toLocaleLowerCase() === "usesplinterpoint" && forwardToOriginalChatHandler(message, button, action)) {
+            return;
+        }
         if (localAction) {
             await message.system.handleGenericAction(actionData);
         } else if (!game.user.isGM) {
@@ -2082,6 +2100,23 @@ async function handleChatCardAction(event, button) {
         console.error(`${MODULE_ID} | Chat card action failed`, error);
         ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
     }
+}
+
+function forwardToOriginalChatHandler(message, sourceButton, action) {
+    const messageRoots = Array.from(document.querySelectorAll(".message[data-message-id]"))
+        .filter((element) => element.dataset.messageId === message.id && !element.closest(`#${MODULE_ID}-hud`));
+    const candidates = messageRoots.flatMap((element) =>
+        Array.from(element.querySelectorAll(".splittermond-chat-action[data-action]"))
+    );
+    const original = candidates.find((candidate) => candidate.dataset.action === action && !candidate.disabled);
+    if (!original) return false;
+
+    sourceButton.disabled = true;
+    original.click();
+    setTimeout(() => {
+        if (sourceButton.isConnected) sourceButton.disabled = false;
+    }, 1500);
+    return true;
 }
 
 async function applyDamageToLinkedTarget(message, actionData) {

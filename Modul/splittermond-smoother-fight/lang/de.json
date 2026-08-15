@@ -96,6 +96,8 @@
       "PlayerTargetName": "Ziel von {user}: {target}",
       "AutomaticOwner": "automatisch über Owner-Rechte",
       "CombatEvents": "Kampfereignisse",
+      "RollResult": "Würfelergebnis",
+      "DegreesOfSuccess": "Erfolgsgrade",
       "CollapseCards": "Karten einklappen",
       "ExpandCards": "Karten ausklappen",
       "MinimizeHud": "Kampf-HUD minimieren",
