@@ -35,12 +35,15 @@ const runtime = {
     hoveredToken: null,
     spellTooltip: null,
     cardsCollapsed: false,
+    hiddenByShortcut: false,
+    eventExpansionRequest: null,
     startedAt: Date.now(),
 };
 
 Hooks.once("init", () => {
     registerSettings();
     registerSettingsMenu();
+    registerKeybindings();
 });
 
 Hooks.once("ready", async () => {
@@ -126,6 +129,30 @@ function registerSettings() {
         type: String,
         default: "",
         onChange: rerender,
+    });
+}
+
+function registerKeybindings() {
+    game.keybindings.register(MODULE_ID, "toggleHud", {
+        name: "SMOOTHER_FIGHT.Keybindings.ToggleHudName",
+        hint: "SMOOTHER_FIGHT.Keybindings.ToggleHudHint",
+        editable: [{ key: "KeyV" }],
+        onDown: toggleHudFromKeybinding,
+        repeat: false,
+    });
+    game.keybindings.register(MODULE_ID, "collapseCombatActions", {
+        name: "SMOOTHER_FIGHT.Keybindings.CollapseCombatActionsName",
+        hint: "SMOOTHER_FIGHT.Keybindings.CollapseCombatActionsHint",
+        editable: [{ key: "KeyX" }],
+        onDown: () => requestCombatEventExpansion("collapse"),
+        repeat: false,
+    });
+    game.keybindings.register(MODULE_ID, "openLatestCombatAction", {
+        name: "SMOOTHER_FIGHT.Keybindings.OpenLatestCombatActionName",
+        hint: "SMOOTHER_FIGHT.Keybindings.OpenLatestCombatActionHint",
+        editable: [{ key: "KeyY" }],
+        onDown: () => requestCombatEventExpansion("latest"),
+        repeat: false,
     });
 }
 
@@ -471,7 +498,12 @@ class SmootherFightHud {
         const generation = ++this.renderGeneration;
         const viewState = captureHudViewState(this.element);
         const context = getHudContext();
-        const visible = Boolean(getSetting("enabled", true) && context);
+        const enabled = getSetting("enabled", true);
+        if (!enabled || !context) {
+            runtime.hiddenByShortcut = false;
+            runtime.eventExpansionRequest = null;
+        }
+        const visible = Boolean(enabled && context && !runtime.hiddenByShortcut);
         this.element.classList.toggle("is-hidden", !visible);
         syncSystemActionBar(visible);
         if (!visible) {
@@ -495,6 +527,7 @@ class SmootherFightHud {
         bindQuickTargetHover(this.element);
         bindSpellTooltips(this.element, context);
         restoreHudViewState(this.element, viewState);
+        applyCombatEventExpansionRequest(this.element);
     }
 
     onContextMenu(event) {
@@ -585,6 +618,7 @@ class SmootherFightHud {
                     await setTargetFromQuickMenu(context, target.dataset.tokenUuid);
                     break;
                 case "toggle-cards":
+                    runtime.eventExpansionRequest = null;
                     runtime.cardsCollapsed = !runtime.cardsCollapsed;
                     scheduleRender(0);
                     break;
@@ -1030,6 +1064,30 @@ function restoreHudViewState(root, state) {
     };
     restoreScroll();
     requestAnimationFrame(restoreScroll);
+}
+
+function applyCombatEventExpansionRequest(root) {
+    const request = runtime.eventExpansionRequest;
+    if (!request) return;
+    const scroller = root?.querySelector?.(".sf-event-scroller");
+    if (!scroller) return;
+
+    runtime.eventExpansionRequest = null;
+    const groups = Array.from(scroller.querySelectorAll(".sf-event-group[data-event-id]"));
+    groups.forEach((group) => {
+        group.open = false;
+    });
+    if (request !== "latest") return;
+
+    const latest = groups.at(-1);
+    if (!latest) return;
+    latest.open = true;
+    requestAnimationFrame(() => {
+        if (!latest.isConnected || !scroller.isConnected) return;
+        const top = Math.max(0, latest.offsetTop - scroller.offsetTop);
+        const maximum = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        scroller.scrollTop = Math.min(top, maximum);
+    });
 }
 
 function messageBelongsToCombatant(message, combatant, messageContext = getMessageContext(message)) {
@@ -2388,6 +2446,27 @@ function checkResultMessage(report) {
 function scheduleRender(delay = 40) {
     clearTimeout(runtime.renderTimer);
     runtime.renderTimer = setTimeout(() => void runtime.hud?.render(), delay);
+}
+
+function toggleHudFromKeybinding() {
+    if (!getSetting("enabled", true) || !getHudContext()) return false;
+    runtime.hiddenByShortcut = !runtime.hiddenByShortcut;
+    runtime.eventExpansionRequest = null;
+    scheduleRender(0);
+    return true;
+}
+
+function requestCombatEventExpansion(request) {
+    if (!getSetting("enabled", true) || !getSetting("showCards", true) || runtime.hiddenByShortcut || !getHudContext()) {
+        return false;
+    }
+    runtime.eventExpansionRequest = request;
+    if (request === "latest") {
+        runtime.cardsCollapsed = false;
+        if (getSetting("minimized", false)) void game.settings.set(MODULE_ID, "minimized", false);
+    }
+    scheduleRender(0);
+    return true;
 }
 
 function syncSystemActionBar(hudVisible) {
