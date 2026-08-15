@@ -20,6 +20,7 @@ import {
     normalizeUserTokenLinks,
     parseStatusEffectLabel,
     recalculateAttackReport,
+    requiresRollManagementPermission,
     resolveCombatEventOpenIds,
     totalDegreesOfSuccess,
     uniqueTokensByReference,
@@ -196,6 +197,15 @@ test("remote chat actions match Splittermond's owner, author, and GM permissions
     assert.equal(mayUseRemoteChatActions(false, true, false), true);
     assert.equal(mayUseRemoteChatActions(false, false, true), true);
     assert.equal(mayUseRemoteChatActions(true, false, false), true);
+});
+
+test("roll management permissions cover EG, focus, ticks, and splinter points", () => {
+    assert.equal(requiresRollManagementPermission("anyDegreeOption", true), true);
+    assert.equal(requiresRollManagementPermission("consumeCosts"), true);
+    assert.equal(requiresRollManagementPermission("advanceToken"), true);
+    assert.equal(requiresRollManagementPermission("useSplinterpoint"), true);
+    assert.equal(requiresRollManagementPermission("activeDefense"), false);
+    assert.equal(requiresRollManagementPermission("applyDamage"), false);
 });
 
 test("Splittermond check updates are detected for flat and nested Foundry changes", () => {

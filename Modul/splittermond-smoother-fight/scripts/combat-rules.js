@@ -175,6 +175,13 @@ export function mayUseRemoteChatActions(isGm, ownsSpeakerActor, isMessageAuthor)
     return Boolean(isGm || ownsSpeakerActor || isMessageAuthor);
 }
 
+export function requiresRollManagementPermission(action, isDegreeOption = false) {
+    if (isDegreeOption) return true;
+    return ["consumecosts", "advancetoken", "usesplinterpoint"].includes(
+        String(action ?? "").trim().toLocaleLowerCase()
+    );
+}
+
 export function hasSplittermondCheckUpdate(changes) {
     if (!changes || typeof changes !== "object" || Array.isArray(changes)) return false;
     if (Object.keys(changes).some((key) =>

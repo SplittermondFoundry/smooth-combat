@@ -18,6 +18,7 @@ import {
     normalizeUserTokenLinks,
     parseStatusEffectLabel,
     recalculateAttackReport,
+    requiresRollManagementPermission,
     resolveCombatEventOpenIds,
     totalDegreesOfSuccess,
     uniqueTokensByReference,
@@ -2498,6 +2499,10 @@ async function handleChatCardAction(event, button) {
     const remoteAction = button.dataset.action;
     if (!localAction && !remoteAction) return;
     event.preventDefault();
+    if (isRollManagementControl(button) && !mayManageMessageRoll(message)) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.NoOwner"));
+        return;
+    }
 
     try {
         if (String(localAction).toLocaleLowerCase() === "activedefense") {
@@ -2852,6 +2857,8 @@ function enforceChatPermissions(root, hudContext) {
     for (const element of root.querySelectorAll(".sf-chat-message")) {
         const message = game.messages.get(element.dataset.messageId);
         if (!message) continue;
+        const mayManageRoll = mayManageMessageRoll(message);
+        if (!mayManageRoll) removeRollManagementControls(element);
         const renderedActions = getRenderedChatActionKeys(message.id);
         if (renderedActions) {
             for (const button of element.querySelectorAll(".splittermond-chat-action[data-action], .splittermond-chat-action[data-localaction], .splittermond-chat-action[data-local-action]")) {
@@ -2859,10 +2866,7 @@ function enforceChatPermissions(root, hudContext) {
                 if (key && !renderedActions.has(key)) button.remove();
             }
         } else {
-            const speakerActor = message.speaker?.actor ? game.actors.get(message.speaker.actor) : null;
-            const authorId = message.author?.id ?? message.user?.id ?? message.user;
-            const mayChange = mayUseRemoteChatActions(game.user.isGM, speakerActor?.isOwner, authorId === game.user.id);
-            if (!mayChange) {
+            if (!mayManageRoll) {
                 element.querySelectorAll(".splittermond-chat-action[data-action]:not([data-localaction]):not([data-local-action])").forEach((button) => button.remove());
             }
         }
@@ -2884,6 +2888,30 @@ function enforceChatPermissions(root, hudContext) {
         element.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action)), .sf-promoted-actions:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
         element.querySelectorAll(".sf-promoted-controls:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
     }
+}
+
+function mayManageMessageRoll(message, user = game.user) {
+    const speakerActor = resolveSpeakerActor(message);
+    const ownsSpeakerActor = Boolean(speakerActor?.testUserPermission?.(user, "OWNER") ?? speakerActor?.isOwner);
+    const authorId = message?.author?.id ?? message?.user?.id ?? message?.user;
+    return mayUseRemoteChatActions(Boolean(user?.isGM), ownsSpeakerActor, authorId === user?.id);
+}
+
+function isRollManagementControl(control) {
+    const isDegreeOption = Boolean(
+        control?.closest?.(".sf-promoted-degree-options")
+        || control?.matches?.('input[type="checkbox"].splittermond-chat-action[data-action]')
+    );
+    return requiresRollManagementPermission(control?.dataset?.action, isDegreeOption);
+}
+
+function removeRollManagementControls(element) {
+    element.querySelectorAll([
+        ".sf-promoted-degree-options",
+        '.splittermond-chat-action[data-action="consumeCosts" i]',
+        '.splittermond-chat-action[data-action="advanceToken" i]',
+        '.splittermond-chat-action[data-action="useSplinterpoint" i]',
+    ].join(", ")).forEach((control) => control.remove());
 }
 
 function enforceSystemVisibility(element, message, context = getMessageContext(message)) {
