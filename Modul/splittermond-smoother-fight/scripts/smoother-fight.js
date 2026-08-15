@@ -493,6 +493,14 @@ class SmootherFightHud {
     }
 
     onContextMenu(event) {
+        const portrait = event.target.closest(".sf-portrait[data-sf-token-uuid]");
+        if (portrait && this.element.contains(portrait)) {
+            event.preventDefault();
+            event.stopPropagation();
+            showTokenOnCanvas(resolveToken(portrait.dataset.sfTokenUuid));
+            return;
+        }
+
         const target = event.target.closest("[data-spell-id], [data-attack-id], [data-item-id]");
         if (!target || !this.element.contains(target) || !target.closest(".sf-actions")) return;
         const context = getHudContext();
@@ -646,11 +654,12 @@ function buildHudToggle(minimized) {
 function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false }) {
     const image = token?.texture?.src ?? actor?.img ?? "icons/svg/mystery-man.svg";
     const clickable = action ? `data-sf-action="${action}" role="button" tabindex="0"` : "";
+    const tokenReference = token?.uuid ? `data-sf-token-uuid="${escapeAttr(token.uuid)}"` : "";
     const defense = getDerivedValue(actor, "defense");
     const body = getDerivedValue(actor, "bodyresist");
     const mind = getDerivedValue(actor, "mindresist");
     return `
-        <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""}" ${clickable}>
+        <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""}" ${clickable} ${tokenReference}>
             <div class="sf-portrait-image" style="--sf-token-image:url('${escapeCssUrl(image)}')">
                 <span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>
                 ${highlighted ? `<span class="sf-target-alert"><i class="fa-solid fa-bullseye"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YouAreTarget"))}</span></span>` : ""}
@@ -1451,6 +1460,24 @@ function focusCombatantToken(context) {
     if (!object?.center) return;
     canvas?.animatePan?.({ x: object.center.x, y: object.center.y });
     canvas?.ping?.(object.center);
+}
+
+function showTokenOnCanvas(token) {
+    const sceneId = token?.parent?.id ?? token?.scene?.id;
+    if (!canvas?.ready || (sceneId && sceneId !== canvas.scene?.id)) return;
+
+    const object = token?.object ?? canvas?.tokens?.get(token?.id);
+    if (!object?.visible || !object?.center) {
+        ui.notifications.warn("COMBATANT.WarnNonVisibleToken", { localize: true });
+        return;
+    }
+
+    const { x, y } = object.center;
+    return canvas.animatePan({
+        x,
+        y,
+        scale: Math.max(canvas.stage.scale.x, canvas.dimensions.scale.default),
+    });
 }
 
 async function requireGm(callback) {
