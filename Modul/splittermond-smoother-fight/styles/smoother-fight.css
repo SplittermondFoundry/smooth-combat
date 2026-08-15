@@ -32,11 +32,17 @@
 #splittermond-smoother-fight-hud.sf-hud.is-minimized {
     left: var(--sf-minimized-center, 50%);
     right: auto;
-    bottom: var(--sf-minimized-bottom, 10px);
+    bottom: 10px;
     width: min(620px, calc(100vw - 24px));
     max-width: none;
     margin-inline: 0;
     transform: translateX(-50%);
+}
+
+#splittermond-smoother-fight-hud.sf-hud.is-minimized.is-action-bar-aligned {
+    top: var(--sf-minimized-top);
+    bottom: auto;
+    transform: translate(-50%, -50%);
 }
 
 #splittermond-smoother-fight-hud .sf-shell,

@@ -3013,23 +3013,32 @@ function syncSystemActionBar(hudVisible) {
 
 function syncMinimizedHudPosition(hud, minimized) {
     hud.classList.toggle("is-minimized", minimized);
+    hud.classList.remove("is-action-bar-aligned");
     hud.style.removeProperty("--sf-minimized-center");
-    hud.style.removeProperty("--sf-minimized-bottom");
+    hud.style.removeProperty("--sf-minimized-top");
     if (!minimized) return;
 
-    const actionBar = document.querySelector("#token-action-bar:not(.sf-system-bar-hidden)");
-    const bounds = actionBar?.getBoundingClientRect?.();
-    if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+    const actionBarSelectors = [
+        "#token-action-bar:not(.sf-system-bar-hidden) .token-action-bar",
+        "#custom-hotbar",
+        "#hotbar",
+    ];
+    const bounds = actionBarSelectors
+        .map((selector) => document.querySelector(selector))
+        .filter((element) => element && window.getComputedStyle(element).display !== "none")
+        .map((element) => element.getBoundingClientRect())
+        .find((candidate) => candidate.width > 0 && candidate.height > 0);
+    if (!bounds) return;
 
     const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
     const hudWidth = Math.min(620, Math.max(0, viewportWidth - 24));
     const halfWidth = hudWidth / 2;
     const desiredCenter = bounds.left + bounds.width / 2;
     const center = Math.min(viewportWidth - halfWidth - 12, Math.max(halfWidth + 12, desiredCenter));
-    const bottom = Math.max(10, viewportHeight - bounds.top + 8);
+    const top = bounds.top + bounds.height / 2;
+    hud.classList.add("is-action-bar-aligned");
     hud.style.setProperty("--sf-minimized-center", `${Math.round(center)}px`);
-    hud.style.setProperty("--sf-minimized-bottom", `${Math.round(bottom)}px`);
+    hud.style.setProperty("--sf-minimized-top", `${Math.round(top)}px`);
 }
 
 function isUnmodifiedKeyAvailable(key) {
