@@ -112,6 +112,7 @@
       "FumbleDamageApplied": "{name} verliert {damage} Lebenspunkte.",
       "FumbleConditionsApplied": "Die Zustände wurden {name} hinzugefügt.",
       "DefenseResult": "Aktive Abwehr",
+      "DefenseAvailable": "Deine Aktive Abwehr",
       "Recalculated": "Neu berechnet gegen {defense}: {value}",
       "OriginalAttack": "Durch Aktive Abwehr ersetzt",
       "TargetChanged": "Ziel auf {target} gesetzt.",

@@ -765,7 +765,7 @@ async function buildActionBar(context) {
             defenseButton(actor, "defense", "VTD"),
             defenseButton(actor, "bodyresist", "KW"),
             defenseButton(actor, "mindresist", "GW"),
-        ].join(""))}
+        ].join(""), isCurrentUserTarget(context.target) ? "is-defense-alert" : "")}
         <div class="sf-defense-pills" aria-hidden="true">
             <span>VTD <b>${escapeHtml(getDerivedValue(actor, "defense"))}</b></span>
             <span>KW <b>${escapeHtml(getDerivedValue(actor, "bodyresist"))}</b></span>
@@ -774,8 +774,8 @@ async function buildActionBar(context) {
     </nav>`;
 }
 
-function actionMenu(icon, label, body) {
-    return `<details class="sf-action-menu">
+function actionMenu(icon, label, body, className = "") {
+    return `<details class="sf-action-menu ${escapeAttr(className)}">
         <summary><i class="${icon}"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-up sf-chevron"></i></summary>
         <div class="sf-action-popover">${body}</div>
     </details>`;
@@ -916,7 +916,7 @@ function buildCombatEvents(context) {
     const title = runtime.cardsCollapsed ? t("SMOOTHER_FIGHT.HUD.ExpandCards") : t("SMOOTHER_FIGHT.HUD.CollapseCards");
     const body = !groups.length
         ? `<p class="sf-events-empty">${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoEvents"))}</p>`
-        : groups.map((group, index) => buildEventGroup(group, index === groups.length - 1)).join("");
+        : groups.map((group, index) => buildEventGroup(group, index === groups.length - 1, context)).join("");
     return `<section class="sf-events ${runtime.cardsCollapsed ? "is-collapsed" : ""}">
         <button type="button" class="sf-events-heading" data-sf-action="toggle-cards" title="${escapeAttr(title)}">
             <span><i class="fa-solid fa-message"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CombatEvents"))}</span>
@@ -926,11 +926,12 @@ function buildCombatEvents(context) {
     </section>`;
 }
 
-function buildEventGroup(group, isLatest) {
+function buildEventGroup(group, isLatest, hudContext) {
     const primary = group.primary;
     const context = getMessageContext(primary);
     const recalculated = context?.recalculatedFrom;
     const superseded = context?.supersededBy;
+    const defenseAlert = shouldHighlightActiveDefense(group, isLatest, hudContext, context);
     const badge = group.kind === "spell"
         ? `<span class="sf-event-badge is-spell"><i class="fa-solid fa-wand-sparkles"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Spells"))}</span>`
         : recalculated
@@ -938,8 +939,11 @@ function buildEventGroup(group, isLatest) {
         : superseded
             ? `<span class="sf-event-badge is-muted">${escapeHtml(t("SMOOTHER_FIGHT.HUD.OriginalAttack"))}</span>`
             : "";
-    return `<details class="sf-event-group" data-event-id="${escapeAttr(primary.id)}" ${isLatest && !runtime.cardsCollapsed ? "open" : ""}>
-        <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}<i class="fa-solid fa-chevron-down"></i></summary>
+    const defenseBadge = defenseAlert
+        ? `<span class="sf-event-badge is-defense-alert"><i class="fa-solid fa-shield-halved"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseAvailable"))}</span>`
+        : "";
+    return `<details class="sf-event-group ${defenseAlert ? "is-defense-alert" : ""}" data-event-id="${escapeAttr(primary.id)}" ${isLatest && !runtime.cardsCollapsed ? "open" : ""}>
+        <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}${defenseBadge}<i class="fa-solid fa-chevron-down"></i></summary>
         <div class="sf-event-body">
             ${chatMessageHtml(primary)}
             ${group.defenses.map((message) => `<div class="sf-associated-card"><h4><i class="fa-solid fa-shield"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseResult"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
@@ -947,6 +951,14 @@ function buildEventGroup(group, isLatest) {
             ${group.fumbles.map((message) => `<div class="sf-associated-card is-fumble"><h4><i class="fa-solid fa-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MagicFumble"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
         </div>
     </details>`;
+}
+
+function shouldHighlightActiveDefense(group, isLatest, hudContext, messageContext) {
+    if (game.user?.isGM || group.kind !== "attack") return false;
+    if (messageContext?.recalculatedFrom || messageContext?.supersededBy || group.defenses.length) return false;
+    const storedTarget = resolveToken(messageContext?.targetTokenUuid);
+    if (storedTarget) return isCurrentUserTarget(storedTarget);
+    return Boolean(isLatest && isCurrentUserTarget(hudContext?.target));
 }
 
 function captureHudViewState(root) {

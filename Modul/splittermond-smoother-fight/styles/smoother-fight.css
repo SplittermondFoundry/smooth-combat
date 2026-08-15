@@ -523,6 +523,17 @@
     background: rgba(108, 201, 193, 0.08);
 }
 
+#splittermond-smoother-fight-hud .sf-action-menu.is-defense-alert > summary {
+    color: #fff4c9;
+    background: linear-gradient(135deg, rgba(216, 168, 93, 0.25), rgba(108, 201, 193, 0.2));
+    box-shadow: inset 0 0 0 1px rgba(242, 206, 135, 0.48);
+    animation: sf-defense-attention 1.8s ease-in-out infinite;
+}
+
+#splittermond-smoother-fight-hud .sf-action-menu.is-defense-alert > summary > i:first-child {
+    color: #fff0ad;
+}
+
 #splittermond-smoother-fight-hud .sf-action-menu > summary > i:first-child {
     color: var(--sf-gold);
     font-size: 17px;
@@ -812,6 +823,16 @@ body > .sf-spell-tooltip footer {
     border-top: 1px solid var(--sf-line);
 }
 
+#splittermond-smoother-fight-hud .sf-event-group.is-defense-alert {
+    background: linear-gradient(90deg, rgba(216, 168, 93, 0.11), rgba(108, 201, 193, 0.07));
+    box-shadow: inset 3px 0 var(--sf-gold-bright);
+}
+
+#splittermond-smoother-fight-hud .sf-event-group.is-defense-alert > summary {
+    color: #fff2bd;
+    font-weight: 700;
+}
+
 #splittermond-smoother-fight-hud .sf-event-group > summary {
     display: flex;
     align-items: center;
@@ -841,6 +862,12 @@ body > .sf-spell-tooltip footer {
 #splittermond-smoother-fight-hud .sf-event-badge.is-muted {
     color: var(--sf-muted);
     background: rgba(255, 255, 255, 0.05);
+}
+
+#splittermond-smoother-fight-hud .sf-event-badge.is-defense-alert {
+    color: #082326;
+    background: var(--sf-gold-bright);
+    box-shadow: 0 0 8px rgba(242, 206, 135, 0.35);
 }
 
 #splittermond-smoother-fight-hud .sf-event-body {
@@ -879,6 +906,33 @@ body > .sf-spell-tooltip footer {
 
 #splittermond-smoother-fight-hud .sf-chat-message button {
     pointer-events: auto;
+}
+
+#splittermond-smoother-fight-hud .sf-event-group.is-defense-alert .sf-chat-message [data-localaction="activeDefense" i],
+#splittermond-smoother-fight-hud .sf-event-group.is-defense-alert .sf-chat-message [data-local-action="activeDefense" i] {
+    border: 1px solid #f2ce87 !important;
+    color: #fff7d6 !important;
+    background: linear-gradient(135deg, rgba(184, 128, 42, 0.78), rgba(24, 101, 100, 0.86)) !important;
+    box-shadow: 0 0 0 1px rgba(108, 201, 193, 0.3), 0 0 12px rgba(242, 206, 135, 0.38) !important;
+    font-weight: 800;
+    animation: sf-defense-attention 1.8s ease-in-out infinite;
+}
+
+@keyframes sf-defense-attention {
+    0%, 100% {
+        filter: brightness(1);
+    }
+    50% {
+        filter: brightness(1.22);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #splittermond-smoother-fight-hud .sf-action-menu.is-defense-alert > summary,
+    #splittermond-smoother-fight-hud .sf-event-group.is-defense-alert .sf-chat-message [data-localaction="activeDefense" i],
+    #splittermond-smoother-fight-hud .sf-event-group.is-defense-alert .sf-chat-message [data-local-action="activeDefense" i] {
+        animation: none;
+    }
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message .chat-message-header img {

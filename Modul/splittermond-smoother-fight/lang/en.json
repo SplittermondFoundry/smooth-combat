@@ -112,6 +112,7 @@
       "FumbleDamageApplied": "{name} loses {damage} health points.",
       "FumbleConditionsApplied": "Conditions added to {name}.",
       "DefenseResult": "Active defense",
+      "DefenseAvailable": "Your active defense",
       "Recalculated": "Recalculated against {defense}: {value}",
       "OriginalAttack": "Replaced by active defense",
       "TargetChanged": "Target changed to {target}.",
