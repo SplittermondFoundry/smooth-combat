@@ -107,6 +107,7 @@
       "AutomaticOwner": "automatisch über Owner-Rechte",
       "CombatEvents": "Kampfereignisse",
       "EventTarget": "Ziel: {target}",
+      "ShowEventTarget": "Zieltoken {target} auf der Karte anzeigen",
       "RollResult": "Würfelergebnis",
       "RollDetails": "Wurfdetails",
       "DegreesOfSuccess": "Erfolgsgrade",

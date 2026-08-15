@@ -625,6 +625,9 @@ class SmootherFightHud {
                 case "focus-combatant":
                     focusCombatantToken(context);
                     break;
+                case "show-token":
+                    showTokenOnCanvas(resolveToken(target.dataset.tokenUuid));
+                    break;
                 case "toggle-combatant-hidden":
                     await requireGm(() => context.combatant.update({ hidden: !context.combatant.hidden }));
                     break;
@@ -1280,14 +1283,21 @@ function arrangeDamageResult(root, message) {
 function addOffenseTarget(card, message) {
     if (card.querySelector(":scope > .sf-offense-target")) return;
     const header = card.querySelector(":scope > .chat-message-header");
-    const targetName = getMessageTargetName(getMessageContext(message));
+    const messageContext = getMessageContext(message);
+    const targetName = getMessageTargetName(messageContext);
     if (!header || !targetName) return;
 
-    const label = t("SMOOTHER_FIGHT.HUD.EventTarget", { target: targetName });
-    const target = document.createElement("div");
+    const targetToken = resolveToken(messageContext?.targetTokenUuid);
+    const label = t(targetToken ? "SMOOTHER_FIGHT.HUD.ShowEventTarget" : "SMOOTHER_FIGHT.HUD.EventTarget", { target: targetName });
+    const target = document.createElement(targetToken ? "button" : "div");
     target.className = "sf-offense-target";
     target.title = label;
     target.setAttribute("aria-label", label);
+    if (targetToken) {
+        target.type = "button";
+        target.dataset.sfAction = "show-token";
+        target.dataset.tokenUuid = targetToken.uuid;
+    }
     target.innerHTML = `<i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Target"))}</span><strong>${escapeHtml(targetName)}</strong>`;
     header.after(target);
 }

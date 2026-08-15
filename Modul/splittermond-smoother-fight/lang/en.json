@@ -107,6 +107,7 @@
       "AutomaticOwner": "automatic by ownership",
       "CombatEvents": "Combat events",
       "EventTarget": "Target: {target}",
+      "ShowEventTarget": "Show target token {target} on the canvas",
       "RollResult": "Roll result",
       "RollDetails": "Roll details",
       "DegreesOfSuccess": "Degrees of success",
