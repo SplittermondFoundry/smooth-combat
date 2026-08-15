@@ -140,6 +140,10 @@ export function mayViewActorResources(isGm, hasObserverPermission) {
     return Boolean(isGm || hasObserverPermission);
 }
 
+export function mayUseRemoteChatActions(isGm, ownsSpeakerActor, isMessageAuthor) {
+    return Boolean(isGm || ownsSpeakerActor || isMessageAuthor);
+}
+
 export async function withTemporarySetValues(targetSet, values, callback) {
     const original = Array.from(targetSet ?? []);
     targetSet.clear();

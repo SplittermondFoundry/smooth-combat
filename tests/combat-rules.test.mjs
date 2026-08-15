@@ -7,6 +7,7 @@ import {
     findDefensiveFeatureValue,
     fullyConsumedCost,
     linkMatchesCombatant,
+    mayUseRemoteChatActions,
     mayViewActorResources,
     normalizeActorUserLinks,
     normalizeSearchText,
@@ -144,6 +145,13 @@ test("health and focus require observer permission unless the viewer is a GM", (
     assert.equal(mayViewActorResources(false, false), false);
     assert.equal(mayViewActorResources(false, true), true);
     assert.equal(mayViewActorResources(true, false), true);
+});
+
+test("remote chat actions match Splittermond's owner, author, and GM permissions", () => {
+    assert.equal(mayUseRemoteChatActions(false, false, false), false);
+    assert.equal(mayUseRemoteChatActions(false, true, false), true);
+    assert.equal(mayUseRemoteChatActions(false, false, true), true);
+    assert.equal(mayUseRemoteChatActions(true, false, false), true);
 });
 
 test("temporary system targets are restored after applying linked-target damage", async () => {

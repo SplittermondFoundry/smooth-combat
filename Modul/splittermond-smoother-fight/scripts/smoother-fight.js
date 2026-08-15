@@ -5,6 +5,7 @@ import {
     findDefensiveFeatureValue,
     fullyConsumedCost,
     linkMatchesCombatant,
+    mayUseRemoteChatActions,
     mayViewActorResources,
     normalizeActorUserLinks,
     normalizeSearchText,
@@ -2172,10 +2173,19 @@ function enforceChatPermissions(root, hudContext) {
     for (const element of root.querySelectorAll(".sf-chat-message")) {
         const message = game.messages.get(element.dataset.messageId);
         if (!message) continue;
-        const speakerActor = resolveSpeakerActor(message);
-        const mayChange = game.user.isGM || speakerActor?.isOwner || message.author?.id === game.user.id;
-        if (!mayChange) {
-            element.querySelectorAll("[data-action]:not([data-localaction]):not([data-local-action])").forEach((button) => button.remove());
+        const renderedActions = getRenderedChatActionKeys(message.id);
+        if (renderedActions) {
+            for (const button of element.querySelectorAll(".splittermond-chat-action[data-action], .splittermond-chat-action[data-localaction], .splittermond-chat-action[data-local-action]")) {
+                const key = chatActionKey(button);
+                if (key && !renderedActions.has(key)) button.remove();
+            }
+        } else {
+            const speakerActor = message.speaker?.actor ? game.actors.get(message.speaker.actor) : null;
+            const authorId = message.author?.id ?? message.user?.id ?? message.user;
+            const mayChange = mayUseRemoteChatActions(game.user.isGM, speakerActor?.isOwner, authorId === game.user.id);
+            if (!mayChange) {
+                element.querySelectorAll(".splittermond-chat-action[data-action]:not([data-localaction]):not([data-local-action])").forEach((button) => button.remove());
+            }
         }
 
         const context = getMessageContext(message);
@@ -2189,6 +2199,24 @@ function enforceChatPermissions(root, hudContext) {
         }
         element.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
     }
+}
+
+function getRenderedChatActionKeys(messageId) {
+    const messageRoots = Array.from(document.querySelectorAll(".message[data-message-id]"))
+        .filter((element) => element.dataset.messageId === messageId && !element.closest(`#${MODULE_ID}-hud`));
+    if (!messageRoots.length) return null;
+    return new Set(messageRoots.flatMap((element) =>
+        Array.from(element.querySelectorAll(".splittermond-chat-action[data-action], .splittermond-chat-action[data-localaction], .splittermond-chat-action[data-local-action]"))
+            .map(chatActionKey)
+            .filter(Boolean)
+    ));
+}
+
+function chatActionKey(button) {
+    const localAction = button?.dataset?.localaction ?? button?.dataset?.localAction;
+    if (localAction) return `local:${String(localAction).toLocaleLowerCase()}`;
+    const remoteAction = button?.dataset?.action;
+    return remoteAction ? `remote:${String(remoteAction).toLocaleLowerCase()}` : "";
 }
 
 function getMessageContext(message) {
