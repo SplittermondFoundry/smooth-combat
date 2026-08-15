@@ -1010,7 +1010,7 @@ function promoteChatCardActions(content) {
     const template = document.createElement("template");
     template.innerHTML = content ?? "";
     arrangeCheckResults(template.content);
-    for (const actions of template.content.querySelectorAll(".actions.splittermond-chat-action-container")) {
+    for (const actions of template.content.querySelectorAll(".splittermond.check > .actions, .actions.splittermond-chat-action-container")) {
         actions.classList.add("sf-promoted-actions");
         actions.parentElement?.prepend(actions);
     }
@@ -2197,7 +2197,7 @@ function enforceChatPermissions(root, hudContext) {
                 if (context?.supersededBy || context?.recalculatedFrom) button.remove();
             });
         }
-        element.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
+        element.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action)), .sf-promoted-actions:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
     }
 }
 
