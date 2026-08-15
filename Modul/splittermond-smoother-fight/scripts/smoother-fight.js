@@ -1497,11 +1497,13 @@ function showTokenOnCanvas(token) {
     }
 
     const { x, y } = object.center;
-    return canvas.animatePan({
+    const animation = canvas.animatePan({
         x,
         y,
         scale: Math.max(canvas.stage.scale.x, canvas.dimensions.scale.default),
     });
+    canvas.ping?.(object.center);
+    return animation;
 }
 
 async function requireGm(callback) {
