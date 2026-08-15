@@ -3091,7 +3091,7 @@ function syncMinimizedHudPosition(hud, minimized) {
     const halfWidth = hudWidth / 2;
     const desiredCenter = bounds.left + bounds.width / 2;
     const center = Math.min(viewportWidth - halfWidth - 12, Math.max(halfWidth + 12, desiredCenter));
-    const top = bounds.top + bounds.height / 2;
+    const top = bounds.top + 4;
     hud.classList.add("is-action-bar-aligned");
     hud.style.setProperty("--sf-minimized-center", `${Math.round(center)}px`);
     hud.style.setProperty("--sf-minimized-top", `${Math.round(top)}px`);

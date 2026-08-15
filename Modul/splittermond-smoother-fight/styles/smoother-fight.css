@@ -42,7 +42,7 @@
 #splittermond-smoother-fight-hud.sf-hud.is-minimized.is-action-bar-aligned {
     top: var(--sf-minimized-top);
     bottom: auto;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -100%);
 }
 
 #splittermond-smoother-fight-hud .sf-shell,
