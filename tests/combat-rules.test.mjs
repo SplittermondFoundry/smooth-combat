@@ -18,6 +18,7 @@ import {
     recalculateAttackReport,
     resolveCombatEventOpenIds,
     totalDegreesOfSuccess,
+    uniqueTokensByReference,
     withTemporarySetValues,
 } from "../Modul/splittermond-smoother-fight/scripts/combat-rules.js";
 
@@ -91,6 +92,15 @@ test("token mapping prefers exact token or actor matches", () => {
     assert.equal(linkMatchesCombatant({ actorUuid: "Actor.a1" }, combatant), true);
     assert.equal(linkMatchesCombatant({ actorId: "other" }, combatant), false);
     assert.equal(linkMatchesCombatant({ tokenUuid: "Scene.s1.Token.t2", actorUuid: "Actor.a1" }, combatant), false);
+});
+
+test("target candidates retain different tokens that share the same name", () => {
+    const first = { uuid: "Scene.scene.Token.first", id: "first", name: "Farruk" };
+    const second = { uuid: "Scene.scene.Token.second", id: "second", name: "Farruk" };
+    assert.deepEqual(
+        uniqueTokensByReference([first, second, first]).map((token) => token.uuid),
+        [first.uuid, second.uuid]
+    );
 });
 
 test("legacy single-token mappings are normalized to multiple-token lists", () => {

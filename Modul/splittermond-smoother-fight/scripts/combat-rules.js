@@ -77,6 +77,16 @@ export function linkMatchesCombatant(link, combatant) {
     return Boolean(link.actorId && actorId && link.actorId === actorId);
 }
 
+export function uniqueTokensByReference(tokens) {
+    const references = new Set();
+    return Array.from(tokens ?? []).filter((token) => {
+        const reference = token?.uuid ?? token?.id ?? null;
+        if (!reference || references.has(reference)) return false;
+        references.add(reference);
+        return true;
+    });
+}
+
 export function normalizeUserTokenLinks(value, fallbackUserId = null) {
     if (!value || typeof value !== "object") return {};
 

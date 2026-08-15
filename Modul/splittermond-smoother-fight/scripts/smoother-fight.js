@@ -16,6 +16,7 @@ import {
     recalculateAttackReport,
     resolveCombatEventOpenIds,
     totalDegreesOfSuccess,
+    uniqueTokensByReference,
     withTemporarySetValues,
 } from "./combat-rules.js";
 
@@ -1099,10 +1100,11 @@ function scopeChatCardIds(content, messageId) {
 }
 
 function buildQuickTargets(context) {
-    const candidates = getCombatSceneTokens(context.combat).filter((token) => token.id !== context.token?.id);
+    const candidates = getTargetSceneTokens(context.combat).filter((token) => token.uuid !== context.token?.uuid);
+    const labels = quickTargetLabels(candidates);
     const body = candidates.length
         ? candidates.map((token) => `<button type="button" data-sf-action="set-target" data-token-uuid="${escapeAttr(token.uuid)}" class="${context.target?.uuid === token.uuid ? "is-current" : ""}">
-            <img src="${escapeAttr(token.texture?.src ?? token.actor?.img ?? "icons/svg/mystery-man.svg")}" alt=""><span>${escapeHtml(token.name)}</span>
+            <img src="${escapeAttr(token.texture?.src ?? token.actor?.img ?? "icons/svg/mystery-man.svg")}" alt=""><span>${escapeHtml(labels.get(token.uuid) ?? token.name)}</span>
             ${context.target?.uuid === token.uuid ? '<i class="fa-solid fa-crosshairs"></i>' : ""}
         </button>`).join("")
         : `<p>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoCombatants"))}</p>`;
@@ -1111,6 +1113,20 @@ function buildQuickTargets(context) {
         <summary title="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-up"></i></summary>
         <div>${body}</div>
     </details>`;
+}
+
+function quickTargetLabels(tokens) {
+    const names = new Map(tokens.map((token) => [token.uuid, String(token.name ?? token.actor?.name ?? "–")]));
+    const totals = new Map();
+    for (const name of names.values()) totals.set(name, (totals.get(name) ?? 0) + 1);
+    const occurrences = new Map();
+    return new Map(tokens.map((token) => {
+        const name = names.get(token.uuid);
+        const total = totals.get(name) ?? 1;
+        const occurrence = (occurrences.get(name) ?? 0) + 1;
+        occurrences.set(name, occurrence);
+        return [token.uuid, total > 1 ? `${name} · ${occurrence}/${total}` : name];
+    }));
 }
 
 function getHudContext() {
@@ -1332,11 +1348,12 @@ function getSceneTokens() {
     return Array.from(scene.tokens ?? []).filter((token) => game.user.isGM || !token.hidden);
 }
 
-function getCombatSceneTokens(combat) {
+function getTargetSceneTokens(combat) {
     const sceneId = canvas?.scene?.id;
-    return Array.from(combat.combatants ?? [])
+    const combatTokens = Array.from(combat.combatants ?? [])
         .map((combatant) => combatant.token ?? resolveCombatantToken(combatant))
         .filter((token) => token && (!sceneId || token.parent?.id === sceneId) && (game.user.isGM || !token.hidden));
+    return uniqueTokensByReference([...combatTokens, ...getSceneTokens()]);
 }
 
 function resolveCombatantToken(combatant) {
