@@ -1130,7 +1130,10 @@ function promoteChatCardActions(content) {
         const promotedControls = document.createElement("div");
         promotedControls.className = "sf-promoted-controls";
         actions.classList.add("sf-promoted-actions");
-        actions.parentElement?.prepend(promotedControls);
+        const card = actions.parentElement;
+        const header = card?.querySelector(":scope > .chat-message-header");
+        if (header) header.after(promotedControls);
+        else card?.prepend(promotedControls);
         promotedControls.append(actions);
         if (degreeOptions) {
             degreeOptions.classList.add("sf-promoted-degree-options");

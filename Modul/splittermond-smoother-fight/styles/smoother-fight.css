@@ -778,7 +778,7 @@ body > .sf-spell-tooltip footer {
 }
 
 #splittermond-smoother-fight-hud .sf-events {
-    max-height: min(330px, 40vh);
+    max-height: min(410px, 50vh);
     transition: max-height 160ms ease;
 }
 
@@ -810,7 +810,7 @@ body > .sf-spell-tooltip footer {
 }
 
 #splittermond-smoother-fight-hud .sf-event-scroller {
-    max-height: min(298px, calc(40vh - 32px));
+    max-height: min(378px, calc(50vh - 32px));
     overflow: auto;
     scrollbar-width: thin;
 }
@@ -880,6 +880,10 @@ body > .sf-spell-tooltip footer {
     gap: 7px;
     padding: 3px 7px 8px;
     align-items: start;
+}
+
+#splittermond-smoother-fight-hud .sf-event-body > .sf-chat-message {
+    grid-column: 1 / -1;
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message {
@@ -1001,9 +1005,41 @@ body > .sf-spell-tooltip footer {
     box-shadow: 0 7px 12px rgba(5, 15, 18, 0.5);
 }
 
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls:has(> .sf-promoted-degree-options) {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: start;
+}
+
 #splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls > .sf-promoted-actions,
 #splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls > .sf-promoted-degree-options {
+    min-width: 0;
     margin: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls h3 {
+    margin: 0 0 3px;
+    font-size: 11px;
+    line-height: 1.15;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls button {
+    min-height: 24px;
+    margin-block: 2px;
+    padding-block: 2px;
+    font-size: 11px;
+    line-height: 1.15;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-degree-options .degree-of-success-description {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+    gap: 1px 8px;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-degree-options .splittermond-inline-label-input {
+    min-width: 0;
+    font-size: 11px;
+    line-height: 1.15;
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message button {
