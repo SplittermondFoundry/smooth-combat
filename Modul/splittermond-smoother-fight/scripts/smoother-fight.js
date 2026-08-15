@@ -9,6 +9,7 @@ import {
     linkMatchesCombatant,
     mayUseRemoteChatActions,
     mayViewActorResources,
+    mayViewTargetDifficulty,
     normalizeActorUserLinks,
     normalizeSearchText,
     normalizeUserTokenLinks,
@@ -150,19 +151,10 @@ function registerKeybindings() {
     game.keybindings.register(MODULE_ID, "openLatestCombatAction", {
         name: "SMOOTHER_FIGHT.Keybindings.OpenLatestCombatActionName",
         hint: "SMOOTHER_FIGHT.Keybindings.OpenLatestCombatActionHint",
-        editable: [{ key: defaultLetterKeyCode("Y") }],
+        editable: [{ key: "KeyY" }, { key: "KeyZ" }],
         onDown: () => requestCombatEventExpansion("latest"),
         repeat: false,
     });
-}
-
-function defaultLetterKeyCode(letter) {
-    const normalized = String(letter ?? "").trim().toUpperCase();
-    const universalKeybindings = Boolean(game.settings.get("core", "universalKeybindings"));
-    const germanEnvironment = [globalThis.navigator?.language, game.i18n?.lang]
-        .some((locale) => /^de(?:-|$)/iu.test(String(locale ?? "")));
-    if (!universalKeybindings && germanEnvironment && normalized === "Y") return "KeyZ";
-    return `Key${normalized}`;
 }
 
 function registerSettingsMenu() {
@@ -560,10 +552,24 @@ class SmootherFightHud {
     }
 
     async onClick(event) {
-        const target = event.target.closest("[data-sf-action], .sf-chat-message .splittermond-chat-action, .sf-chat-message button, .sf-chat-message [role=button]");
+        const target = event.target.closest("[data-sf-action], [data-sf-roll-toggle], .sf-chat-message .splittermond-chat-action, .sf-chat-message button, .sf-chat-message [role=button]");
         if (!target || !this.element.contains(target)) return;
         if (target.getAttribute("aria-disabled") === "true") {
             event.preventDefault();
+            return;
+        }
+
+        if (Object.hasOwn(target.dataset, "sfRollToggle")) {
+            event.preventDefault();
+            const roll = target.closest(".sf-collapsible-roll");
+            const breakdown = roll?.querySelector(":scope > .sf-roll-breakdown");
+            if (!roll || !breakdown) return;
+            const expanded = !roll.classList.contains("is-details-open");
+            roll.classList.toggle("is-details-open", expanded);
+            breakdown.hidden = !expanded;
+            target.setAttribute("aria-expanded", String(expanded));
+            target.querySelector("i")?.classList.toggle("fa-chevron-up", expanded);
+            target.querySelector("i")?.classList.toggle("fa-chevron-down", !expanded);
             return;
         }
 
@@ -1007,17 +1013,30 @@ function buildEventGroup(group, isLatest, hudContext) {
     const defenseBadge = defenseAlert
         ? `<span class="sf-event-badge is-defense-alert"><i class="fa-solid fa-shield-halved"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseAvailable"))}</span>`
         : "";
+    const targetBadge = buildEventTargetBadge(context);
     const belongsToActiveCombatant = messageBelongsToCombatant(primary, hudContext.combatant, context);
     const open = isLatest && belongsToActiveCombatant && !runtime.cardsCollapsed ? "open" : "";
     return `<details class="sf-event-group ${defenseAlert ? "is-defense-alert" : ""}" data-event-id="${escapeAttr(primary.id)}" data-event-combatant-id="${escapeAttr(context?.combatantId ?? "")}" data-event-actor-id="${escapeAttr(primary.speaker?.actor ?? "")}" ${open}>
-        <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}${defenseBadge}<i class="fa-solid fa-chevron-down"></i></summary>
+        <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}${defenseBadge}${targetBadge}<i class="fa-solid fa-chevron-down"></i></summary>
         <div class="sf-event-body">
+            ${group.defenses.map((message) => `<div class="sf-associated-card is-defense"><h4><i class="fa-solid fa-shield"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseResult"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
             ${chatMessageHtml(primary)}
-            ${group.defenses.map((message) => `<div class="sf-associated-card"><h4><i class="fa-solid fa-shield"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseResult"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
             ${group.damages.map((message) => `<div class="sf-associated-card"><h4><i class="fa-solid fa-droplet"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Damage"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
             ${group.fumbles.map((message) => `<div class="sf-associated-card is-fumble"><h4><i class="fa-solid fa-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MagicFumble"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
         </div>
     </details>`;
+}
+
+function buildEventTargetBadge(context) {
+    const targetName = getMessageTargetName(context);
+    if (!targetName) return "";
+    const label = t("SMOOTHER_FIGHT.HUD.EventTarget", { target: targetName });
+    return `<span class="sf-event-target" title="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs"></i>${escapeHtml(label)}</span>`;
+}
+
+function getMessageTargetName(context) {
+    const target = resolveMessageTarget(context);
+    return context?.targetName ?? target?.token?.name ?? target?.actor?.name ?? "";
 }
 
 function shouldHighlightActiveDefense(group, isLatest, hudContext, messageContext) {
@@ -1112,15 +1131,15 @@ function chatMessageHtml(message) {
         const fumble = getFumbleData(message) ?? createMagicFumbleData(message, content);
         if (fumble) content = decorateMagicFumbleCard(content, fumble);
     }
-    content = promoteChatCardActions(content);
+    content = promoteChatCardActions(content, message);
     content = scopeChatCardIds(content, message.id);
     return `<article class="sf-chat-message message" data-message-id="${escapeAttr(message.id)}"><div class="message-content">${content}</div></article>`;
 }
 
-function promoteChatCardActions(content) {
+function promoteChatCardActions(content, message) {
     const template = document.createElement("template");
     template.innerHTML = content ?? "";
-    arrangeCheckResults(template.content);
+    arrangeCheckResults(template.content, message);
     for (const actions of template.content.querySelectorAll(".splittermond.check > .actions, .actions.splittermond-chat-action-container")) {
         const precedingOptions = actions.previousElementSibling;
         const degreeOptions = precedingOptions?.matches(".splittermond-chat-action-container.chat-card-segment")
@@ -1145,13 +1164,20 @@ function promoteChatCardActions(content) {
     return wrapper.innerHTML;
 }
 
-function arrangeCheckResults(root) {
+function arrangeCheckResults(root, message) {
+    const recalculated = root.querySelector(".sf-chat-recalculated");
+    const defenseMessage = isDefenseMessage(message);
     for (const card of root.querySelectorAll(".splittermond.check")) {
         const roll = card.querySelector(":scope > .roll-summary");
         const degrees = card.querySelector(":scope > .degree-of-success");
         if (!roll || !degrees || roll.closest(".sf-check-result-grid")) continue;
         if (card.matches(".attack, .spell")) {
-            roll.classList.add("expanded", "sf-expanded-roll-result");
+            card.classList.add("sf-offense-check");
+            addOffenseTarget(card, message);
+            makeRollCollapsible(roll);
+        } else if (defenseMessage) {
+            card.classList.add("sf-defense-check");
+            makeRollCollapsible(roll);
         }
         const summary = document.createElement("div");
         summary.className = "sf-check-result-grid";
@@ -1159,7 +1185,66 @@ function arrangeCheckResults(root) {
         degrees.dataset.sfLabel = t("SMOOTHER_FIGHT.HUD.DegreesOfSuccess");
         roll.before(summary);
         summary.append(roll, degrees);
+        if (defenseMessage) {
+            const defenseValue = card.querySelector(":scope > .degree-of-success-description");
+            if (defenseValue) {
+                decorateDefenseValue(defenseValue);
+                degrees.append(defenseValue);
+            }
+        }
+        if (recalculated && card.matches(".attack, .spell")) degrees.append(recalculated);
     }
+}
+
+function addOffenseTarget(card, message) {
+    if (card.querySelector(":scope > .sf-offense-target")) return;
+    const header = card.querySelector(":scope > .chat-message-header");
+    const targetName = getMessageTargetName(getMessageContext(message));
+    if (!header || !targetName) return;
+
+    const label = t("SMOOTHER_FIGHT.HUD.EventTarget", { target: targetName });
+    const target = document.createElement("div");
+    target.className = "sf-offense-target";
+    target.title = label;
+    target.setAttribute("aria-label", label);
+    target.innerHTML = `<i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Target"))}</span><strong>${escapeHtml(targetName)}</strong>`;
+    header.after(target);
+}
+
+function makeRollCollapsible(roll) {
+    const total = roll.querySelector(":scope > .roll-total");
+    if (!total || roll.querySelector(":scope > .sf-roll-breakdown")) return;
+    const detailNodes = Array.from(roll.childNodes).filter((node) =>
+        node !== total && (node.nodeType === Node.ELEMENT_NODE || String(node.textContent ?? "").trim())
+    );
+    if (!detailNodes.length) return;
+
+    const breakdown = document.createElement("div");
+    breakdown.className = "sf-roll-breakdown";
+    breakdown.hidden = true;
+    detailNodes.forEach((node) => breakdown.append(node));
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "sf-roll-toggle";
+    toggle.dataset.sfRollToggle = "";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.innerHTML = `<span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.RollDetails"))}</span><i class="fa-solid fa-chevron-down"></i>`;
+
+    roll.classList.remove("expanded", "sf-expanded-roll-result");
+    roll.classList.add("sf-collapsible-roll");
+    roll.append(toggle, breakdown);
+}
+
+function decorateDefenseValue(element) {
+    element.classList.add("sf-defense-value");
+    const match = String(element.textContent ?? "").trim().match(/^(.+?)\s*:\s*(-?\d+)$/u);
+    if (!match) return;
+    const label = document.createElement("span");
+    label.textContent = match[1].trim();
+    const value = document.createElement("strong");
+    value.textContent = match[2];
+    element.replaceChildren(label, value);
 }
 
 function scopeChatCardIds(content, messageId) {
@@ -1476,7 +1561,10 @@ function collectCombatEventGroups(context) {
         if (!isDamageMessage(message) && !isDefenseMessage(message) && !isMagicFumbleMessage(message)) continue;
         const fumble = getFumbleData(message);
         const cardContext = getMessageContext(message);
-        let group = fumble?.sourceMessageId
+        let group = isDefenseMessage(message)
+            ? groups.find((candidate) => getMessageContext(candidate.primary)?.defenseMessageId === message.id)
+            : null;
+        group ??= fumble?.sourceMessageId
             ? groups.find((candidate) => candidate.primary.id === fumble.sourceMessageId)
             : cardContext?.attackMessageId
             ? groups.find((candidate) => candidate.primary.id === cardContext.attackMessageId)
@@ -1798,6 +1886,7 @@ async function attachCombatContext(message) {
         attackerActorUuid: actor?.uuid ?? null,
         targetTokenUuid: target?.uuid ?? null,
         targetActorUuid: target?.actor?.uuid ?? null,
+        targetName: target?.name ?? target?.actor?.name ?? null,
         linkedUserId: linkedUser?.id ?? game.user.id,
         createdAt: Date.now(),
     };
@@ -2199,7 +2288,8 @@ async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, def
     if (!created) return null;
     const rendered = await renderTemplate(created.system.template, created.system.getData());
     const defenseLabel = localizeSystem(`splittermond.derivedAttribute.${defenseCheck.defenseType}.short`, String(defenseCheck.defenseType).toUpperCase());
-    const banner = `<div class="sf-chat-recalculated"><i class="fa-solid fa-shield-halved"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Recalculated", { defense: defenseLabel, value: newDefense }))}</div>`;
+    const hiddenClass = systemSource.checkReport.hideDifficulty ? " gm-only" : "";
+    const banner = `<div class="sf-chat-recalculated${hiddenClass}"><i class="fa-solid fa-shield-halved"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NewDefense", { defense: defenseLabel }))}</span><strong>${escapeHtml(newDefense)}</strong></div>`;
     const decorated = decorateRecalculatedCard(rendered, banner);
     await created.update({ content: decorated });
     await safeSetFlag(original, "context", { ...getMessageContext(original), supersededBy: created.id });
@@ -2377,6 +2467,7 @@ function enforceChatPermissions(root, hudContext) {
         }
 
         const context = getMessageContext(message);
+        enforceSystemVisibility(element, message, context);
         const defenseTarget = resolveToken(context?.targetTokenUuid) ?? getControlledTokenDocument() ?? hudContext.target;
         const mayDefend = game.user.isGM || defenseTarget?.actor?.isOwner;
         if (!mayDefend || context?.supersededBy || context?.recalculatedFrom) {
@@ -2388,6 +2479,42 @@ function enforceChatPermissions(root, hudContext) {
         element.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action)), .sf-promoted-actions:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
         element.querySelectorAll(".sf-promoted-controls:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
     }
+}
+
+function enforceSystemVisibility(element, message, context = getMessageContext(message)) {
+    if (game.user.isGM) return;
+    const target = resolveMessageTarget(context);
+    const observer = Boolean(target?.actor?.testUserPermission?.(game.user, "OBSERVER"));
+    const markedDifficulty = element.querySelector(".gm-only.difficulty, .gm-only .difficulty");
+    const targetDependent = Boolean(message.system?.checkReport?.hideDifficulty || markedDifficulty);
+    const mayViewDifficulty = mayViewTargetDifficulty(targetDependent, false, observer);
+
+    for (const restricted of element.querySelectorAll(".gm-only")) {
+        const isDifficulty = restricted.matches(".difficulty, .sf-chat-recalculated")
+            || Boolean(restricted.querySelector(".difficulty, .sf-chat-recalculated"));
+        if (!isDifficulty || !mayViewDifficulty) restricted.remove();
+    }
+    if (!mayViewDifficulty) {
+        element.querySelectorAll(".sf-chat-recalculated").forEach((restricted) => restricted.remove());
+    }
+    if (!mayViewActorResources(false, observer)) {
+        element.querySelectorAll(".sf-defense-value").forEach((restricted) => restricted.remove());
+    }
+}
+
+function resolveMessageTarget(context) {
+    if (!context) return { token: null, actor: null };
+    const token = resolveToken(context.targetTokenUuid);
+    if (token?.actor) return { token, actor: token.actor };
+    let actor = null;
+    if (context.targetActorUuid) {
+        try {
+            actor = globalThis.fromUuidSync?.(context.targetActorUuid) ?? null;
+        } catch (error) {
+            console.debug(`${MODULE_ID} | Could not resolve target actor ${context.targetActorUuid}`, error);
+        }
+    }
+    return { token, actor };
 }
 
 function getRenderedChatActionKeys(messageId) {

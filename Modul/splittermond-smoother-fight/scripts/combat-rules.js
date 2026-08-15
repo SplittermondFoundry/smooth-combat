@@ -150,6 +150,10 @@ export function mayViewActorResources(isGm, hasObserverPermission) {
     return Boolean(isGm || hasObserverPermission);
 }
 
+export function mayViewTargetDifficulty(isTargetDependent, isGm, hasObserverPermission) {
+    return !isTargetDependent || mayViewActorResources(isGm, hasObserverPermission);
+}
+
 export function mayUseRemoteChatActions(isGm, ownsSpeakerActor, isMessageAuthor) {
     return Boolean(isGm || ownsSpeakerActor || isMessageAuthor);
 }

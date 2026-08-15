@@ -11,6 +11,7 @@ import {
     linkMatchesCombatant,
     mayUseRemoteChatActions,
     mayViewActorResources,
+    mayViewTargetDifficulty,
     normalizeActorUserLinks,
     normalizeSearchText,
     normalizeUserTokenLinks,
@@ -158,6 +159,13 @@ test("health and focus require observer permission unless the viewer is a GM", (
     assert.equal(mayViewActorResources(false, false), false);
     assert.equal(mayViewActorResources(false, true), true);
     assert.equal(mayViewActorResources(true, false), true);
+});
+
+test("target-dependent difficulties require observer permission unless the viewer is a GM", () => {
+    assert.equal(mayViewTargetDifficulty(true, false, false), false);
+    assert.equal(mayViewTargetDifficulty(true, false, true), true);
+    assert.equal(mayViewTargetDifficulty(true, true, false), true);
+    assert.equal(mayViewTargetDifficulty(false, false, false), true);
 });
 
 test("remote chat actions match Splittermond's owner, author, and GM permissions", () => {

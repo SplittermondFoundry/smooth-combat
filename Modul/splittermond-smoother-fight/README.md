@@ -16,11 +16,11 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 - Zauberliste mit Fokuskosten, Beschreibungs-/Verstärkungs-Tooltip und Rechtsklick zum Öffnen des Zauberbogens; Waffen lassen sich ebenso per Rechtsklick öffnen
 - mit Dice So Nice synchronisierte Verarbeitung und HUD-Kartenanzeige nach Abschluss der Würfelanimation
 - korrekte Splittermond-Vorbereitung für Fernkampfangriffe und Zauber
-- originale Splittermond-Angriffs- und Zauberkarten in voller HUD-Breite; EG-Optionen stehen kompakt neben den weiteren Aktionen oberhalb des Ergebnisses
+- höhensparend strukturierte Splittermond-Angriffs- und Zauberkarten mit gespeichertem Ziel direkt neben dem Namen der Waffe oder des Zaubers; Aktionen und Ergebnis stehen nebeneinander, die vollständige Würfelzerlegung ist über „Wurfdetails“ erreichbar
 - Zauberpatzer mit direkten, nur einmal nutzbaren Buttons für Lebenspunktverlust und die genannten Zustände
 - Gruppierung von Angriff und anschließendem Schaden zu einem Kampfereignis
 - „Auf die Ziele des Angreifers anwenden“ verwendet dessen im HUD gespeichertes Ziel und weiterhin den originalen Splittermond-Schadenshandler
-- erfolgreiche Aktive Abwehr erzeugt eine neue Angriffskarte mit neuer VTD/KW/GW und neu berechneten EG
+- erfolgreiche Aktive Abwehr erzeugt eine neue Angriffskarte mit neu berechneten EG; die kompakte Abwehrprobe steht davor und zeigt neue VTD/KW/GW direkt im EG-Feld
 - Ziel-Quickmenü für den GM und den Owner des aktiven Tokens mit allen sichtbaren Szenen-Tokens; Kampfteilnehmer stehen zuerst, gleichnamige Tokens werden nummeriert und beim Überfahren auf der Karte hervorgehoben
 - direkte Tickbuttons, freie Tickeingabe sowie Abwartend/Bereithalten/Reaktivieren
 - relevante Combat-Reiter-Aktionen für Tokenfokus, Sichtbarkeit, Besiegt-Status und Entfernen aus dem Kampf

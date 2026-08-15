@@ -7,7 +7,7 @@
       "CollapseCombatActionsName": "Alle Kampfaktionen einklappen",
       "CollapseCombatActionsHint": "Klappt alle geöffneten Angriffs-, Zauber- und Abwehraktionen im Kampf-HUD ein.",
       "OpenLatestCombatActionName": "Neueste Kampfaktion öffnen",
-      "OpenLatestCombatActionHint": "Klappt ausschließlich die neueste Kampfaktion auf und bringt sie in den sichtbaren Bereich. Standard: Taste Y; im physischen Foundry-Modus wird sie auf deutschen QWERTZ-Tastaturen intern als Z geführt."
+      "OpenLatestCombatActionHint": "Klappt ausschließlich die neueste Kampfaktion auf und bringt sie in den sichtbaren Bereich. Y und die physische QWERTZ-Entsprechung werden als Standardbelegungen registriert."
     },
     "Settings": {
       "EnabledName": "Kampf-HUD aktivieren",
@@ -104,7 +104,9 @@
       "PlayerTargetName": "Ziel von {user}: {target}",
       "AutomaticOwner": "automatisch über Owner-Rechte",
       "CombatEvents": "Kampfereignisse",
+      "EventTarget": "Ziel: {target}",
       "RollResult": "Würfelergebnis",
+      "RollDetails": "Wurfdetails",
       "DegreesOfSuccess": "Erfolgsgrade",
       "CollapseCards": "Karten einklappen",
       "ExpandCards": "Karten ausklappen",
@@ -124,6 +126,7 @@
       "DefenseResult": "Aktive Abwehr",
       "DefenseAvailable": "Deine Aktive Abwehr",
       "Recalculated": "Neu berechnet gegen {defense}: {value}",
+      "NewDefense": "Neue {defense}",
       "OriginalAttack": "Durch Aktive Abwehr ersetzt",
       "TargetChanged": "Ziel auf {target} gesetzt.",
       "SelectTargetFirst": "Bitte zuerst ein Ziel auswählen.",
