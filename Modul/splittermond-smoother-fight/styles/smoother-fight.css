@@ -908,7 +908,7 @@ body > .sf-spell-tooltip footer {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     margin: 0 !important;
     padding: 24px 8px 9px !important;
     border: 1px solid rgba(117, 191, 186, 0.3);
@@ -951,17 +951,18 @@ body > .sf-spell-tooltip footer {
 }
 
 #splittermond-smoother-fight-hud .sf-check-result-grid > .degree-of-success > div {
-    margin-bottom: 4px;
+    margin: 6px 0 4px;
     color: var(--sf-gold-bright);
     font-size: 15px;
     line-height: 1;
 }
 
 #splittermond-smoother-fight-hud .sf-check-result-grid > .degree-of-success > strong {
+    order: -1;
     display: block;
     margin-bottom: 2px;
     color: var(--sf-teal);
-    font-size: 20px;
+    font-size: 29px;
     font-weight: 900;
     line-height: 1;
     text-shadow: 0 0 10px rgba(108, 201, 193, 0.25);
