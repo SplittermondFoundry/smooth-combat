@@ -187,6 +187,11 @@ export function combatMessageKind(message) {
     return null;
 }
 
+export function isOffensiveCombatMessage(message) {
+    const kind = combatMessageKind(message);
+    return kind === "attack" || kind === "spell";
+}
+
 export function parseStatusEffectLabel(value) {
     const label = String(value ?? "").trim();
     if (!label) return { name: "", level: 0 };

@@ -7,6 +7,7 @@ import {
     findDefensiveFeatureValue,
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
+    isOffensiveCombatMessage,
     linkMatchesCombatant,
     mayUseRemoteChatActions,
     mayViewActorResources,
@@ -195,6 +196,12 @@ test("attack, spell, and damage chat messages are classified as combat events", 
     assert.equal(combatMessageKind({ system: { constructor: { name: "SpellRollMessage" } } }), "spell");
     assert.equal(combatMessageKind({ type: "damageMessage" }), "damage");
     assert.equal(combatMessageKind({ type: "simple" }), null);
+});
+
+test("attacks and spells can be recalculated after active defense", () => {
+    assert.equal(isOffensiveCombatMessage({ type: "attackRollMessage" }), true);
+    assert.equal(isOffensiveCombatMessage({ type: "spellRollMessage" }), true);
+    assert.equal(isOffensiveCombatMessage({ type: "damageMessage" }), false);
 });
 
 test("status effect labels split the condition name from its level", () => {

@@ -5,6 +5,7 @@ import {
     findDefensiveFeatureValue,
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
+    isOffensiveCombatMessage,
     linkMatchesCombatant,
     mayUseRemoteChatActions,
     mayViewActorResources,
@@ -437,9 +438,9 @@ function registerSocket() {
             if (!sender || !message || (!sender.isGM && authorId !== sender.id)) return;
 
             const pending = normalizePendingDefense(payload.pending);
-            const attack = game.messages.get(pending?.attackMessageId);
+            const offense = game.messages.get(pending?.attackMessageId);
             const target = resolveToken(pending?.targetTokenUuid);
-            if (!pending || !attack || !isAttackMessage(attack)) return;
+            if (!pending || !offense || !isOffensiveCombatMessage(offense)) return;
             if (!sender.isGM && !target?.actor?.testUserPermission?.(sender, "OWNER")) return;
 
             await processDefenseMessage(message, pending, { allowForeign: true });
@@ -961,11 +962,15 @@ function buildEventGroup(group, isLatest, hudContext) {
 }
 
 function shouldHighlightActiveDefense(group, isLatest, hudContext, messageContext) {
-    if (game.user?.isGM || group.kind !== "attack") return false;
+    if (game.user?.isGM || !messageOffersActiveDefense(group.primary)) return false;
     if (messageContext?.recalculatedFrom || messageContext?.supersededBy || group.defenses.length) return false;
     const storedTarget = resolveToken(messageContext?.targetTokenUuid);
     if (storedTarget) return isCurrentUserTarget(storedTarget);
     return Boolean(isLatest && isCurrentUserTarget(hudContext?.target));
+}
+
+function messageOffersActiveDefense(message) {
+    return /data-local-?action\s*=\s*["']activeDefense["']/iu.test(String(message?.content ?? ""));
 }
 
 function captureHudViewState(root) {
@@ -1321,7 +1326,7 @@ function collectCombatEventGroups(context) {
     const combatActorIds = new Set(Array.from(context.combat.combatants ?? []).map((c) => c.actorId).filter(Boolean));
     const primaryMessages = messages.filter((message) => {
         if (isDiceAnimationPending(message)) return false;
-        if (!isAttackMessage(message) && !isSpellMessage(message)) return false;
+        if (!isOffensiveCombatMessage(message)) return false;
         const cardContext = getMessageContext(message);
         if (cardContext) return cardContext.combatId === context.combat.id;
         return Number(message.timestamp) >= runtime.startedAt && combatActorIds.has(message.speaker?.actor);
@@ -1579,7 +1584,7 @@ function publishOwnTarget(explicitUuid) {
 async function onCreateChatMessage(message) {
     try {
         await waitForDiceSoNice(message);
-        if (isAttackMessage(message) || isSpellMessage(message)) await attachCombatContext(message);
+        if (isOffensiveCombatMessage(message)) await attachCombatContext(message);
         if (isMagicFumbleMessage(message)) await attachMagicFumbleActions(message);
         if (isDefenseMessage(message)) await processDefenseMessage(message);
     } catch (error) {
@@ -1648,7 +1653,7 @@ async function attachCombatContext(message) {
 }
 
 function captureSystemActiveDefense(message, html) {
-    if (!html || !isAttackMessage(message)) return;
+    if (!html || !isOffensiveCombatMessage(message)) return;
     for (const button of html.querySelectorAll('[data-localaction="activeDefense" i], [data-local-action="activeDefense" i]')) {
         if (button.dataset.smootherFightCaptured) continue;
         button.dataset.smootherFightCaptured = "true";
@@ -1935,7 +1940,7 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
     let pending = normalizePendingDefense(pendingOverride)
         ?? normalizePendingDefense(getMessageContext(message))
         ?? runtime.pendingDefense;
-    if (!pending || pending.expiresAt < Date.now()) pending = findPendingAttackForDefense(message);
+    if (!pending || pending.expiresAt < Date.now()) pending = findPendingOffenseForDefense(message);
     if (!pending?.attackMessageId) return;
 
     const target = resolveToken(pending.targetTokenUuid);
@@ -1973,33 +1978,33 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
         return;
     }
 
-    const newAttack = await recreateAttackAfterDefense(pending.attackMessageId, message, check);
+    const newOffense = await recreateOffenseAfterDefense(pending.attackMessageId, message, check);
     runtime.pendingDefense = null;
-    if (newAttack) scheduleRender(0);
+    if (newOffense) scheduleRender(0);
 }
 
-function findPendingAttackForDefense(message) {
-    const messages = Array.from(game.messages?.contents ?? []).filter(isAttackMessage).reverse();
+function findPendingOffenseForDefense(message) {
+    const messages = Array.from(game.messages?.contents ?? []).filter(isOffensiveCombatMessage).reverse();
     const defenseActorId = message.speaker?.actor;
-    const attack = messages.find((candidate) => {
+    const offense = messages.find((candidate) => {
         const context = getMessageContext(candidate);
         if (!context?.targetActorUuid) return false;
         const actor = globalThis.fromUuidSync?.(context.targetActorUuid);
         return actor?.id === defenseActorId && !context.supersededBy;
     });
-    if (!attack) return null;
-    const context = getMessageContext(attack);
+    if (!offense) return null;
+    const context = getMessageContext(offense);
     return {
-        attackMessageId: attack.id,
+        attackMessageId: offense.id,
         targetTokenUuid: context.targetTokenUuid,
         targetActorUuid: context.targetActorUuid,
         expiresAt: Date.now() + 1000,
     };
 }
 
-async function recreateAttackAfterDefense(attackMessageId, defenseMessage, defenseCheck) {
-    const original = game.messages.get(attackMessageId);
-    if (!original || !isAttackMessage(original)) return null;
+async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, defenseCheck) {
+    const original = game.messages.get(offenseMessageId);
+    if (!original || !isOffensiveCombatMessage(original)) return null;
 
     const featureValue = findDefensiveFeatureValue(defenseCheck.itemData);
     const newDefense = calculateActiveDefenseValue(defenseCheck, featureValue);
@@ -2015,7 +2020,7 @@ async function recreateAttackAfterDefense(attackMessageId, defenseMessage, defen
         0,
         totalDegreesOfSuccess(systemSource.checkReport) - (systemSource.checkReport.maneuvers?.length ?? 0)
     );
-    resetAttackHandlers(systemSource);
+    resetOffenseHandlers(systemSource);
 
     const source = cloneData(original.toObject());
     delete source._id;
@@ -2049,7 +2054,7 @@ async function recreateAttackAfterDefense(attackMessageId, defenseMessage, defen
     return created;
 }
 
-function resetAttackHandlers(systemSource) {
+function resetOffenseHandlers(systemSource) {
     if (systemSource.damageHandler) {
         systemSource.damageHandler.damageUsed = false;
         systemSource.damageHandler.penaltyUsed = false;
@@ -2256,10 +2261,6 @@ function getMessageContext(message) {
 
 function getDefenseCheck(message) {
     return message?.getFlag?.("splittermond", "check") ?? message?.flags?.splittermond?.check ?? null;
-}
-
-function isAttackMessage(message) {
-    return combatMessageKind(message) === "attack";
 }
 
 function isSpellMessage(message) {
