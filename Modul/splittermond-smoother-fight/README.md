@@ -28,8 +28,8 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 - erfolgreiche Aktive Abwehr erzeugt eine neue Angriffskarte mit neu berechneten EG; die kompakte Abwehrprobe steht davor und zeigt neue VTD/KW/GW direkt im EG-Feld
 - regelgerechte Unterstützung durch die Meisterschaft **Verteidiger**: nur Besitzer der Meisterschaft erhalten innerhalb von 2 m eine Zusatzaktion, ausschließlich passende Nahkampf-Abwehren werden angeboten und der systemeigene −3-Modifikator wird vorausgewählt; verteidigt das Ziel ebenfalls, zählt die höhere neue VTD
 - Ziel-Quickmenü für den GM und den Owner des aktiven Tokens mit allen sichtbaren Szenen-Tokens; Kampfteilnehmer stehen zuerst, gleichnamige Tokens werden nummeriert und beim Überfahren auf der Karte hervorgehoben
-- direkte Tickbuttons, freie Tickeingabe sowie Abwartend/Bereithalten/Reaktivieren
-- relevante Combat-Reiter-Aktionen für Tokenfokus, Sichtbarkeit, Besiegt-Status und Entfernen aus dem Kampf
+- direkte Tickbuttons für 1, 2, 3, 5, 7 und 10 Ticks, freie Tickeingabe sowie Abwartend/Bereithalten/Reaktivieren
+- beschriftete Combat-Reiter-Aktionen für Tokenfokus, Sichtbarkeit, Besiegt-Status und Entfernen aus dem Kampf; auf schmalen Ansichten bleiben die platzsparenden Symbole
 - vorbereitete Zauber als hervorgehobene Direktaktion mit Auslösen- und Abbrechen-Button
 - Socket-Synchronisierung, damit das Ziel des zugeordneten Spielers auf allen Clients sichtbar ist
 - standardmäßiges Ausblenden der normalen Splittermond-Aktionsleiste während eines Kampfes; pro Client deaktivierbar

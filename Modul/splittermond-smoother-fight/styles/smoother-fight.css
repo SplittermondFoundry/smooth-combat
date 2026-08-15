@@ -248,7 +248,11 @@
 }
 
 #splittermond-smoother-fight-hud .sf-combat-controls .sf-icon-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     padding-inline: 6px;
+    white-space: nowrap;
 }
 
 #splittermond-smoother-fight-hud .sf-combat-controls .is-danger:hover,
@@ -1959,6 +1963,10 @@ body > .sf-spell-tooltip footer {
 
     #splittermond-smoother-fight-hud .sf-shell {
         grid-template-columns: 126px minmax(280px, 1fr) 126px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-tracker-buttons .sf-control-label {
+        display: none;
     }
 
     #splittermond-smoother-fight-hud .sf-defense-check,
