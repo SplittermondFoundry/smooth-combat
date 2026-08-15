@@ -901,19 +901,59 @@ body > .sf-spell-tooltip footer {
     grid-column: 1 / -1;
 }
 
-#splittermond-smoother-fight-hud .sf-associated-card.is-defense {
+#splittermond-smoother-fight-hud .sf-associated-card {
     grid-column: 1 / -1;
-    padding: 5px 7px 7px;
+    min-width: 0;
     border: 1px solid rgba(108, 201, 193, 0.3);
     border-radius: 4px;
-    background: rgba(108, 201, 193, 0.055);
+    background: rgba(255, 255, 255, 0.025);
 }
 
-#splittermond-smoother-fight-hud .sf-associated-card.is-defense > h4 {
+#splittermond-smoother-fight-hud .sf-associated-card > summary {
+    min-height: 27px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 8px;
+    color: var(--sf-gold-bright);
+    cursor: pointer;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card > summary::-webkit-details-marker {
     display: none;
 }
 
-#splittermond-smoother-fight-hud .sf-associated-card.is-defense > .sf-chat-message {
+#splittermond-smoother-fight-hud .sf-associated-card > summary > span {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card > summary > i:last-child {
+    margin-left: auto;
+    color: var(--sf-muted);
+    transition: transform 120ms ease;
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card[open] > summary > i:last-child {
+    transform: rotate(180deg);
+}
+
+#splittermond-smoother-fight-hud .sf-associated-body {
+    padding: 0 6px 6px;
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card.is-defense {
+    background: rgba(108, 201, 193, 0.055);
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card.is-defense > .sf-associated-body > .sf-chat-message {
     padding: 0;
     border: 0;
     background: transparent;
@@ -1019,6 +1059,85 @@ body > .sf-spell-tooltip footer {
 
 #splittermond-smoother-fight-hud .sf-offense-check > :not(.chat-message-header, .sf-offense-target, .sf-promoted-controls, .sf-check-result-grid) {
     grid-column: 1 / -1;
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card.is-damage {
+    border-color: rgba(216, 168, 93, 0.34);
+    background: rgba(216, 168, 93, 0.035);
+}
+
+#splittermond-smoother-fight-hud .sf-damage-check {
+    display: grid;
+    grid-template-columns: minmax(320px, 1.25fr) minmax(240px, 0.75fr);
+    align-items: stretch;
+    gap: 7px 9px;
+}
+
+#splittermond-smoother-fight-hud .sf-damage-check > header {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    margin: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-damage-check > .sf-promoted-controls {
+    position: static;
+    grid-column: 1;
+    grid-row: 2;
+    align-self: stretch;
+    margin: 0;
+    box-shadow: none;
+}
+
+#splittermond-smoother-fight-hud .sf-damage-check > .roll-summary {
+    position: relative;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    min-width: 0;
+    min-height: 108px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 0 !important;
+    padding: 24px 9px 9px !important;
+    border: 1px solid rgba(216, 168, 93, 0.43);
+    border-radius: 5px;
+    background: linear-gradient(150deg, rgba(255, 255, 255, 0.055), rgba(9, 31, 34, 0.52));
+    text-align: center;
+}
+
+#splittermond-smoother-fight-hud .sf-damage-check > .roll-summary[data-sf-label]::before {
+    content: attr(data-sf-label);
+    position: absolute;
+    top: 6px;
+    left: 7px;
+    color: var(--sf-muted);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-damage-check > .roll-summary > .roll-total {
+    color: var(--sf-gold-bright);
+    font-size: 31px;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 0 0 10px rgba(216, 168, 93, 0.28);
+}
+
+#splittermond-smoother-fight-hud .sf-damage-check > :not(header, .sf-promoted-controls, .roll-summary) {
+    grid-column: 1 / -1;
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card.is-damage .sf-promoted-actions button {
+    height: auto !important;
+    min-height: 28px;
+    padding: 4px 8px !important;
+    line-height: 1.2;
+    white-space: normal;
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message {
@@ -1232,6 +1351,16 @@ body > .sf-spell-tooltip footer {
     padding-block: 2px;
     font-size: 11px;
     line-height: 1.15;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls .sf-defender-action {
+    border-color: rgba(108, 201, 193, 0.58);
+    color: #dffbf7;
+    background: linear-gradient(135deg, rgba(39, 104, 103, 0.52), rgba(108, 201, 193, 0.13));
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls .sf-defender-action i {
+    color: var(--sf-gold-bright);
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-degree-options .degree-of-success-description {
@@ -1706,6 +1835,17 @@ body > .sf-spell-tooltip footer {
     width: 100%;
 }
 
+.sf-defender-dialog .form-group {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+}
+
+.sf-defender-dialog select {
+    width: 100%;
+}
+
 .sf-settings-user {
     display: flex;
     align-items: center;
@@ -1740,13 +1880,16 @@ body > .sf-spell-tooltip footer {
     }
 
     #splittermond-smoother-fight-hud .sf-defense-check,
-    #splittermond-smoother-fight-hud .sf-offense-check {
+    #splittermond-smoother-fight-hud .sf-offense-check,
+    #splittermond-smoother-fight-hud .sf-damage-check {
         display: block;
     }
 
     #splittermond-smoother-fight-hud .sf-defense-check > .chat-message-header,
     #splittermond-smoother-fight-hud .sf-offense-check > .sf-promoted-controls,
-    #splittermond-smoother-fight-hud .sf-offense-check > .sf-offense-target {
+    #splittermond-smoother-fight-hud .sf-offense-check > .sf-offense-target,
+    #splittermond-smoother-fight-hud .sf-damage-check > header,
+    #splittermond-smoother-fight-hud .sf-damage-check > .sf-promoted-controls {
         margin-bottom: 7px;
     }
 

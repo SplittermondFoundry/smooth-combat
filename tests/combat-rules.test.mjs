@@ -2,11 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
     actorLinkUuid,
+    bestActiveDefenseValue,
     calculateActiveDefenseValue,
     combatMessageKind,
     findDefensiveFeatureValue,
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
+    isDefenderMasteryName,
     isOffensiveCombatMessage,
     linkMatchesCombatant,
     mayUseRemoteChatActions,
@@ -48,6 +50,17 @@ test("successful active defense increases the base defense by 1 + EG + Defensiv"
 
 test("failed active defense leaves the base defense unchanged", () => {
     assert.equal(calculateActiveDefenseValue({ baseDefense: 20, succeeded: false }, 3), 20);
+});
+
+test("multiple active defenses retain the better defense value", () => {
+    assert.equal(bestActiveDefenseValue(24, 27), 27);
+    assert.equal(bestActiveDefenseValue(27, 24), 27);
+});
+
+test("the Defender mastery is recognized with an optional threshold suffix", () => {
+    assert.equal(isDefenderMasteryName("Verteidiger"), true);
+    assert.equal(isDefenderMasteryName("Verteidiger (Schwelle 1)"), true);
+    assert.equal(isDefenderMasteryName("Magischer Verteidiger"), false);
 });
 
 test("attack is recalculated against the improved defense", () => {

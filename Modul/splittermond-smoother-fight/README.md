@@ -19,8 +19,11 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 - höhensparend strukturierte Splittermond-Angriffs- und Zauberkarten mit gespeichertem Ziel direkt neben dem Namen der Waffe oder des Zaubers; Aktionen und Ergebnis stehen nebeneinander, die vollständige Würfelzerlegung ist über „Wurfdetails“ erreichbar
 - Zauberpatzer mit direkten, nur einmal nutzbaren Buttons für Lebenspunktverlust und die genannten Zustände
 - Gruppierung von Angriff und anschließendem Schaden zu einem Kampfereignis
+- einzeln ein- und ausklappbare Abwehr-, Schadens- und Patzer-Subevents; ein neuer Schadenswurf klappt ältere Abwehrdetails automatisch zu und wird in den sichtbaren Scrollbereich geholt
+- vollbreite, zweispaltige Schadenskarte mit gut umbrechenden Aktionsbuttons sowie prominentem Gesamtergebnis und optionaler Würfelzerlegung
 - „Auf die Ziele des Angreifers anwenden“ verwendet dessen im HUD gespeichertes Ziel und weiterhin den originalen Splittermond-Schadenshandler
 - erfolgreiche Aktive Abwehr erzeugt eine neue Angriffskarte mit neu berechneten EG; die kompakte Abwehrprobe steht davor und zeigt neue VTD/KW/GW direkt im EG-Feld
+- regelgerechte Unterstützung durch die Meisterschaft **Verteidiger**: nur Besitzer der Meisterschaft erhalten innerhalb von 2 m eine Zusatzaktion, ausschließlich passende Nahkampf-Abwehren werden angeboten und der systemeigene −3-Modifikator wird vorausgewählt; verteidigt das Ziel ebenfalls, zählt die höhere neue VTD
 - Ziel-Quickmenü für den GM und den Owner des aktiven Tokens mit allen sichtbaren Szenen-Tokens; Kampfteilnehmer stehen zuerst, gleichnamige Tokens werden nummeriert und beim Überfahren auf der Karte hervorgehoben
 - direkte Tickbuttons, freie Tickeingabe sowie Abwartend/Bereithalten/Reaktivieren
 - relevante Combat-Reiter-Aktionen für Tokenfokus, Sichtbarkeit, Besiegt-Status und Entfernen aus dem Kampf
@@ -38,11 +41,11 @@ Eine direkte Token-Zuordnung hat Vorrang vor der Zuordnung seines Charakter- ode
 ## Ablauf Aktive Abwehr
 
 1. Der Angreifer führt den Angriff aus. Smoother Fight merkt sich dessen aktuelles Ziel an der Chatkarte.
-2. Der Owner des Ziels klickt im HUD auf **Aktive Abwehr**.
+2. Der Owner des Ziels klickt im HUD auf **Aktive Abwehr**. Ein anderer Spieler mit der Meisterschaft **Verteidiger**, einer passenden Nahkampf-Abwehr und höchstens 2 m Abstand kann stattdessen oder zusätzlich **Verteidiger für …** wählen.
 3. Das normale Splittermond-System führt die Abwehrprobe aus.
-4. Bei Erfolg wird der neue Verteidigungswert als `Basis + 1 + EG + Defensiv` berechnet.
+4. Bei Erfolg wird der neue Verteidigungswert als `Basis + 1 + EG + Defensiv` berechnet. Bei mehreren Abwehrproben bleibt der höchste Wert bestehen.
 5. Eine neue, voll funktionsfähige Splittermond-Angriffskarte wird mit diesem Wert erzeugt. Trefferstatus, verfügbare EG und Streiftreffer werden neu bestimmt.
-6. Gewürfelter Schaden erscheint im selben HUD-Ereignis; die originalen Anwenden-Buttons bleiben nutzbar.
+6. Gewürfelter Schaden erscheint als geöffnetes, vollbreites Subevent im selben HUD-Ereignis; ältere Abwehrdetails werden dabei eingeklappt und die originalen Anwenden-Buttons bleiben nutzbar.
 
 ## Qualitätssicherung
 

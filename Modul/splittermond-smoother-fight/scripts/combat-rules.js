@@ -16,6 +16,19 @@ export function calculateActiveDefenseValue(checkData, defensiveFeature = 0) {
     return baseDefense + 1 + totalDegreesOfSuccess(checkData) + numberOr(defensiveFeature);
 }
 
+export function bestActiveDefenseValue(currentValue, candidateValue) {
+    const current = Number(currentValue);
+    const candidate = Number(candidateValue);
+    if (!Number.isFinite(current)) return Number.isFinite(candidate) ? candidate : 0;
+    if (!Number.isFinite(candidate)) return current;
+    return Math.max(current, candidate);
+}
+
+export function isDefenderMasteryName(value) {
+    const name = normalizeSearchText(value);
+    return /^(?:verteidiger|defender)(?:\s*\(|$)/u.test(name);
+}
+
 export function recalculateAttackReport(report, difficulty, config = {}) {
     const settings = { ...DEFAULT_CHECK_CONFIG, ...config };
     const cloned = clone(report);
