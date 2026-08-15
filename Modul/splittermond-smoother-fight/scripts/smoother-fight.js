@@ -69,7 +69,7 @@ function registerSettings() {
         scope: "client",
         config: true,
         type: Boolean,
-        default: false,
+        default: true,
         onChange: rerender,
     });
     game.settings.register(MODULE_ID, "showCards", {
@@ -2380,7 +2380,7 @@ function scheduleRender(delay = 40) {
 function syncSystemActionBar(hudVisible) {
     const bar = document.querySelector("#token-action-bar");
     if (!bar) return;
-    const shouldHide = hudVisible && getSetting("hideSystemBar", false);
+    const shouldHide = hudVisible && getSetting("hideSystemBar", true);
     bar.classList.toggle("sf-system-bar-hidden", shouldHide);
 }
 

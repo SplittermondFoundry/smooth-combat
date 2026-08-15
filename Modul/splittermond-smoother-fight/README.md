@@ -26,7 +26,7 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 - relevante Combat-Reiter-Aktionen für Tokenfokus, Sichtbarkeit, Besiegt-Status und Entfernen aus dem Kampf
 - vorbereitete Zauber als hervorgehobene Direktaktion mit Auslösen- und Abbrechen-Button
 - Socket-Synchronisierung, damit das Ziel des zugeordneten Spielers auf allen Clients sichtbar ist
-- optionales Ausblenden der normalen Splittermond-Aktionsleiste während eines Kampfes
+- standardmäßiges Ausblenden der normalen Splittermond-Aktionsleiste während eines Kampfes; pro Client deaktivierbar
 
 ## Installation zum Entwickeln/Testen
 
