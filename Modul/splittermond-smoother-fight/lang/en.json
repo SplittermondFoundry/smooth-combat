@@ -64,6 +64,7 @@
     },
     "HUD": {
       "Active": "Currently active",
+      "YourTurn": "Your turn",
       "Target": "Selected target",
       "NoTarget": "No target selected",
       "NoTargetDetail": "Target with T or use the target menu.",

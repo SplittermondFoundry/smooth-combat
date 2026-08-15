@@ -9,6 +9,7 @@ import {
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
     isDefenderMasteryName,
+    isPlayersTurn,
     isTargetDependentDifficulty,
     isOffensiveCombatMessage,
     linkMatchesCombatant,
@@ -197,6 +198,13 @@ test("remote chat actions match Splittermond's owner, author, and GM permissions
     assert.equal(mayUseRemoteChatActions(false, true, false), true);
     assert.equal(mayUseRemoteChatActions(false, false, true), true);
     assert.equal(mayUseRemoteChatActions(true, false, false), true);
+});
+
+test("the active player is identified without highlighting the GM or other owners", () => {
+    assert.equal(isPlayersTurn({ userId: "player", linkedUserId: "player" }), true);
+    assert.equal(isPlayersTurn({ userId: "player", linkedUserId: "other", ownsActor: true }), false);
+    assert.equal(isPlayersTurn({ userId: "player", ownsActor: true }), true);
+    assert.equal(isPlayersTurn({ isGm: true, userId: "gm", linkedUserId: "gm" }), false);
 });
 
 test("roll management permissions cover EG, focus, ticks, and splinter points", () => {

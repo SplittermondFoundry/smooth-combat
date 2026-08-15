@@ -175,6 +175,11 @@ export function mayUseRemoteChatActions(isGm, ownsSpeakerActor, isMessageAuthor)
     return Boolean(isGm || ownsSpeakerActor || isMessageAuthor);
 }
 
+export function isPlayersTurn({ isGm = false, userId = null, linkedUserId = null, ownsActor = false } = {}) {
+    if (isGm || !userId) return false;
+    return linkedUserId ? linkedUserId === userId : Boolean(ownsActor);
+}
+
 export function requiresRollManagementPermission(action, isDegreeOption = false) {
     if (isDegreeOption) return true;
     return ["consumecosts", "advancetoken", "usesplinterpoint"].includes(

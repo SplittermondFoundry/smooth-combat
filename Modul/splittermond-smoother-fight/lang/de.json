@@ -64,6 +64,7 @@
     },
     "HUD": {
       "Active": "Gerade aktiv",
+      "YourTurn": "Du bist dran",
       "Target": "Ausgewähltes Ziel",
       "NoTarget": "Noch kein Ziel ausgewählt",
       "NoTargetDetail": "Mit T ein Ziel markieren oder das Zielmenü verwenden.",

@@ -5,6 +5,7 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 ## Funktionen
 
 - aktiver Combatant mit Tokenbild, VTD/KW/GW sowie Lebens- und Fokusleiste
+- persönlich hervorgehobenes HUD mit gut sichtbarem „Du bist dran“-Hinweis für den zugeordneten aktiven Spieler
 - Ziel des dem aktiven Token zugeordneten Spielers; verständlicher Hinweis, wenn kein Ziel gewählt wurde
 - persönliche Warnmarkierung, wenn der eigene Charakter das aktuelle Ziel ist
 - Lebens- und Fokuswerte nur für Benutzer mit mindestens Observer-Rechten am jeweiligen Akteur

@@ -7,6 +7,7 @@ import {
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
     isDefenderMasteryName,
+    isPlayersTurn,
     isTargetDependentDifficulty,
     isOffensiveCombatMessage,
     linkMatchesCombatant,
@@ -680,15 +681,26 @@ async function buildHud(context) {
     const minimized = getSetting("minimized", false);
     const hudToggle = buildHudToggle(minimized);
     const personalTarget = isCurrentUserTarget(target);
+    const currentPlayersTurn = isPlayersTurn({
+        isGm: game.user?.isGM,
+        userId: game.user?.id,
+        linkedUserId: linkedUser?.id,
+        ownsActor: actor.isOwner,
+    });
+    const turnNotice = currentPlayersTurn
+        ? `<span class="sf-your-turn"><i class="fa-solid fa-bolt"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YourTurn"))}</span>`
+        : "";
+    const shellClass = currentPlayersTurn ? "sf-shell is-current-user-turn" : "sf-shell";
 
     if (minimized) {
         return `
-            <div class="sf-shell is-minimized">
+            <div class="${shellClass} is-minimized">
                 <main class="sf-center">
                     <header class="sf-turnline">
                         <span class="sf-live-dot"></span>
                         <strong>${escapeHtml(actor.name)}</strong>
                         <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
+                        ${turnNotice}
                         <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
                         ${hudToggle}
                     </header>
@@ -698,13 +710,14 @@ async function buildHud(context) {
     }
 
     return `
-        <div class="sf-shell">
+        <div class="${shellClass}">
             ${portraitPanel({ side: "actor", token, actor, eyebrow: t("SMOOTHER_FIGHT.HUD.Active"), action: "open-sheet" })}
             <main class="sf-center">
                 <header class="sf-turnline">
                     <span class="sf-live-dot"></span>
                     <strong>${escapeHtml(actor.name)}</strong>
                     <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
+                    ${turnNotice}
                     <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
                     ${hudToggle}
                 </header>
