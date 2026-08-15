@@ -2,8 +2,10 @@
   "SMOOTHER_FIGHT": {
     "Title": "Smoother Fight",
     "Keybindings": {
-      "ToggleHudName": "Show or hide the combat HUD",
-      "ToggleHudHint": "Shows or hides the entire Smoother Fight HUD while combat is running.",
+      "ToggleHudName": "Collapse or expand the combat HUD",
+      "ToggleHudHint": "Switches between the full and compact Smoother Fight HUD while combat is running.",
+      "ToggleHudVisibilityName": "Show or hide the entire combat HUD",
+      "ToggleHudVisibilityHint": "Shows or hides the entire Smoother Fight HUD while combat is running. B is assigned by default only when the key is still free.",
       "CollapseCombatActionsName": "Collapse all combat actions",
       "CollapseCombatActionsHint": "Collapses all open attack, spell, and defense actions in the combat HUD.",
       "OpenLatestCombatActionName": "Open the latest combat action",

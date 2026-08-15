@@ -29,6 +29,16 @@
     display: none;
 }
 
+#splittermond-smoother-fight-hud.sf-hud.is-minimized {
+    left: var(--sf-minimized-center, 50%);
+    right: auto;
+    bottom: var(--sf-minimized-bottom, 10px);
+    width: min(620px, calc(100vw - 24px));
+    max-width: none;
+    margin-inline: 0;
+    transform: translateX(-50%);
+}
+
 #splittermond-smoother-fight-hud .sf-shell,
 #splittermond-smoother-fight-hud .sf-quick-targets {
     pointer-events: auto;
@@ -43,7 +53,7 @@
 
 #splittermond-smoother-fight-hud .sf-shell.is-minimized {
     display: block;
-    width: min(620px, 100%);
+    width: 100%;
     margin-inline: auto;
 }
 

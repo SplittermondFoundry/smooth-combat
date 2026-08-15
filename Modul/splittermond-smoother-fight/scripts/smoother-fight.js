@@ -140,7 +140,14 @@ function registerKeybindings() {
         name: "SMOOTHER_FIGHT.Keybindings.ToggleHudName",
         hint: "SMOOTHER_FIGHT.Keybindings.ToggleHudHint",
         editable: [{ key: "KeyV" }],
-        onDown: toggleHudFromKeybinding,
+        onDown: toggleHudMinimizedFromKeybinding,
+        repeat: false,
+    });
+    game.keybindings.register(MODULE_ID, "toggleHudVisibility", {
+        name: "SMOOTHER_FIGHT.Keybindings.ToggleHudVisibilityName",
+        hint: "SMOOTHER_FIGHT.Keybindings.ToggleHudVisibilityHint",
+        editable: isUnmodifiedKeyAvailable("KeyB") ? [{ key: "KeyB" }] : [],
+        onDown: toggleHudVisibilityFromKeybinding,
         repeat: false,
     });
     game.keybindings.register(MODULE_ID, "collapseCombatActions", {
@@ -506,8 +513,10 @@ class SmootherFightHud {
             runtime.eventExpansionRequest = null;
         }
         const visible = Boolean(enabled && context && !runtime.hiddenByShortcut);
+        const minimized = Boolean(visible && getSetting("minimized", false));
         this.element.classList.toggle("is-hidden", !visible);
         syncSystemActionBar(visible);
+        syncMinimizedHudPosition(this.element, minimized);
         if (!visible) {
             delete this.element.dataset.activeCombatantId;
             delete this.element.dataset.activeActorId;
@@ -2968,7 +2977,13 @@ function scheduleRender(delay = 40) {
     runtime.renderTimer = setTimeout(() => void runtime.hud?.render(), delay);
 }
 
-function toggleHudFromKeybinding() {
+function toggleHudMinimizedFromKeybinding() {
+    if (!getSetting("enabled", true) || !getHudContext()) return false;
+    void game.settings.set(MODULE_ID, "minimized", !getSetting("minimized", false));
+    return true;
+}
+
+function toggleHudVisibilityFromKeybinding() {
     if (!getSetting("enabled", true) || !getHudContext()) return false;
     runtime.hiddenByShortcut = !runtime.hiddenByShortcut;
     runtime.eventExpansionRequest = null;
@@ -2994,6 +3009,37 @@ function syncSystemActionBar(hudVisible) {
     if (!bar) return;
     const shouldHide = hudVisible && getSetting("hideSystemBar", true);
     bar.classList.toggle("sf-system-bar-hidden", shouldHide);
+}
+
+function syncMinimizedHudPosition(hud, minimized) {
+    hud.classList.toggle("is-minimized", minimized);
+    hud.style.removeProperty("--sf-minimized-center");
+    hud.style.removeProperty("--sf-minimized-bottom");
+    if (!minimized) return;
+
+    const actionBar = document.querySelector("#token-action-bar:not(.sf-system-bar-hidden)");
+    const bounds = actionBar?.getBoundingClientRect?.();
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+    const hudWidth = Math.min(620, Math.max(0, viewportWidth - 24));
+    const halfWidth = hudWidth / 2;
+    const desiredCenter = bounds.left + bounds.width / 2;
+    const center = Math.min(viewportWidth - halfWidth - 12, Math.max(halfWidth + 12, desiredCenter));
+    const bottom = Math.max(10, viewportHeight - bounds.top + 8);
+    hud.style.setProperty("--sf-minimized-center", `${Math.round(center)}px`);
+    hud.style.setProperty("--sf-minimized-bottom", `${Math.round(bottom)}px`);
+}
+
+function isUnmodifiedKeyAvailable(key) {
+    const customBindings = game.settings.get("core", "keybindings") ?? {};
+    for (const [actionId, config] of game.keybindings.actions ?? []) {
+        const editable = Object.hasOwn(customBindings, actionId) ? customBindings[actionId] : config.editable;
+        const bindings = [...(config.uneditable ?? []), ...(editable ?? [])];
+        if (bindings.some((binding) => binding?.key === key && !(binding.modifiers?.length))) return false;
+    }
+    return true;
 }
 
 function getDerivedValue(actor, key) {

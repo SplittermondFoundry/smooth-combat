@@ -2,8 +2,10 @@
   "SMOOTHER_FIGHT": {
     "Title": "Smoother Fight",
     "Keybindings": {
-      "ToggleHudName": "Kampf-HUD vollständig ein- oder ausblenden",
-      "ToggleHudHint": "Blendet das gesamte Smoother-Fight-HUD während eines laufenden Kampfes ein oder aus.",
+      "ToggleHudName": "Kampf-HUD ein- oder ausklappen",
+      "ToggleHudHint": "Wechselt während eines laufenden Kampfes zwischen dem vollständigen und dem kompakten Smoother-Fight-HUD.",
+      "ToggleHudVisibilityName": "Kampf-HUD vollständig ein- oder ausblenden",
+      "ToggleHudVisibilityHint": "Blendet das gesamte Smoother-Fight-HUD während eines laufenden Kampfes ein oder aus. B wird nur als Standard gesetzt, wenn die Taste noch frei ist.",
       "CollapseCombatActionsName": "Alle Kampfaktionen einklappen",
       "CollapseCombatActionsHint": "Klappt alle geöffneten Angriffs-, Zauber- und Abwehraktionen im Kampf-HUD ein.",
       "OpenLatestCombatActionName": "Neueste Kampfaktion öffnen",
