@@ -460,6 +460,7 @@ class SmootherFightHud {
     async render() {
         if (!this.element) return;
         const generation = ++this.renderGeneration;
+        const viewState = captureHudViewState(this.element);
         const context = getHudContext();
         const visible = Boolean(getSetting("enabled", true) && context);
         this.element.classList.toggle("is-hidden", !visible);
@@ -480,6 +481,7 @@ class SmootherFightHud {
         enforceFumbleActionState(this.element);
         bindQuickTargetHover(this.element);
         bindSpellTooltips(this.element, context);
+        restoreHudViewState(this.element, viewState);
     }
 
     onContextMenu(event) {
@@ -936,7 +938,7 @@ function buildEventGroup(group, isLatest) {
         : superseded
             ? `<span class="sf-event-badge is-muted">${escapeHtml(t("SMOOTHER_FIGHT.HUD.OriginalAttack"))}</span>`
             : "";
-    return `<details class="sf-event-group" ${isLatest && !runtime.cardsCollapsed ? "open" : ""}>
+    return `<details class="sf-event-group" data-event-id="${escapeAttr(primary.id)}" ${isLatest && !runtime.cardsCollapsed ? "open" : ""}>
         <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}<i class="fa-solid fa-chevron-down"></i></summary>
         <div class="sf-event-body">
             ${chatMessageHtml(primary)}
@@ -945,6 +947,39 @@ function buildEventGroup(group, isLatest) {
             ${group.fumbles.map((message) => `<div class="sf-associated-card is-fumble"><h4><i class="fa-solid fa-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MagicFumble"))}</h4>${chatMessageHtml(message)}</div>`).join("")}
         </div>
     </details>`;
+}
+
+function captureHudViewState(root) {
+    const scroller = root?.querySelector?.(".sf-event-scroller");
+    if (!scroller) return null;
+    const groups = Array.from(scroller.querySelectorAll(".sf-event-group[data-event-id]"));
+    return {
+        scrollTop: scroller.scrollTop,
+        eventIds: new Set(groups.map((group) => group.dataset.eventId)),
+        openEventIds: new Set(groups.filter((group) => group.open).map((group) => group.dataset.eventId)),
+    };
+}
+
+function restoreHudViewState(root, state) {
+    if (!state) return;
+    const scroller = root?.querySelector?.(".sf-event-scroller");
+    if (!scroller) return;
+
+    let hasMatchingEvent = false;
+    for (const group of scroller.querySelectorAll(".sf-event-group[data-event-id]")) {
+        const eventId = group.dataset.eventId;
+        if (!state.eventIds.has(eventId)) continue;
+        hasMatchingEvent = true;
+        group.open = state.openEventIds.has(eventId);
+    }
+    if (!hasMatchingEvent) return;
+
+    const restoreScroll = () => {
+        if (!scroller.isConnected) return;
+        scroller.scrollTop = Math.min(state.scrollTop, Math.max(0, scroller.scrollHeight - scroller.clientHeight));
+    };
+    restoreScroll();
+    requestAnimationFrame(restoreScroll);
 }
 
 function chatMessageHtml(message) {
