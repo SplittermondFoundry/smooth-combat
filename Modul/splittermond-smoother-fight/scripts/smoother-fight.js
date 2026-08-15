@@ -13,6 +13,7 @@ import {
     normalizeUserTokenLinks,
     parseStatusEffectLabel,
     recalculateAttackReport,
+    resolveCombatEventOpenIds,
     totalDegreesOfSuccess,
     withTemporarySetValues,
 } from "./combat-rules.js";
@@ -983,14 +984,13 @@ function restoreHudViewState(root, state) {
     const scroller = root?.querySelector?.(".sf-event-scroller");
     if (!scroller) return;
 
-    let hasMatchingEvent = false;
-    for (const group of scroller.querySelectorAll(".sf-event-group[data-event-id]")) {
-        const eventId = group.dataset.eventId;
-        if (!state.eventIds.has(eventId)) continue;
-        hasMatchingEvent = true;
-        group.open = state.openEventIds.has(eventId);
-    }
-    if (!hasMatchingEvent) return;
+    const groups = Array.from(scroller.querySelectorAll(".sf-event-group[data-event-id]"));
+    const currentEventIds = groups.map((group) => group.dataset.eventId);
+    const openEventIds = resolveCombatEventOpenIds(state.eventIds, state.openEventIds, currentEventIds);
+    groups.forEach((group) => {
+        group.open = openEventIds.has(group.dataset.eventId);
+    });
+    if (!currentEventIds.some((eventId) => state.eventIds.has(eventId))) return;
 
     const restoreScroll = () => {
         if (!scroller.isConnected) return;

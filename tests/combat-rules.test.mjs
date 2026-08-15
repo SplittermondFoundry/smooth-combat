@@ -15,6 +15,7 @@ import {
     normalizeUserTokenLinks,
     parseStatusEffectLabel,
     recalculateAttackReport,
+    resolveCombatEventOpenIds,
     totalDegreesOfSuccess,
     withTemporarySetValues,
 } from "../Modul/splittermond-smoother-fight/scripts/combat-rules.js";
@@ -162,6 +163,17 @@ test("Splittermond check updates are detected for flat and nested Foundry change
     assert.equal(hasSplittermondCheckUpdate({ flags: { "splittermond.check": { succeeded: true } } }), true);
     assert.equal(hasSplittermondCheckUpdate({ flags: { "splittermond-smoother-fight": { context: {} } } }), false);
     assert.equal(hasSplittermondCheckUpdate({ content: "updated card" }), false);
+});
+
+test("a new combat event closes older cards and opens only the newest event", () => {
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(["attack-1"], ["attack-1"], ["attack-1", "spell-2"])],
+        ["spell-2"]
+    );
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(["attack-1", "spell-2"], ["attack-1"], ["attack-1", "spell-2"])],
+        ["attack-1"]
+    );
 });
 
 test("temporary system targets are restored after applying linked-target damage", async () => {

@@ -157,6 +157,15 @@ export function hasSplittermondCheckUpdate(changes) {
     return Boolean(splittermond && typeof splittermond === "object" && Object.hasOwn(splittermond, "check"));
 }
 
+export function resolveCombatEventOpenIds(previousEventIds, previousOpenEventIds, currentEventIds) {
+    const previous = new Set(previousEventIds ?? []);
+    const previouslyOpen = new Set(previousOpenEventIds ?? []);
+    const current = Array.from(currentEventIds ?? []);
+    const newEventIds = current.filter((eventId) => !previous.has(eventId));
+    if (newEventIds.length) return new Set([newEventIds.at(-1)]);
+    return new Set(current.filter((eventId) => previouslyOpen.has(eventId)));
+}
+
 export async function withTemporarySetValues(targetSet, values, callback) {
     const original = Array.from(targetSet ?? []);
     targetSet.clear();
