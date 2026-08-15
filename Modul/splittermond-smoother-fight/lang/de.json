@@ -7,7 +7,7 @@
       "CollapseCombatActionsName": "Alle Kampfaktionen einklappen",
       "CollapseCombatActionsHint": "Klappt alle geöffneten Angriffs-, Zauber- und Abwehraktionen im Kampf-HUD ein.",
       "OpenLatestCombatActionName": "Neueste Kampfaktion öffnen",
-      "OpenLatestCombatActionHint": "Klappt ausschließlich die neueste Kampfaktion auf und bringt sie in den sichtbaren Bereich."
+      "OpenLatestCombatActionHint": "Klappt ausschließlich die neueste Kampfaktion auf und bringt sie in den sichtbaren Bereich. Standard: Taste Y; im physischen Foundry-Modus wird sie auf deutschen QWERTZ-Tastaturen intern als Z geführt."
     },
     "Settings": {
       "EnabledName": "Kampf-HUD aktivieren",

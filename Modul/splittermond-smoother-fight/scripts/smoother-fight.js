@@ -150,10 +150,19 @@ function registerKeybindings() {
     game.keybindings.register(MODULE_ID, "openLatestCombatAction", {
         name: "SMOOTHER_FIGHT.Keybindings.OpenLatestCombatActionName",
         hint: "SMOOTHER_FIGHT.Keybindings.OpenLatestCombatActionHint",
-        editable: [{ key: "KeyY" }],
+        editable: [{ key: defaultLetterKeyCode("Y") }],
         onDown: () => requestCombatEventExpansion("latest"),
         repeat: false,
     });
+}
+
+function defaultLetterKeyCode(letter) {
+    const normalized = String(letter ?? "").trim().toUpperCase();
+    const universalKeybindings = Boolean(game.settings.get("core", "universalKeybindings"));
+    const germanEnvironment = [globalThis.navigator?.language, game.i18n?.lang]
+        .some((locale) => /^de(?:-|$)/iu.test(String(locale ?? "")));
+    if (!universalKeybindings && germanEnvironment && normalized === "Y") return "KeyZ";
+    return `Key${normalized}`;
 }
 
 function registerSettingsMenu() {
