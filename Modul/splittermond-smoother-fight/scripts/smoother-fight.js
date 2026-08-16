@@ -106,6 +106,7 @@ Hooks.once("init", () => {
     registerSettings();
     registerSettingsMenu();
     registerKeybindings();
+    Hooks.on("renderSettingsConfig", (app, html) => renderAudioPreviewControls(app, html));
 });
 
 Hooks.once("ready", async () => {
@@ -246,6 +247,29 @@ function registerSettings() {
         default: "",
         onChange: rerender,
     });
+}
+
+function renderAudioPreviewControls(app, html) {
+    const root = asElement(html) ?? asElement(app?.element);
+    if (!root) return;
+    for (const config of Object.values(AUDIO_FEEDBACK_EVENTS)) {
+        const select = root.querySelector(`select[name="${MODULE_ID}.${config.sound}"]`);
+        if (!select || select.parentElement?.querySelector(`[data-sf-audio-preview="${config.sound}"]`)) continue;
+        select.parentElement?.classList.add("sf-audio-setting-fields");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "sf-audio-preview";
+        button.dataset.sfAudioPreview = config.sound;
+        button.title = t("SMOOTHER_FIGHT.Settings.AudioPreviewHint");
+        button.innerHTML = `<i class="fa-solid fa-volume-high"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.Settings.AudioPreview"))}</span>`;
+        button.addEventListener("click", async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const played = await playFeedbackProfile(select.value, config.defaultSound, true);
+            if (!played) ui.notifications.warn(t("SMOOTHER_FIGHT.Settings.AudioPreviewUnavailable"));
+        });
+        select.insertAdjacentElement("afterend", button);
+    }
 }
 
 function registerKeybindings() {
@@ -3079,34 +3103,55 @@ function isFeedbackSoundEnabled(kind) {
 }
 
 function unlockFeedbackAudio() {
-    if (!Object.keys(AUDIO_FEEDBACK_EVENTS).some(isFeedbackSoundEnabled)) return;
+    void prepareFeedbackAudio(false);
+}
+
+async function prepareFeedbackAudio(force = false) {
+    if (!force && !Object.keys(AUDIO_FEEDBACK_EVENTS).some(isFeedbackSoundEnabled)) return null;
     const AudioContext = window.AudioContext ?? window.webkitAudioContext;
-    if (!AudioContext) return;
+    if (!AudioContext) return null;
     runtime.audioContext ??= new AudioContext();
-    void runtime.audioContext.resume?.();
+    try {
+        await runtime.audioContext.resume?.();
+    } catch (error) {
+        console.debug(`${MODULE_ID} | Could not resume audio context`, error);
+    }
+    return runtime.audioContext.state === "running" ? runtime.audioContext : null;
 }
 
 function playFeedbackTone(kind) {
     const eventConfig = AUDIO_FEEDBACK_EVENTS[kind];
     if (!eventConfig || !isFeedbackSoundEnabled(kind)) return;
-    unlockFeedbackAudio();
-    const audio = runtime.audioContext;
-    if (!audio || audio.state !== "running") return;
     const soundId = getSetting(eventConfig.sound, eventConfig.defaultSound);
-    const profile = AUDIO_SOUND_PROFILES[soundId] ?? AUDIO_SOUND_PROFILES[eventConfig.defaultSound];
+    void playFeedbackProfile(soundId, eventConfig.defaultSound);
+}
+
+async function playFeedbackProfile(soundId, fallbackSoundId = "shield", force = false) {
+    const audio = await prepareFeedbackAudio(force);
+    if (!audio) return false;
+    const profile = AUDIO_SOUND_PROFILES[soundId]
+        ?? AUDIO_SOUND_PROFILES[fallbackSoundId]
+        ?? AUDIO_SOUND_PROFILES.shield;
     const notes = profile?.notes ?? [];
+    if (!notes.length) return false;
     const now = audio.currentTime;
-    for (const [frequency, delay] of notes) {
-        const oscillator = audio.createOscillator();
-        const gain = audio.createGain();
-        oscillator.type = profile.wave;
-        oscillator.frequency.setValueAtTime(frequency, now + delay);
-        gain.gain.setValueAtTime(0.0001, now + delay);
-        gain.gain.exponentialRampToValueAtTime(0.055, now + delay + 0.012);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.18);
-        oscillator.connect(gain).connect(audio.destination);
-        oscillator.start(now + delay);
-        oscillator.stop(now + delay + 0.2);
+    try {
+        for (const [frequency, delay] of notes) {
+            const oscillator = audio.createOscillator();
+            const gain = audio.createGain();
+            oscillator.type = profile.wave;
+            oscillator.frequency.setValueAtTime(frequency, now + delay);
+            gain.gain.setValueAtTime(0.0001, now + delay);
+            gain.gain.exponentialRampToValueAtTime(0.055, now + delay + 0.012);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.18);
+            oscillator.connect(gain).connect(audio.destination);
+            oscillator.start(now + delay);
+            oscillator.stop(now + delay + 0.2);
+        }
+        return true;
+    } catch (error) {
+        console.debug(`${MODULE_ID} | Could not play audio profile ${soundId}`, error);
+        return false;
     }
 }
 

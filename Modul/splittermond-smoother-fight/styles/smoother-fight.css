@@ -2608,6 +2608,29 @@ body > .sf-spell-tooltip footer {
     align-items: center;
 }
 
+.sf-audio-setting-fields {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sf-audio-setting-fields select {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.sf-audio-setting-fields .sf-audio-preview {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: auto;
+    min-width: fit-content;
+    margin: 0;
+    white-space: nowrap;
+}
+
 .sf-token-owner-dialog select {
     width: 100%;
 }
