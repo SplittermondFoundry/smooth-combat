@@ -6,6 +6,7 @@ import {
     actorLinkUuid,
     attackControlSelection,
     attackControlState,
+    attackOutcomeChanged,
     attackReadiness,
     bestActiveDefenseValue,
     calculateActiveDefenseValue,
@@ -182,6 +183,21 @@ test("active defense can turn an attack into a failure", () => {
     const result = recalculateAttackReport(attackReport(), 27);
     assert.equal(result.succeeded, false);
     assert.equal(result.degreeOfSuccess.fromRoll, 0);
+});
+
+test("active defense recreates attack cards only for changed outcomes", () => {
+    assert.equal(attackOutcomeChanged(
+        attackReport(),
+        attackReport({ difficulty: 19 })
+    ), false);
+    assert.equal(attackOutcomeChanged(
+        attackReport(),
+        attackReport({ degreeOfSuccess: { fromRoll: 1, modification: 0 } })
+    ), true);
+    assert.equal(attackOutcomeChanged(
+        attackReport({ degreeOfSuccess: { fromRoll: 0, modification: 0 } }),
+        attackReport({ succeeded: false, degreeOfSuccess: { fromRoll: 0, modification: 0 } })
+    ), true);
 });
 
 test("critical and fumble modifiers remain compatible with Splittermond", () => {

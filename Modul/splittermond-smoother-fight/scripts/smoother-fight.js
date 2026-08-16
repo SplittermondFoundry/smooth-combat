@@ -4,6 +4,7 @@ import {
     actorLinkUuid,
     attackControlSelection,
     attackControlState,
+    attackOutcomeChanged,
     attackReadiness,
     bestActiveDefenseValue,
     calculateActiveDefenseValue,
@@ -3690,12 +3691,24 @@ async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, def
         return original;
     }
     const systemSource = cloneData(original.system?.toObject?.() ?? original.toObject().system);
+    const previousReport = systemSource.checkReport;
     const config = globalThis.CONFIG?.splittermond ?? {};
-    systemSource.checkReport = recalculateAttackReport(systemSource.checkReport, newDefense, {
+    const recalculatedReport = recalculateAttackReport(previousReport, newDefense, {
         triumphBonus: config.check?.degreeOfSuccess?.triumphBonus ?? 3,
         fumblePenalty: config.check?.degreeOfSuccess?.fumblePenalty ?? -3,
         grazingHitBasePenalty: config.grazingHitBasePenalty ?? 2,
     });
+    if (!attackOutcomeChanged(previousReport, recalculatedReport)) {
+        await safeSetFlag(original, "context", {
+            ...originalContext,
+            defenseMessageIds,
+            defenseValue: newDefense,
+            defenseType: defenseCheck.defenseType,
+            attemptedDefenseActorUuids,
+        });
+        return original;
+    }
+    systemSource.checkReport = recalculatedReport;
     systemSource.checkReport.degreeOfSuccessMessage = checkResultMessage(systemSource.checkReport);
     systemSource.openDegreesOfSuccess = Math.max(
         0,

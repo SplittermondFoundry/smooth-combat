@@ -10,6 +10,11 @@ export function totalDegreesOfSuccess(report) {
     return numberOr(report?.degreeOfSuccess?.fromRoll) + numberOr(report?.degreeOfSuccess?.modification);
 }
 
+export function attackOutcomeChanged(previousReport, nextReport) {
+    return totalDegreesOfSuccess(previousReport) !== totalDegreesOfSuccess(nextReport)
+        || Boolean(previousReport?.succeeded) !== Boolean(nextReport?.succeeded);
+}
+
 export function healthCostTotal(health) {
     return [health?.consumed?.value, health?.exhausted?.value, health?.channeled?.value]
         .reduce((total, value) => total + Math.max(0, numberOr(value)), 0);
