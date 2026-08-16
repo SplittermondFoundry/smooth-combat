@@ -10,6 +10,7 @@ import {
     calculateActiveDefenseValue,
     combatActionHighlightState,
     combatMessageKind,
+    combatTickActionsFor,
     findDefensiveFeatureValue,
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
@@ -1174,13 +1175,78 @@ function buildCombatControls(context) {
 }
 
 function buildAdvanceButtons(context, includeActorName = false) {
-    const tickButtons = [1, 2, 3, 5, 7, 10].map((ticks) => `
-        <button type="button" data-sf-action="add-ticks" data-ticks="${ticks}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks }))}">+${ticks} T</button>
-    `).join("");
+    const tickButtons = [1, 2, 3, 4, 5, 6, 7, 8, 10].map((ticks) => buildAdvanceButton(ticks)).join("");
     const label = includeActorName
         ? `${t("SMOOTHER_FIGHT.HUD.Advance")} · ${context.actor.name}`
         : t("SMOOTHER_FIGHT.HUD.Advance");
-    return `<div class="sf-tick-buttons"><span>${escapeHtml(label)}</span>${tickButtons}<button type="button" data-sf-action="add-ticks" data-ticks="custom" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CustomTicks"))}">+X</button></div>`;
+    return `<div class="sf-tick-buttons"><span class="sf-tick-label">${escapeHtml(label)}</span>${tickButtons}${buildAdvanceButton("custom")}</div>`;
+}
+
+function buildAdvanceButton(ticks) {
+    const custom = ticks === "custom";
+    const label = custom
+        ? t("SMOOTHER_FIGHT.HUD.CustomTicks")
+        : t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks });
+    return `<span class="sf-tick-action-control${custom ? " is-complete" : ""}">
+        <button type="button" data-sf-action="add-ticks" data-ticks="${escapeAttr(ticks)}" aria-label="${escapeAttr(label)}">${custom ? "+X" : `+${escapeHtml(ticks)} T`}</button>
+        ${buildTickActionReference(ticks)}
+    </span>`;
+}
+
+function buildTickActionReference(ticks) {
+    const complete = ticks === "custom";
+    const actions = combatTickActionsFor(ticks);
+    const columnCount = complete ? 4 : 3;
+    const heading = complete
+        ? t("SMOOTHER_FIGHT.HUD.TickActionReferenceAll")
+        : t("SMOOTHER_FIGHT.HUD.TickActionReference", { ticks });
+    let currentCategory = null;
+    const rows = actions.map((action) => {
+        const category = action.category === currentCategory ? "" : `
+            <tr class="sf-tick-action-category"><th colspan="${columnCount}">${escapeHtml(t(`SMOOTHER_FIGHT.HUD.TickActionCategories.${action.category}`))}</th></tr>`;
+        currentCategory = action.category;
+        const duration = complete ? `<td>${escapeHtml(tickActionDuration(action))}</td>` : "";
+        const special = action.special
+            ? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Special`)
+            : t("SMOOTHER_FIGHT.HUD.TickActionDash");
+        return `${category}<tr>
+            <td>${escapeHtml(t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Name`))}</td>
+            <td>${escapeHtml(t(`SMOOTHER_FIGHT.HUD.TickActionKinds.${action.kind}`))}</td>
+            ${duration}
+            <td>${escapeHtml(special)}</td>
+        </tr>`;
+    }).join("");
+    const body = rows || `<tr><td colspan="${columnCount}" class="sf-tick-action-empty">${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionEmpty", { ticks }))}</td></tr>`;
+    return `<div class="sf-tick-action-tooltip" role="tooltip">
+        <strong>${escapeHtml(heading)}</strong>
+        <table>
+            <thead><tr>
+                <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionName"))}</th>
+                <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionType"))}</th>
+                ${complete ? `<th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionDurationHeading"))}</th>` : ""}
+                <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSpecial"))}</th>
+            </tr></thead>
+            <tbody>${body}</tbody>
+        </table>
+    </div>`;
+}
+
+function tickActionDuration(action) {
+    if (Array.isArray(action.ticks)) {
+        return t("SMOOTHER_FIGHT.HUD.TickActionDurationRange", {
+            first: action.ticks[0],
+            last: action.ticks.at(-1),
+        });
+    }
+    if (Number.isFinite(Number(action.ticks))) {
+        return t("SMOOTHER_FIGHT.HUD.TickActionDuration", { ticks: action.ticks });
+    }
+    const suffix = action.ticks === "wgs"
+        ? "Wgs"
+        : action.ticks === "spell"
+            ? "Spell"
+            : "Unavailable";
+    return t(`SMOOTHER_FIGHT.HUD.TickActionDuration${suffix}`);
 }
 
 function buildPersonalControls(activeContext) {

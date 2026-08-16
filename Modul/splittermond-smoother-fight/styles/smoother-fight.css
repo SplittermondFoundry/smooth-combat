@@ -271,10 +271,100 @@
     flex-wrap: wrap;
 }
 
-#splittermond-smoother-fight-hud .sf-tick-buttons > span {
+#splittermond-smoother-fight-hud .sf-tick-buttons {
+    flex-wrap: wrap;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-buttons > .sf-tick-label {
     color: var(--sf-muted);
     font-size: 9px;
     text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-control {
+    position: relative;
+    display: inline-flex;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-tooltip {
+    position: absolute;
+    z-index: 100;
+    left: 0;
+    bottom: calc(100% - 1px);
+    width: min(560px, calc(100vw - 150px));
+    max-height: min(520px, calc(100vh - 90px));
+    padding: 9px;
+    border: 1px solid rgba(216, 168, 93, 0.58);
+    border-radius: 6px;
+    color: var(--sf-text);
+    background: var(--sf-bg);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.58);
+    opacity: 0;
+    visibility: hidden;
+    overflow: auto;
+    pointer-events: none;
+    transform: translateY(5px);
+    transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-control.is-complete .sf-tick-action-tooltip {
+    width: min(780px, calc(100vw - 150px));
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-control:hover .sf-tick-action-tooltip,
+#splittermond-smoother-fight-hud .sf-tick-action-control:focus-within .sf-tick-action-tooltip {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-tooltip > strong {
+    display: block;
+    margin: 0 0 7px;
+    color: var(--sf-gold-bright);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-tooltip table {
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+    color: var(--sf-text);
+    font-size: 11px;
+    line-height: 1.25;
+    text-align: left;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-tooltip th,
+#splittermond-smoother-fight-hud .sf-tick-action-tooltip td {
+    padding: 4px 6px;
+    border: 1px solid var(--sf-line);
+    vertical-align: top;
+    white-space: normal;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-tooltip thead th {
+    position: sticky;
+    top: -9px;
+    z-index: 1;
+    color: var(--sf-gold-bright);
+    background: var(--sf-bg-soft);
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-tooltip .sf-tick-action-category th {
+    color: var(--sf-teal);
+    background: rgba(108, 201, 193, 0.09);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-tooltip .sf-tick-action-empty {
+    color: var(--sf-muted);
+    font-style: italic;
 }
 
 #splittermond-smoother-fight-hud .sf-pause-buttons button {

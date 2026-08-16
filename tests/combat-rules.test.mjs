@@ -12,6 +12,7 @@ import {
     calculateActiveDefenseValue,
     combatActionHighlightState,
     combatMessageKind,
+    combatTickActionsFor,
     findDefensiveFeatureValue,
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
@@ -236,6 +237,29 @@ test("legacy tick movement is consumed only after initiative actually advances",
     assert.equal(tickAdvanceConfirmed(9, 12), true);
     assert.equal(tickAdvanceConfirmed(9, 9), false);
     assert.equal(tickAdvanceConfirmed(9, undefined), false);
+});
+
+test("combat tick references cover every fixed action duration", () => {
+    for (const ticks of [2, 3, 4, 5, 6, 7, 8, 10]) {
+        assert.ok(combatTickActionsFor(ticks).length > 0, `missing reference for ${ticks} ticks`);
+    }
+    assert.equal(combatTickActionsFor(1).length, 0);
+    assert.ok(combatTickActionsFor(10).some((action) => action.id === "coordinate"));
+});
+
+test("aiming and searching for an opening appear at 2, 4, and 6 ticks", () => {
+    for (const ticks of [2, 4, 6]) {
+        const ids = combatTickActionsFor(ticks).map((action) => action.id);
+        assert.ok(ids.includes("aim"));
+        assert.ok(ids.includes("searchOpening"));
+    }
+});
+
+test("the custom tick reference includes fixed, variable, free, and unavailable actions", () => {
+    const ids = combatTickActionsFor("custom").map((action) => action.id);
+    for (const id of ["dropItem", "meleeAttack", "focusMagic", "complexTask", "coordinate"]) {
+        assert.ok(ids.includes(id));
+    }
 });
 
 test("only ranged attacks use the persistent prepared-attack state", () => {
