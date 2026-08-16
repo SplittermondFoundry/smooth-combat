@@ -220,6 +220,24 @@
     background: rgba(0, 0, 0, 0.12);
 }
 
+#splittermond-smoother-fight-hud .sf-personal-combat-controls {
+    box-shadow: inset 3px 0 0 rgba(108, 201, 193, 0.48);
+}
+
+#splittermond-smoother-fight-hud .sf-personal-skill-actions {
+    box-shadow: inset 3px 0 0 rgba(216, 168, 93, 0.42);
+}
+
+#splittermond-smoother-fight-hud .sf-personal-combatant-picker {
+    min-width: 120px;
+}
+
+#splittermond-smoother-fight-hud .sf-personal-combatant-picker .sf-action-popover button.is-current {
+    color: var(--sf-gold-bright);
+    background: rgba(108, 201, 193, 0.14);
+    box-shadow: inset 3px 0 0 var(--sf-gold);
+}
+
 #splittermond-smoother-fight-hud .sf-combat-controls button {
     width: auto;
     min-width: 27px;
@@ -247,6 +265,10 @@
     display: flex;
     align-items: center;
     gap: 3px;
+}
+
+#splittermond-smoother-fight-hud .sf-tracker-buttons {
+    flex-wrap: wrap;
 }
 
 #splittermond-smoother-fight-hud .sf-tick-buttons > span {
@@ -335,6 +357,42 @@
         var(--sf-token-image);
     background-size: cover;
     background-position: center 26%;
+}
+
+#splittermond-smoother-fight-hud .sf-concealed-actor .sf-portrait-image {
+    display: grid;
+    place-items: center;
+    background:
+        radial-gradient(circle at center, rgba(108, 201, 193, 0.16), transparent 54%),
+        linear-gradient(150deg, rgba(255, 255, 255, 0.035), rgba(4, 18, 21, 0.82));
+}
+
+#splittermond-smoother-fight-hud .sf-concealed-symbol {
+    color: var(--sf-muted);
+    font-size: 46px;
+    line-height: 1;
+    filter: drop-shadow(0 0 12px rgba(108, 201, 193, 0.2));
+}
+
+#splittermond-smoother-fight-hud .sf-concealed-actor .sf-portrait-name {
+    margin-top: 0;
+    color: var(--sf-muted);
+    font-size: 20px;
+}
+
+#splittermond-smoother-fight-hud .sf-concealed-turn .sf-theme-toggle {
+    margin-left: auto;
+}
+
+#splittermond-smoother-fight-hud .sf-concealed-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--sf-muted);
+}
+
+#splittermond-smoother-fight-hud .sf-concealed-target-column {
+    min-height: 1px;
 }
 
 #splittermond-smoother-fight-hud .sf-eyebrow {
@@ -466,6 +524,12 @@
     box-shadow: 0 0 20px rgba(255, 100, 87, 0.64);
 }
 
+#splittermond-smoother-fight-hud .sf-action-feedback.is-damageBlocked {
+    color: #e7f8ff;
+    background: rgba(31, 73, 105, 0.94);
+    box-shadow: 0 0 20px rgba(118, 207, 255, 0.7);
+}
+
 @keyframes sf-action-feedback {
     0% { opacity: 0; transform: translate(-50%, 20%) scale(0.45); }
     20% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
@@ -553,6 +617,7 @@
 
 #splittermond-smoother-fight-hud .sf-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: stretch;
     min-height: 49px;
     border-bottom: 1px solid var(--sf-line);
@@ -574,6 +639,109 @@
 
 #splittermond-smoother-fight-hud .sf-action-menu + .sf-action-menu {
     border-left: 1px solid var(--sf-line);
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    background: linear-gradient(120deg, rgba(216, 168, 93, 0.12), rgba(108, 201, 193, 0.05));
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack-control.has-menu {
+    grid-template-columns: minmax(0, 1fr) 30px;
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack {
+    min-width: 0;
+    height: 49px;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 4px 6px;
+    border: 0;
+    border-radius: 0;
+    color: var(--sf-text);
+    background: transparent;
+    text-align: left;
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack:hover {
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.12);
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack img {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 3px;
+    object-fit: cover;
+}
+
+#splittermond-smoother-fight-hud .sf-direct-skill > i {
+    width: 28px;
+    color: var(--sf-gold-bright);
+    font-size: 17px;
+    text-align: center;
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack > span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack small {
+    overflow: hidden;
+    color: var(--sf-gold-bright);
+    font-size: 7px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack strong {
+    overflow: hidden;
+    color: inherit;
+    font-size: 11px;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack b {
+    color: var(--sf-gold-bright);
+    font-size: 9px;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack-picker {
+    min-width: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack-picker > summary {
+    height: 49px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    border-left: 1px solid var(--sf-line);
+    color: var(--sf-muted);
+    transition: color 120ms ease, background 120ms ease;
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack-picker > summary:hover,
+#splittermond-smoother-fight-hud .sf-direct-attack-picker[open] > summary {
+    color: var(--sf-gold-bright);
+    background: rgba(108, 201, 193, 0.1);
+}
+
+#splittermond-smoother-fight-hud .sf-direct-attack-picker[open] > summary .sf-chevron {
+    transform: rotate(180deg);
 }
 
 #splittermond-smoother-fight-hud .sf-prepared-spell-menu {
@@ -794,6 +962,159 @@
 
 #splittermond-smoother-fight-hud .sf-action-popover button.is-unequipped {
     opacity: 0.55;
+}
+
+#splittermond-smoother-fight-hud .sf-attack-option {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34px;
+    align-items: stretch;
+}
+
+#splittermond-smoother-fight-hud .sf-attack-option + .sf-attack-option {
+    border-top: 1px solid rgba(117, 191, 186, 0.1);
+}
+
+#splittermond-smoother-fight-hud .sf-attack-option > .sf-attack-option-roll {
+    min-width: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-attack-option > .sf-default-attack-toggle {
+    width: 34px;
+    min-height: 35px;
+    display: grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+    gap: 0;
+    padding: 0;
+    border-left: 1px solid rgba(117, 191, 186, 0.12);
+    border-radius: 0;
+    color: var(--sf-muted);
+    text-align: center;
+}
+
+#splittermond-smoother-fight-hud .sf-attack-option > .sf-default-attack-toggle:hover,
+#splittermond-smoother-fight-hud .sf-attack-option > .sf-default-attack-toggle.is-default {
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.13);
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover .sf-default-attack-toggle.is-automatic:disabled {
+    cursor: default;
+    opacity: 1;
+}
+
+#splittermond-smoother-fight-hud .sf-attack-option > button + button {
+    border-top: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-skill-option {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34px;
+    align-items: stretch;
+}
+
+#splittermond-smoother-fight-hud .sf-skill-option + .sf-skill-option {
+    border-top: 1px solid rgba(117, 191, 186, 0.1);
+}
+
+#splittermond-smoother-fight-hud .sf-skill-option > .sf-skill-option-roll {
+    min-width: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-skill-option > .sf-favorite-skill-toggle {
+    width: 34px;
+    min-height: 35px;
+    display: grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+    gap: 0;
+    padding: 0;
+    border-left: 1px solid rgba(117, 191, 186, 0.12);
+    border-radius: 0;
+    color: var(--sf-muted);
+    text-align: center;
+}
+
+#splittermond-smoother-fight-hud .sf-skill-option > .sf-favorite-skill-toggle:hover,
+#splittermond-smoother-fight-hud .sf-skill-option > .sf-favorite-skill-toggle.is-favorite {
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.13);
+}
+
+#splittermond-smoother-fight-hud .sf-skill-option > button + button {
+    border-top: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites {
+    flex: 0 0 100%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    min-width: 0;
+    min-height: 36px;
+    border-top: 1px solid var(--sf-line);
+    background: linear-gradient(90deg, rgba(216, 168, 93, 0.08), rgba(108, 201, 193, 0.055));
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button {
+    min-width: 0;
+    min-height: 36px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 4px 9px;
+    border: 0;
+    border-radius: 0;
+    color: var(--sf-text);
+    background: transparent;
+    font-size: 11px;
+    text-align: left;
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button[draggable="true"] {
+    cursor: grab;
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button.is-dragging {
+    cursor: grabbing;
+    opacity: 0.42;
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button.is-drop-before {
+    box-shadow: inset 3px 0 0 var(--sf-gold-bright);
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button.is-drop-after {
+    box-shadow: inset -3px 0 0 var(--sf-gold-bright);
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button + button {
+    border-left: 1px solid var(--sf-line);
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button:hover {
+    color: var(--sf-gold-bright);
+    background: rgba(108, 201, 193, 0.12);
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button b {
+    color: var(--sf-gold-bright);
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button i {
+    color: var(--sf-muted);
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-skill-favorites button b {
+    white-space: nowrap;
 }
 
 #splittermond-smoother-fight-hud .sf-action-popover h4 {
@@ -1455,14 +1776,12 @@ body > .sf-spell-tooltip footer {
 }
 
 #splittermond-smoother-fight-hud .sf-check-result-grid > .degree-of-success {
-    color: var(--sf-text);
     font-size: 11px;
     line-height: 1.25;
 }
 
 #splittermond-smoother-fight-hud .sf-check-result-grid > .degree-of-success > div {
     margin: 6px 0 4px;
-    color: var(--sf-gold-bright);
     font-size: 15px;
     line-height: 1;
 }
@@ -1658,9 +1977,13 @@ body > .sf-spell-tooltip footer {
     color: var(--sf-gold-bright);
 }
 
+#splittermond-smoother-fight-hud .sf-chat-message .sf-tick-advance-action.is-own-action-ticks,
 #splittermond-smoother-fight-hud .sf-chat-message .sf-tick-advance-action.is-own-defense-ticks,
 #splittermond-smoother-fight-hud .sf-chat-message .sf-tick-advance-action.is-damage-ticks,
+#splittermond-smoother-fight-hud .sf-chat-message .is-next-focus-cost,
+#splittermond-smoother-fight-hud .sf-chat-message .is-next-damage-roll,
 #splittermond-smoother-fight-hud .sf-chat-message .is-own-fumble-roll,
+#splittermond-smoother-fight-hud .sf-chat-message .is-gm-target-application,
 #splittermond-smoother-fight-hud .sf-chat-message .is-self-target {
     border: 1px solid rgba(242, 206, 135, 0.82) !important;
     color: #fff7d6 !important;
@@ -1712,6 +2035,20 @@ body > .sf-spell-tooltip footer {
     line-height: 1.15;
 }
 
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-degree-options.is-next-degree-options {
+    border-radius: 4px;
+    outline: 1px solid rgba(242, 206, 135, 0.82);
+    outline-offset: 2px;
+    background: linear-gradient(135deg, rgba(169, 112, 31, 0.2), rgba(32, 112, 106, 0.24));
+    box-shadow: 0 0 12px rgba(242, 206, 135, 0.3);
+    animation: sf-defense-attention 1.8s ease-in-out infinite;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .has-next-open-degrees .stars {
+    text-shadow: 0 0 7px currentColor;
+    animation: sf-defense-attention 1.8s ease-in-out infinite;
+}
+
 #splittermond-smoother-fight-hud .sf-chat-message button {
     pointer-events: auto;
 }
@@ -1745,7 +2082,12 @@ body > .sf-spell-tooltip footer {
 
     #splittermond-smoother-fight-hud .sf-action-feedback,
     #splittermond-smoother-fight-hud .sf-chat-message .sf-tick-advance-action,
+    #splittermond-smoother-fight-hud .sf-chat-message .is-next-degree-options,
+    #splittermond-smoother-fight-hud .sf-chat-message .has-next-open-degrees .stars,
+    #splittermond-smoother-fight-hud .sf-chat-message .is-next-focus-cost,
+    #splittermond-smoother-fight-hud .sf-chat-message .is-next-damage-roll,
     #splittermond-smoother-fight-hud .sf-chat-message .is-own-fumble-roll,
+    #splittermond-smoother-fight-hud .sf-chat-message .is-gm-target-application,
     #splittermond-smoother-fight-hud .sf-chat-message .is-self-target {
         animation: none;
     }

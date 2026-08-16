@@ -1,12 +1,20 @@
 import {
+    actionRequiresTarget,
     activeDefenseChangesDifficulty,
     actorLinkUuid,
+    attackControlSelection,
+    attackControlState,
+    attackReadiness,
     bestActiveDefenseValue,
     calculateActiveDefenseValue,
+    combatActionHighlightState,
     combatMessageKind,
     findDefensiveFeatureValue,
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
+    hasTokenPositionUpdate,
+    healthCostFeedbackKind,
+    healthCostTotal,
     isCombatantVisibleToUser,
     isDamageSelectionAction,
     isDefenderMasteryName,
@@ -20,23 +28,47 @@ import {
     mayViewTargetDifficulty,
     mergeActiveDefenseCheck,
     normalizeActorUserLinks,
+    normalizeFavoriteSkillIds,
     normalizeSearchText,
     normalizeTargetReferences,
     normalizeUserTokenLinks,
     parseActiveDefenseDescription,
     parseStatusEffectLabel,
     recalculateAttackReport,
+    reorderFavoriteSkillIds,
     requiresRollManagementPermission,
     resolveCombatEventOpenIds,
+    selectPersonalCombatant,
+    tickAdvanceConfirmed,
+    tokenDocumentCenter,
     totalDegreesOfSuccess,
+    toggleFavoriteSkillId,
     uniqueTokensByReference,
+    visibleCanvasCenterY,
     withTemporarySetValues,
 } from "./combat-rules.js";
 
 const MODULE_ID = "splittermond-smoother-fight";
 const SOCKET = `module.${MODULE_ID}`;
 const SYSTEM_SOCKET = "system.splittermond";
+const MAX_FAVORITE_SKILLS = 4;
 const COMBAT_PAUSE = Object.freeze({ wait: 10000, keepReady: 20000 });
+const AUDIO_FEEDBACK_EVENTS = Object.freeze({
+    defense: { enabled: "audioDefenseEnabled", sound: "audioDefenseSound", name: "AudioDefense", defaultSound: "shield" },
+    damage: { enabled: "audioDamageEnabled", sound: "audioDamageSound", name: "AudioDamage", defaultSound: "impact" },
+    damageBlocked: { enabled: "audioDamageBlockedEnabled", sound: "audioDamageBlockedSound", name: "AudioDamageBlocked", defaultSound: "blocked" },
+    spell: { enabled: "audioSpellEnabled", sound: "audioSpellSound", name: "AudioSpell", defaultSound: "arcane" },
+    ranged: { enabled: "audioRangedEnabled", sound: "audioRangedSound", name: "AudioRanged", defaultSound: "shot" },
+    turn: { enabled: "audioTurnEnabled", sound: "audioTurnSound", name: "AudioTurn", defaultSound: "turn" },
+});
+const AUDIO_SOUND_PROFILES = Object.freeze({
+    shield: { label: "SMOOTHER_FIGHT.Settings.AudioSoundShield", wave: "sine", notes: [[330, 0], [494, 0.08], [659, 0.16]] },
+    impact: { label: "SMOOTHER_FIGHT.Settings.AudioSoundImpact", wave: "triangle", notes: [[180, 0], [125, 0.1]] },
+    blocked: { label: "SMOOTHER_FIGHT.Settings.AudioSoundBlocked", wave: "square", notes: [[740, 0], [520, 0.055], [370, 0.11]] },
+    arcane: { label: "SMOOTHER_FIGHT.Settings.AudioSoundArcane", wave: "sine", notes: [[523, 0], [659, 0.07], [784, 0.14]] },
+    shot: { label: "SMOOTHER_FIGHT.Settings.AudioSoundShot", wave: "sine", notes: [[880, 0], [440, 0.06]] },
+    turn: { label: "SMOOTHER_FIGHT.Settings.AudioSoundTurn", wave: "sine", notes: [[440, 0], [660, 0.11], [880, 0.22]] },
+});
 
 const runtime = {
     hud: null,
@@ -50,13 +82,21 @@ const runtime = {
     cardsCollapsed: false,
     hiddenByShortcut: false,
     eventExpansionRequest: null,
+    actionMenuExpansionRequest: null,
     feedback: null,
     feedbackTimer: null,
     audioContext: null,
     lastTurnCombatantId: null,
     heardMessageIds: new Set(),
+    healthCostsByActor: new Map(),
     pendingOffenseKinds: new Map(),
+    pendingDamageRolls: new Map(),
+    pendingDamageApplications: [],
+    completedDamageApplicationMessageIds: new Set(),
+    pendingLegacyTickMessages: new Set(),
     combatEventDeletionPending: false,
+    personalCombatId: null,
+    personalCombatantId: null,
     startedAt: Date.now(),
 };
 
@@ -67,8 +107,11 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", async () => {
+    await migrateAudioFeedbackSettings();
+    installHealthCostFeedbackInterceptor();
     runtime.hud = new SmootherFightHud();
     runtime.hud.mount();
+    seedHealthFeedbackState();
     registerHooks();
     registerSocket();
     publishOwnTarget();
@@ -142,13 +185,37 @@ function registerSettings() {
         onChange: rerender,
     });
     game.settings.register(MODULE_ID, "audioFeedback", {
-        name: "SMOOTHER_FIGHT.Settings.AudioFeedbackName",
-        hint: "SMOOTHER_FIGHT.Settings.AudioFeedbackHint",
         scope: "client",
-        config: true,
+        config: false,
         type: Boolean,
         default: true,
     });
+    game.settings.register(MODULE_ID, "audioFeedbackMigrated", {
+        scope: "client",
+        config: false,
+        type: Boolean,
+        default: false,
+    });
+    const soundChoices = Object.fromEntries(Object.entries(AUDIO_SOUND_PROFILES).map(([id, profile]) => [id, profile.label]));
+    for (const config of Object.values(AUDIO_FEEDBACK_EVENTS)) {
+        game.settings.register(MODULE_ID, config.enabled, {
+            name: `SMOOTHER_FIGHT.Settings.${config.name}EnabledName`,
+            hint: "SMOOTHER_FIGHT.Settings.AudioEventEnabledHint",
+            scope: "client",
+            config: true,
+            type: Boolean,
+            default: true,
+        });
+        game.settings.register(MODULE_ID, config.sound, {
+            name: `SMOOTHER_FIGHT.Settings.${config.name}SoundName`,
+            hint: "SMOOTHER_FIGHT.Settings.AudioEventSoundHint",
+            scope: "client",
+            config: true,
+            type: String,
+            choices: soundChoices,
+            default: config.defaultSound,
+        });
+    }
     game.settings.register(MODULE_ID, "theme", {
         scope: "client",
         config: false,
@@ -461,7 +528,18 @@ function registerHooks() {
         "updateItem",
         "deleteItem",
     ];
-    rerenderHooks.forEach((hook) => Hooks.on(hook, scheduleRender));
+    rerenderHooks.forEach((hook) => Hooks.on(hook, () => scheduleRender()));
+    Hooks.on("controlToken", () => scheduleRender(0));
+    Hooks.on("updateToken", (token, changes) => {
+        if (Object.hasOwn(changes ?? {}, "hidden")) scheduleRender(0);
+        if (hasTokenPositionUpdate(changes)) scheduleRenderAfterTokenMovement(token);
+    });
+
+    Hooks.on("canvasReady", seedHealthFeedbackState);
+    Hooks.on("preUpdateActor", rememberActorHealthCost);
+    Hooks.on("updateActor", announceAppliedDamageFeedback);
+    Hooks.on("createActor", rememberActorHealthCost);
+    Hooks.on("deleteActor", forgetActorHealthCost);
 
     Hooks.on("targetToken", (user, token, targeted) => {
         const targets = new Set(normalizeTargetReferences(user.targets));
@@ -481,6 +559,8 @@ function registerHooks() {
         scheduleRender();
     });
     Hooks.on("combatStart", (combat) => {
+        runtime.personalCombatId = null;
+        runtime.personalCombatantId = null;
         runtime.lastTurnCombatantId = null;
         announceTurnFeedback(combat);
     });
@@ -530,6 +610,27 @@ function registerSocket() {
             return;
         }
 
+        if (payload.type === "combat-feedback" && payload.senderId !== game.user.id) {
+            const sender = game.users.get(payload.senderId);
+            if (!sender || payload.kind !== "damageBlocked") return;
+            receivePublishedFeedback(payload.kind, {
+                tokenUuid: payload.tokenUuid,
+                actorUuid: payload.actorUuid,
+            });
+            return;
+        }
+
+        if (payload.type === "damage-application-completed" && payload.recipientId === game.user.id && game.user.isGM) {
+            const sender = game.users.get(payload.senderId);
+            const message = game.messages.get(payload.messageId);
+            const actor = resolveActorUuid(payload.actorUuid) ?? resolveToken(payload.tokenUuid)?.actor ?? null;
+            if (!sender || !message || !isDamageMessage(message) || !mayUserApplyDamageToActor(sender, actor)) return;
+            runtime.completedDamageApplicationMessageIds.add(message.id);
+            await safeSetFlag(message, "damageApplicationCompleted", true);
+            scheduleRender(0);
+            return;
+        }
+
         if (payload.type === "recalculate-defense" && payload.recipientId === game.user.id && game.user.isGM) {
             const sender = game.users.get(payload.senderId);
             const message = await waitForChatMessage(payload.defenseMessageId);
@@ -551,6 +652,8 @@ class SmootherFightHud {
     constructor() {
         this.element = null;
         this.renderGeneration = 0;
+        this.draggedFavoriteSkillId = null;
+        this.favoriteSkillClickBlockedUntil = 0;
     }
 
     mount() {
@@ -562,6 +665,10 @@ class SmootherFightHud {
         document.body.append(this.element);
         this.element.addEventListener("click", (event) => void this.onClick(event));
         this.element.addEventListener("contextmenu", (event) => this.onContextMenu(event));
+        this.element.addEventListener("dragstart", (event) => this.onFavoriteSkillDragStart(event));
+        this.element.addEventListener("dragover", (event) => this.onFavoriteSkillDragOver(event));
+        this.element.addEventListener("drop", (event) => void this.onFavoriteSkillDrop(event));
+        this.element.addEventListener("dragend", () => this.onFavoriteSkillDragEnd());
     }
 
     async render() {
@@ -574,6 +681,7 @@ class SmootherFightHud {
         if (!enabled || !context) {
             runtime.hiddenByShortcut = false;
             runtime.eventExpansionRequest = null;
+            runtime.actionMenuExpansionRequest = null;
         }
         const visible = Boolean(enabled && context && !runtime.hiddenByShortcut);
         const minimized = Boolean(visible && getSetting("minimized", false));
@@ -597,7 +705,7 @@ class SmootherFightHud {
         clearSpellTooltip();
         this.element.innerHTML = html;
         this.element.dataset.activeCombatantId = context.combatant.id ?? "";
-        this.element.dataset.activeActorId = context.actor.id ?? "";
+        this.element.dataset.activeActorId = context.actor?.id ?? "";
         enforceChatPermissions(this.element, context);
         enforceFumbleActionState(this.element);
         bindQuickTargetHover(this.element);
@@ -605,6 +713,7 @@ class SmootherFightHud {
         restoreHudViewState(this.element, viewState, { forceLatestEvent });
         if (forceLatestEvent) runtime.combatEventDeletionPending = false;
         applyCombatEventExpansionRequest(this.element);
+        applyActionMenuExpansionRequest(this.element);
     }
 
     onContextMenu(event) {
@@ -630,6 +739,11 @@ class SmootherFightHud {
     async onClick(event) {
         const target = event.target.closest("[data-sf-action], [data-sf-roll-toggle], .sf-chat-message .splittermond-chat-action, .sf-chat-message button, .sf-chat-message [role=button]");
         if (!target || !this.element.contains(target)) return;
+        if (target.closest(".sf-skill-favorites") && Date.now() < this.favoriteSkillClickBlockedUntil) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
         if (target.getAttribute("aria-disabled") === "true") {
             event.preventDefault();
             return;
@@ -655,7 +769,8 @@ class SmootherFightHud {
             return;
         }
 
-        const context = getHudContext();
+        const hudContext = getHudContext();
+        const context = resolveHudActionContext(hudContext, target);
         if (!context) return;
 
         try {
@@ -671,8 +786,20 @@ class SmootherFightHud {
                 case "skill":
                     await requireOwner(context, () => context.actor.rollSkill(target.dataset.skillId));
                     break;
+                case "toggle-favorite-skill":
+                    await requireOwner(context, () => {
+                        requestActionMenuExpansion(context, target, "skills");
+                        return toggleFavoriteSkill(context, target.dataset.skillId);
+                    });
+                    break;
                 case "attack":
                     await requireOwner(context, () => performAttack(context, target.dataset.attackId));
+                    break;
+                case "toggle-default-attack":
+                    await requireOwner(context, () => {
+                        requestActionMenuExpansion(context, target, "attacks");
+                        return toggleDefaultAttack(context, target.dataset.attackId);
+                    });
                     break;
                 case "spell":
                     await requireOwner(context, () => performSpell(context, target.dataset.spellId));
@@ -689,6 +816,9 @@ class SmootherFightHud {
                 case "add-ticks":
                     await requireOwner(context, () => addCombatTicks(context, target.dataset.ticks));
                     break;
+                case "select-personal-combatant":
+                    selectPersonalCombatantFromMenu(hudContext, target.dataset.combatantId);
+                    break;
                 case "pause-combatant":
                     await requireOwner(context, () => pauseCombatant(context, target.dataset.pauseType));
                     break;
@@ -702,7 +832,10 @@ class SmootherFightHud {
                     showTokenOnCanvas(resolveToken(target.dataset.tokenUuid));
                     break;
                 case "toggle-combatant-hidden":
-                    await requireGm(() => context.combatant.update({ hidden: !context.combatant.hidden }));
+                    await requireGm(() => toggleCombatantHidden(context));
+                    break;
+                case "toggle-token-hidden":
+                    await requireGm(() => toggleTokenHidden(context));
                     break;
                 case "toggle-combatant-visibility":
                     await requireGm(() => toggleCombatantVisibility(context));
@@ -723,7 +856,10 @@ class SmootherFightHud {
                     await beginAdditionalTargetDefense(game.messages.get(target.dataset.messageId));
                     break;
                 case "toggle-equipped":
-                    await requireOwner(context, () => toggleEquipped(context.actor, target.dataset.itemId));
+                    await requireOwner(context, () => {
+                        requestActionMenuExpansion(context, target, "attacks");
+                        return toggleEquipped(context.actor, target.dataset.itemId);
+                    });
                     break;
                 case "set-target":
                     await setTargetFromQuickMenu(context, target.dataset.tokenUuid);
@@ -745,9 +881,76 @@ class SmootherFightHud {
             ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
         }
     }
+
+    onFavoriteSkillDragStart(event) {
+        const favorite = event.target.closest(".sf-skill-favorites [data-favorite-skill-id]");
+        if (!favorite || !this.element.contains(favorite)) return;
+        this.draggedFavoriteSkillId = favorite.dataset.favoriteSkillId;
+        this.favoriteSkillClickBlockedUntil = Number.POSITIVE_INFINITY;
+        favorite.classList.add("is-dragging");
+        favorite.setAttribute("aria-grabbed", "true");
+        event.dataTransfer?.setData("text/plain", this.draggedFavoriteSkillId);
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    }
+
+    onFavoriteSkillDragOver(event) {
+        const favorite = event.target.closest(".sf-skill-favorites [data-favorite-skill-id]");
+        if (!favorite || !this.draggedFavoriteSkillId || favorite.dataset.favoriteSkillId === this.draggedFavoriteSkillId) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        this.clearFavoriteSkillDropIndicators();
+        const bounds = favorite.getBoundingClientRect();
+        favorite.classList.add(event.clientX > bounds.left + (bounds.width / 2) ? "is-drop-after" : "is-drop-before");
+    }
+
+    async onFavoriteSkillDrop(event) {
+        const favorite = event.target.closest(".sf-skill-favorites [data-favorite-skill-id]");
+        const sourceSkillId = this.draggedFavoriteSkillId ?? event.dataTransfer?.getData("text/plain");
+        const targetSkillId = favorite?.dataset.favoriteSkillId;
+        if (!favorite || !sourceSkillId || !targetSkillId || sourceSkillId === targetSkillId) {
+            this.onFavoriteSkillDragEnd();
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const bounds = favorite.getBoundingClientRect();
+        const placeAfter = event.clientX > bounds.left + (bounds.width / 2);
+        this.onFavoriteSkillDragEnd();
+        const hudContext = getHudContext();
+        const context = resolveHudActionContext(hudContext, favorite);
+        if (!context) return;
+        await requireOwner(context, async () => {
+            const skills = Object.values(context.actor.skills ?? {});
+            const current = normalizeFavoriteSkillIds(
+                context.actor.getFlag?.(MODULE_ID, "favoriteSkillIds"),
+                skills.map((skill) => skill.id),
+                MAX_FAVORITE_SKILLS
+            );
+            const next = reorderFavoriteSkillIds(current, sourceSkillId, targetSkillId, placeAfter);
+            if (next.every((id, index) => id === current[index])) return;
+            await context.actor.setFlag(MODULE_ID, "favoriteSkillIds", next);
+            scheduleRender(0);
+        });
+    }
+
+    onFavoriteSkillDragEnd() {
+        this.favoriteSkillClickBlockedUntil = Date.now() + 250;
+        this.draggedFavoriteSkillId = null;
+        this.element?.querySelectorAll(".sf-skill-favorites [aria-grabbed]").forEach((favorite) => {
+            favorite.classList.remove("is-dragging");
+            favorite.setAttribute("aria-grabbed", "false");
+        });
+        this.clearFavoriteSkillDropIndicators();
+    }
+
+    clearFavoriteSkillDropIndicators() {
+        this.element?.querySelectorAll(".sf-skill-favorites .is-drop-before, .sf-skill-favorites .is-drop-after")
+            .forEach((favorite) => favorite.classList.remove("is-drop-before", "is-drop-after"));
+    }
 }
 
 async function buildHud(context) {
+    if (context.concealed) return buildConcealedHud(context);
     const { combat, combatant, actor, token, linkedUser, target, targets } = context;
     const canAct = Boolean(game.user.isGM || actor.isOwner);
     const tick = combat.currentTick ?? Math.round(Number(combatant.initiative) || 0);
@@ -801,8 +1004,8 @@ async function buildHud(context) {
                     ${buildThemeToggle()}
                     ${hudToggle}
                 </header>
-                ${canAct ? buildCombatControls(context) : ""}
-                ${canAct ? await buildActionBar(context) : `<p class="sf-owner-note"><i class="fa-solid fa-lock"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoOwner"))}</p>`}
+                ${canAct ? buildCombatControls(context) : buildPersonalControls(context)}
+                ${canAct ? await buildActionBar(context) : ""}
                 ${getSetting("showCards", true) ? buildCombatEvents(context) : ""}
             </main>
             <div class="sf-target-column">
@@ -819,6 +1022,43 @@ async function buildHud(context) {
             </div>
         </div>
     `;
+}
+
+function buildConcealedHud(context) {
+    const minimized = getSetting("minimized", false);
+    const label = t("SMOOTHER_FIGHT.HUD.UnknownActive");
+    const hudToggle = buildHudToggle(minimized);
+    const header = `
+        <header class="sf-turnline">
+            <span class="sf-live-dot"></span>
+            <strong class="sf-concealed-name" title="${escapeAttr(label)}"><i class="fa-solid fa-circle-question"></i><span aria-hidden="true">?</span></strong>
+            ${buildThemeToggle()}
+            ${hudToggle}
+        </header>`;
+
+    if (minimized) {
+        return `<div class="sf-shell is-minimized is-concealed-turn"><main class="sf-center">${header}</main></div>`;
+    }
+
+    const personalControls = buildPersonalControls(context);
+    const events = getSetting("showCards", true) ? buildCombatEvents(context) : "";
+    return `
+        <div class="sf-shell is-concealed-turn">
+            ${concealedActorPanel(label)}
+            <main class="sf-center">${header}${personalControls}${events}</main>
+            <div class="sf-target-column sf-concealed-target-column" aria-hidden="true"></div>
+        </div>`;
+}
+
+function concealedActorPanel(label) {
+    return `
+        <aside class="sf-portrait sf-actor sf-concealed-actor" aria-label="${escapeAttr(label)}">
+            <div class="sf-portrait-image">
+                <span class="sf-eyebrow">${escapeHtml(t("SMOOTHER_FIGHT.HUD.Active"))}</span>
+                <span class="sf-concealed-symbol" aria-hidden="true"><i class="fa-solid fa-circle-question"></i></span>
+            </div>
+            <div class="sf-portrait-name" aria-hidden="true">?</div>
+        </aside>`;
 }
 
 function buildHudToggle(minimized) {
@@ -901,26 +1141,29 @@ function resourceBar(type, label, resource) {
 function buildCombatControls(context) {
     const initiative = Number(context.combatant.initiative);
     const paused = Number.isFinite(initiative) && initiative >= COMBAT_PAUSE.wait;
-    const tickButtons = [1, 2, 3, 5, 7, 10].map((ticks) => `
-        <button type="button" data-sf-action="add-ticks" data-ticks="${ticks}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks }))}">+${ticks} T</button>
-    `).join("");
     const pauseButtons = paused
         ? `<button type="button" data-sf-action="resume-combatant" class="is-resume" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Resume"))}"><i class="fa-solid fa-play-circle"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Resume"))}</span></button>`
         : `<button type="button" data-sf-action="pause-combatant" data-pause-type="wait" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Wait"))}"><i class="fa-solid fa-hourglass-half"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Wait"))}</span></button>
            <button type="button" data-sf-action="pause-combatant" data-pause-type="keepReady" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.KeepReady"))}"><i class="fa-solid fa-hand"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.KeepReady"))}</span></button>`;
     const focusLabel = t("SMOOTHER_FIGHT.HUD.FocusCombatant");
-    const visibilityHidden = Boolean(context.combatant.hidden || context.token?.hidden);
-    const visibilityLabel = t(visibilityHidden ? "SMOOTHER_FIGHT.HUD.ShowTokenAndCombatant" : "SMOOTHER_FIGHT.HUD.HideTokenAndCombatant");
+    const tokenHidden = Boolean(context.token?.hidden);
+    const combatantHidden = Boolean(context.combatant.hidden);
+    const visibilityHidden = tokenHidden || combatantHidden;
+    const tokenVisibilityLabel = t(tokenHidden ? "SMOOTHER_FIGHT.HUD.ShowToken" : "SMOOTHER_FIGHT.HUD.HideToken");
+    const combatantVisibilityLabel = t(combatantHidden ? "SMOOTHER_FIGHT.HUD.ShowCombatant" : "SMOOTHER_FIGHT.HUD.HideCombatant");
+    const combinedVisibilityLabel = t(visibilityHidden ? "SMOOTHER_FIGHT.HUD.ShowTokenAndCombatant" : "SMOOTHER_FIGHT.HUD.HideTokenAndCombatant");
     const defeatedLabel = t(context.combatant.isDefeated ? "SMOOTHER_FIGHT.HUD.RestoreCombatant" : "SMOOTHER_FIGHT.HUD.MarkDefeated");
     const removeLabel = t("SMOOTHER_FIGHT.HUD.RemoveCombatant");
     const gmControls = game.user.isGM ? `
-        <button type="button" data-sf-action="toggle-combatant-visibility" class="sf-icon-button ${visibilityHidden ? "is-active" : ""}" title="${escapeAttr(visibilityLabel)}"><i class="fa-solid ${visibilityHidden ? "fa-eye" : "fa-eye-slash"}"></i><span class="sf-control-label">${escapeHtml(visibilityLabel)}</span></button>
+        <button type="button" data-sf-action="toggle-token-hidden" class="sf-icon-button ${tokenHidden ? "is-active" : ""}" title="${escapeAttr(tokenVisibilityLabel)}"><i class="fa-solid ${tokenHidden ? "fa-eye" : "fa-eye-slash"}"></i><span class="sf-control-label">${escapeHtml(tokenVisibilityLabel)}</span></button>
+        <button type="button" data-sf-action="toggle-combatant-hidden" class="sf-icon-button ${combatantHidden ? "is-active" : ""}" title="${escapeAttr(combatantVisibilityLabel)}"><i class="fa-solid ${combatantHidden ? "fa-list" : "fa-list-check"}"></i><span class="sf-control-label">${escapeHtml(combatantVisibilityLabel)}</span></button>
+        <button type="button" data-sf-action="toggle-combatant-visibility" class="sf-icon-button ${visibilityHidden ? "is-active" : ""}" title="${escapeAttr(combinedVisibilityLabel)}"><i class="fa-solid ${visibilityHidden ? "fa-eye" : "fa-eye-slash"}"></i><span class="sf-control-label">${escapeHtml(combinedVisibilityLabel)}</span></button>
         <button type="button" data-sf-action="toggle-combatant-defeated" class="sf-icon-button ${context.combatant.isDefeated ? "is-active" : ""}" title="${escapeAttr(defeatedLabel)}"><i class="fa-solid fa-skull"></i><span class="sf-control-label">${escapeHtml(defeatedLabel)}</span></button>
         <button type="button" data-sf-action="remove-combatant" class="sf-icon-button is-danger" title="${escapeAttr(removeLabel)}"><i class="fa-solid fa-circle-minus"></i><span class="sf-control-label">${escapeHtml(removeLabel)}</span></button>
     ` : "";
 
     return `<section class="sf-combat-controls" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CombatControls"))}">
-        <div class="sf-tick-buttons"><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Advance"))}</span>${tickButtons}<button type="button" data-sf-action="add-ticks" data-ticks="custom" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CustomTicks"))}">+X</button></div>
+        ${buildAdvanceButtons(context)}
         <div class="sf-pause-buttons">${pauseButtons}</div>
         <div class="sf-tracker-buttons">
             <button type="button" data-sf-action="focus-combatant" class="sf-icon-button" title="${escapeAttr(focusLabel)}"><i class="fa-solid fa-bullseye"></i><span class="sf-control-label">${escapeHtml(focusLabel)}</span></button>
@@ -929,40 +1172,141 @@ function buildCombatControls(context) {
     </section>`;
 }
 
-async function buildActionBar(context) {
-    const actor = context.actor;
-    const preparedSpellId = actor.getFlag?.("splittermond", "preparedSpell");
-    const preparedAttackId = actor.getFlag?.("splittermond", "preparedAttack");
+function buildAdvanceButtons(context, includeActorName = false) {
+    const tickButtons = [1, 2, 3, 5, 7, 10].map((ticks) => `
+        <button type="button" data-sf-action="add-ticks" data-ticks="${ticks}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks }))}">+${ticks} T</button>
+    `).join("");
+    const label = includeActorName
+        ? `${t("SMOOTHER_FIGHT.HUD.Advance")} · ${context.actor.name}`
+        : t("SMOOTHER_FIGHT.HUD.Advance");
+    return `<div class="sf-tick-buttons"><span>${escapeHtml(label)}</span>${tickButtons}<button type="button" data-sf-action="add-ticks" data-ticks="custom" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CustomTicks"))}">+X</button></div>`;
+}
+
+function buildPersonalControls(activeContext) {
+    const candidates = getPersonalHudCandidates(activeContext);
+    const context = getPersonalHudContext(activeContext);
+    const picker = candidates.length > 1 ? buildPersonalCombatantPicker(candidates, context) : "";
+    if (!context) {
+        return `<div class="sf-personal-controls sf-personal-selection-required">
+            ${picker ? `<nav class="sf-actions sf-personal-skill-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.ChooseOwnCombatant"))}">${picker}</nav>` : ""}
+            <p class="sf-owner-note"><i class="fa-solid fa-arrow-pointer"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SelectOwnedToken"))}</p>
+        </div>`;
+    }
+    const attributes = `data-sf-context-combatant-id="${escapeAttr(context.combatant.id)}" data-sf-context-actor-id="${escapeAttr(context.actor.id)}"`;
+    return `<div class="sf-personal-controls" ${attributes}>
+        <section class="sf-combat-controls sf-personal-combat-controls" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CombatControls"))}">
+            ${buildAdvanceButtons(context, true)}
+        </section>
+        ${buildSkillActionBar(context.actor, picker)}
+    </div>`;
+}
+
+function buildPersonalCombatantPicker(candidates, context) {
+    const selectedId = context?.combatant?.id ?? null;
+    const current = candidates.find((candidate) => candidate.combatant.id === selectedId) ?? null;
+    const label = current?.token?.name ?? current?.actor?.name ?? t("SMOOTHER_FIGHT.HUD.ChooseOwnCombatant");
+    const body = [...candidates]
+        .sort((left, right) => String(left.token?.name ?? left.actor?.name ?? "").localeCompare(
+            String(right.token?.name ?? right.actor?.name ?? ""),
+            game.i18n.lang
+        ))
+        .map((candidate) => {
+            const name = candidate.token?.name ?? candidate.actor.name;
+            const actorName = candidate.token?.name && candidate.token.name !== candidate.actor.name ? candidate.actor.name : "";
+            const tokenReference = candidate.tokenUuid ? ` data-token-uuid="${escapeAttr(candidate.tokenUuid)}"` : "";
+            const selected = candidate.combatant.id === selectedId;
+            const tick = Math.round(Number(candidate.combatant.initiative) || 0);
+            return `<button type="button" data-sf-action="select-personal-combatant" data-combatant-id="${escapeAttr(candidate.combatant.id)}"${tokenReference} class="${selected ? "is-current" : ""}" aria-pressed="${selected}">
+                <img src="${escapeAttr(candidate.token?.texture?.src ?? candidate.actor.img ?? "icons/svg/mystery-man.svg")}" alt="">
+                <span>${escapeHtml(name)}${actorName ? `<small>${escapeHtml(actorName)}</small>` : ""}</span>
+                <b>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</b>
+            </button>`;
+        }).join("");
+    const title = t("SMOOTHER_FIGHT.HUD.ChooseOwnCombatant");
+    return `<details class="sf-action-menu sf-personal-combatant-picker">
+        <summary title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}"><i class="fa-solid fa-users"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
+        <div class="sf-action-popover">${body}</div>
+    </details>`;
+}
+
+function getSkillActionData(actor) {
     const skills = Object.values(actor.skills ?? {})
         .filter((skill) => numericValue(skill.points) > 0 || ["acrobatics", "athletics", "determination", "stealth", "perception", "endurance"].includes(skill.id))
         .sort((a, b) => displayLabel(a.label).localeCompare(displayLabel(b.label), game.i18n.lang));
+    const favoriteSkillIds = normalizeFavoriteSkillIds(
+        actor.getFlag?.(MODULE_ID, "favoriteSkillIds"),
+        skills.map((skill) => skill.id),
+        MAX_FAVORITE_SKILLS
+    );
+    const favoriteSkillIdSet = new Set(favoriteSkillIds);
+    const favoriteSkills = favoriteSkillIds
+        .map((id) => skills.find((skill) => skill.id === id))
+        .filter(Boolean);
+    const skillMenuBody = buildSkillMenuBody(skills, favoriteSkillIdSet);
+    const skillControlMarkup = favoriteSkills.length === 1
+        ? directSkillControl(favoriteSkills[0], skillMenuBody)
+        : actionMenu("fa-solid fa-dice-d20", t("SMOOTHER_FIGHT.HUD.Skills"), skillMenuBody, "", "skills");
+    return { favoriteSkills, skillControlMarkup };
+}
+
+function buildSkillActionBar(actor, leadingControl = "") {
+    const { favoriteSkills, skillControlMarkup } = getSkillActionData(actor);
+    return `<nav class="sf-actions sf-personal-skill-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Skills"))}">
+        ${leadingControl}
+        ${skillControlMarkup}
+        ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
+    </nav>`;
+}
+
+async function buildActionBar(context) {
+    const actor = context.actor;
+    const defenseAlert = hasPendingActiveDefense(context);
+    const preparedSpellId = actor.getFlag?.("splittermond", "preparedSpell");
+    const preparedAttackId = actor.getFlag?.("splittermond", "preparedAttack");
+    const storedDefaultAttackId = actor.getFlag?.(MODULE_ID, "defaultAttackId");
+    const { favoriteSkills, skillControlMarkup } = getSkillActionData(actor);
     const spells = [...(actor.spells ?? [])].sort((a, b) =>
         Number(b.id === preparedSpellId) - Number(a.id === preparedSpellId) || sortByName(a, b)
     );
     const preparedSpell = spells.find((spell) => spell.id === preparedSpellId) ?? null;
     const availableSpells = spells.filter((spell) => spell.enoughFocus !== false).length;
     const spellLabel = `${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells})`;
-    const attacks = [...(actor.attacks ?? [])].sort((a, b) =>
-        Number(b.id === preparedAttackId || b.isPrepared) - Number(a.id === preparedAttackId || a.isPrepared) || sortByName(a, b)
-    );
-    const preparedAttack = attacks.find((attack) => attack.id === preparedAttackId || attack.isPrepared) ?? null;
-    const attackSpeeds = new Map(await Promise.all(attacks.map(async (attack) => [attack.id, await getAttackSpeed(attack)])));
+    const availableAttacks = [...(actor.attacks ?? [])];
     const equipment = Array.from(actor.items ?? []).filter((item) => ["weapon", "shield"].includes(item.type)).sort(sortByName);
-
+    const attackControl = attackControlState(availableAttacks.map((attack) => attack.id), storedDefaultAttackId, equipment.length);
+    const attackStates = new Map(availableAttacks.map((attack) => [
+        attack.id,
+        attackReadiness(isRangedAttack(attack), attack.id, preparedAttackId),
+    ]));
+    const attacks = availableAttacks.sort((a, b) =>
+        Number(attackStates.get(b.id)?.prepared) - Number(attackStates.get(a.id)?.prepared) || sortByName(a, b)
+    );
+    const preparedAttack = attacks.find((attack) => attackStates.get(attack.id)?.prepared) ?? null;
+    const directAttack = attacks.find((attack) => attack.id === attackControl.directAttackId) ?? null;
+    const attackSpeeds = new Map(await Promise.all(attacks.map(async (attack) => [attack.id, await getAttackSpeed(attack)])));
+    const attackMenuBody = buildAttackMenuBody(
+        attacks,
+        equipment,
+        attackStates,
+        attackSpeeds,
+        attackControl.defaultAttackId,
+        attackControl.automaticDefaultAttackId
+    );
+    const attackSelection = attackControlSelection(preparedAttack?.id, directAttack?.id);
+    const attackControlMarkup = attackSelection.mode === "prepared"
+        ? preparedAttackMenu(preparedAttack)
+        : attackSelection.mode === "default"
+            ? directAttackControl(directAttack, {
+                menuBody: attackMenuBody,
+                showMenu: attackControl.showMenu,
+                isDefault: directAttack.id === attackControl.defaultAttackId,
+                readiness: attackStates.get(directAttack.id),
+                speed: attackSpeeds.get(directAttack.id),
+            })
+            : actionMenu("fa-solid fa-hand-fist", t("SMOOTHER_FIGHT.HUD.Attacks"), attackMenuBody, "", "attacks");
     return `<nav class="sf-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
-        ${actionMenu("fa-solid fa-dice-d20", t("SMOOTHER_FIGHT.HUD.Skills"), skills.map((skill) => `
-            <button type="button" data-sf-action="skill" data-skill-id="${escapeAttr(skill.id)}">
-                <span>${escapeHtml(displayLabel(skill.label, skill.id))}</span><b>${escapeHtml(displayValue(skill.value))}</b>
-            </button>`).join(""))}
-        ${preparedAttack ? preparedAttackMenu(preparedAttack) : actionMenu("fa-solid fa-hand-fist", t("SMOOTHER_FIGHT.HUD.Attacks"), `
-            ${attacks.map((attack) => `<button type="button" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" class="${attack.isPrepared ? "is-prepared" : ""}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
-                <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small></span>
-                <b>${escapeHtml(attack.isPrepared ? (displayValue(attack.damage, "–")) : `${attackSpeeds.get(attack.id) ?? "–"} T`)}</b>
-            </button>`).join("") || emptyMenuText()}
-            ${equipment.length ? `<h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Equip"))}</h4>${equipment.map((item) => `<button type="button" data-sf-action="toggle-equipped" data-item-id="${escapeAttr(item.id)}" class="${item.system?.equipped ? "is-equipped" : "is-unequipped"}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
-                <img src="${escapeAttr(item.img)}" alt=""><span>${escapeHtml(item.name)}</span><i class="fa-solid ${item.system?.equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i>
-            </button>`).join("")}` : ""}
-        `)}
+        ${skillControlMarkup}
+        ${attackControlMarkup}
         ${preparedSpell ? preparedSpellMenu(preparedSpell, availableSpells) : actionMenu("fa-solid fa-wand-sparkles", spellLabel, spells.map((spell) => {
             const preparing = runtime.preparingSpellId === spell.id;
             const skillLabel = displayLabel(spell.skill?.label);
@@ -981,17 +1325,95 @@ async function buildActionBar(context) {
             defenseButton(actor, "defense", "VTD"),
             defenseButton(actor, "bodyresist", "KW"),
             defenseButton(actor, "mindresist", "GW"),
-        ].join(""), isCurrentUserTarget(context.target) ? "is-defense-alert" : "")}
+        ].join(""), defenseAlert ? "is-defense-alert" : "")}
         <div class="sf-defense-pills" aria-hidden="true">
             <span>VTD <b>${escapeHtml(getDerivedValue(actor, "defense"))}</b></span>
             <span>KW <b>${escapeHtml(getDerivedValue(actor, "bodyresist"))}</b></span>
             <span>GW <b>${escapeHtml(getDerivedValue(actor, "mindresist"))}</b></span>
         </div>
+        ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
     </nav>`;
 }
 
-function actionMenu(icon, label, body, className = "") {
-    return `<details class="sf-action-menu ${escapeAttr(className)}">
+function buildSkillMenuBody(skills, favoriteSkillIds) {
+    return skills.map((skill) => {
+        const label = displayLabel(skill.label, skill.id);
+        const isFavorite = favoriteSkillIds.has(skill.id);
+        const toggleLabel = t(isFavorite ? "SMOOTHER_FIGHT.HUD.ClearFavoriteSkill" : "SMOOTHER_FIGHT.HUD.SetFavoriteSkill");
+        return `<div class="sf-skill-option ${isFavorite ? "is-favorite" : ""}">
+            <button type="button" class="sf-skill-option-roll" data-sf-action="skill" data-skill-id="${escapeAttr(skill.id)}">
+                <span>${escapeHtml(label)}</span><b>${escapeHtml(displayValue(skill.value))}</b>
+            </button>
+            <button type="button" class="sf-favorite-skill-toggle ${isFavorite ? "is-favorite" : ""}" data-sf-action="toggle-favorite-skill" data-skill-id="${escapeAttr(skill.id)}" title="${escapeAttr(toggleLabel)}" aria-label="${escapeAttr(toggleLabel)}" aria-pressed="${isFavorite}"><i class="${isFavorite ? "fa-solid" : "fa-regular"} fa-star"></i></button>
+        </div>`;
+    }).join("") || emptyMenuText();
+}
+
+function buildFavoriteSkillBar(skills) {
+    return `<div class="sf-skill-favorites" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.FavoriteSkills"))}">
+        ${skills.map((skill) => {
+            const label = displayLabel(skill.label, skill.id);
+            const dragLabel = t("SMOOTHER_FIGHT.HUD.ReorderFavoriteSkill", { skill: label });
+            return `<button type="button" draggable="true" aria-grabbed="false" data-sf-action="skill" data-skill-id="${escapeAttr(skill.id)}" data-favorite-skill-id="${escapeAttr(skill.id)}" title="${escapeAttr(dragLabel)}"><i class="fa-solid fa-grip-vertical"></i><span>${escapeHtml(label)}</span><b>${escapeHtml(displayValue(skill.value))}</b></button>`;
+        }).join("")}
+    </div>`;
+}
+
+function directSkillControl(skill, menuBody) {
+    const label = displayLabel(skill.label, skill.id);
+    const menuLabel = t("SMOOTHER_FIGHT.HUD.OpenSkillMenu");
+    return `<div class="sf-action-menu sf-direct-attack-control sf-direct-skill-control has-menu">
+        <button type="button" class="sf-direct-attack sf-direct-skill" data-sf-action="skill" data-skill-id="${escapeAttr(skill.id)}" aria-label="${escapeAttr(label)}">
+            <i class="fa-solid fa-star"></i>
+            <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.FavoriteSkill"))}</small><strong>${escapeHtml(label)}</strong></span>
+            <b>${escapeHtml(displayValue(skill.value))}</b>
+        </button>
+        <details class="sf-direct-attack-picker sf-direct-skill-picker" data-sf-menu="skills"><summary title="${escapeAttr(menuLabel)}" aria-label="${escapeAttr(menuLabel)}"><i class="fa-solid fa-chevron-down sf-chevron"></i></summary><div class="sf-action-popover">${menuBody}</div></details>
+    </div>`;
+}
+
+function buildAttackMenuBody(attacks, equipment, attackStates, attackSpeeds, defaultAttackId, automaticDefaultAttackId) {
+    const attackOptions = attacks.map((attack) => {
+        const isDefault = attack.id === defaultAttackId;
+        const isAutomatic = attack.id === automaticDefaultAttackId;
+        const toggleLabel = t(isAutomatic
+            ? "SMOOTHER_FIGHT.HUD.AutomaticDefaultAttack"
+            : isDefault
+                ? "SMOOTHER_FIGHT.HUD.ClearDefaultAttack"
+                : "SMOOTHER_FIGHT.HUD.SetDefaultAttack");
+        return `<div class="sf-attack-option ${isDefault ? "is-default" : ""}">
+            <button type="button" class="sf-attack-option-roll ${attackStates.get(attack.id)?.prepared ? "is-prepared" : ""}" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
+                <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small></span>
+                <b>${escapeHtml(attackStates.get(attack.id)?.prepared ? displayValue(attack.damage, "–") : `${attackSpeeds.get(attack.id) ?? "–"} T`)}</b>
+            </button>
+            <button type="button" class="sf-default-attack-toggle ${isDefault ? "is-default" : ""} ${isAutomatic ? "is-automatic" : ""}" ${isAutomatic ? "disabled" : 'data-sf-action="toggle-default-attack"'} data-attack-id="${escapeAttr(attack.id)}" title="${escapeAttr(toggleLabel)}" aria-label="${escapeAttr(toggleLabel)}" aria-pressed="${isDefault}"><i class="${isDefault ? "fa-solid" : "fa-regular"} fa-star"></i></button>
+        </div>`;
+    }).join("") || emptyMenuText();
+    const equipmentOptions = equipment.length
+        ? `<h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Equip"))}</h4>${equipment.map((item) => `<button type="button" data-sf-action="toggle-equipped" data-item-id="${escapeAttr(item.id)}" class="${item.system?.equipped ? "is-equipped" : "is-unequipped"}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
+            <img src="${escapeAttr(item.img)}" alt=""><span>${escapeHtml(item.name)}</span><i class="fa-solid ${item.system?.equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i>
+        </button>`).join("")}`
+        : "";
+    return attackOptions + equipmentOptions;
+}
+
+function directAttackControl(attack, { menuBody, showMenu, isDefault, readiness, speed }) {
+    const label = t(isDefault ? "SMOOTHER_FIGHT.HUD.DefaultAttack" : "SMOOTHER_FIGHT.HUD.Attacks");
+    const status = readiness?.ready ? displayValue(attack.damage, "–") : `${speed ?? "–"} T`;
+    const menuLabel = t("SMOOTHER_FIGHT.HUD.OpenAttackMenu");
+    return `<div class="sf-action-menu sf-direct-attack-control ${showMenu ? "has-menu" : ""}">
+        <button type="button" class="sf-direct-attack" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" aria-label="${escapeAttr(attack.name)}">
+            <img src="${escapeAttr(attack.img ?? "icons/svg/sword.svg")}" alt="">
+            <span><small>${escapeHtml(label)}</small><strong>${escapeHtml(attack.name)}</strong></span>
+            <b>${escapeHtml(status)}</b>
+        </button>
+        ${showMenu ? `<details class="sf-direct-attack-picker" data-sf-menu="attacks"><summary title="${escapeAttr(menuLabel)}" aria-label="${escapeAttr(menuLabel)}"><i class="fa-solid fa-chevron-down sf-chevron"></i></summary><div class="sf-action-popover">${menuBody}</div></details>` : ""}
+    </div>`;
+}
+
+function actionMenu(icon, label, body, className = "", menuId = "") {
+    const menuAttribute = menuId ? ` data-sf-menu="${escapeAttr(menuId)}"` : "";
+    return `<details class="sf-action-menu ${escapeAttr(className)}"${menuAttribute}>
         <summary><i class="${icon}"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
         <div class="sf-action-popover">${body}</div>
     </details>`;
@@ -1225,6 +1647,7 @@ function getMessageTargetName(context) {
 }
 
 function shouldHighlightActiveDefense(group, isLatest, hudContext, messageContext) {
+    if (group.damages.length > 0) return false;
     if (!messageOffersActiveDefense(group.primary) && !messageContext?.recalculatedFrom) return false;
     if (messageContext?.supersededBy) return false;
     const storedTarget = resolveToken(messageContext?.targetTokenUuid);
@@ -1233,6 +1656,13 @@ function shouldHighlightActiveDefense(group, isLatest, hudContext, messageContex
         return !alreadyDefended && isCurrentUserTarget(storedTarget);
     }
     return Boolean(isLatest && isCurrentUserTarget(hudContext?.target));
+}
+
+function hasPendingActiveDefense(context) {
+    const groups = collectCombatEventGroups(context);
+    const latest = groups.at(-1);
+    if (!latest) return false;
+    return shouldHighlightActiveDefense(latest, true, context, getMessageContext(latest.primary));
 }
 
 function messageOffersActiveDefense(message) {
@@ -1334,6 +1764,42 @@ function applyCombatEventExpansionRequest(root) {
         const maximum = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
         scroller.scrollTop = Math.min(top, maximum);
     });
+}
+
+function requestActionMenuExpansion(context, trigger, menuId) {
+    runtime.actionMenuExpansionRequest = {
+        actorId: context.actor?.id ?? null,
+        combatantId: context.combatant?.id ?? null,
+        menuId,
+        scrollTop: trigger.closest(".sf-action-popover")?.scrollTop ?? 0,
+    };
+}
+
+function applyActionMenuExpansionRequest(root) {
+    const request = runtime.actionMenuExpansionRequest;
+    if (!request) return;
+    runtime.actionMenuExpansionRequest = null;
+    let scope = root;
+    if (request.combatantId && request.combatantId !== root.dataset.activeCombatantId) {
+        scope = Array.from(root.querySelectorAll("[data-sf-context-combatant-id]"))
+            .find((candidate) => candidate.dataset.sfContextCombatantId === request.combatantId);
+        if (!scope) return;
+    } else if (request.actorId && request.actorId !== root.dataset.activeActorId) {
+        return;
+    }
+
+    const menu = Array.from(scope.querySelectorAll(".sf-actions details[data-sf-menu]"))
+        .find((candidate) => candidate.dataset.sfMenu === request.menuId);
+    if (!menu) return;
+    menu.open = true;
+
+    const popover = menu.querySelector(":scope > .sf-action-popover");
+    if (!popover) return;
+    const restoreScroll = () => {
+        if (popover.isConnected) popover.scrollTop = request.scrollTop;
+    };
+    restoreScroll();
+    requestAnimationFrame(restoreScroll);
 }
 
 function messageBelongsToCombatant(message, combatant, messageContext = getMessageContext(message)) {
@@ -1585,14 +2051,91 @@ function getHudContext() {
     const combat = game.combat;
     if (!combat?.started) return null;
     const combatant = combat.combatant ?? combat.turns?.[0] ?? null;
+    if (!combatant) return null;
     const actor = combatant?.actor ?? null;
-    if (!combatant || !actor) return null;
     const token = combatant.token ?? resolveCombatantToken(combatant);
-    if (!isCombatantVisibleToUser(game.user?.isGM, combatant.hidden)) return null;
+    const visible = isCombatantVisibleToUser(game.user?.isGM, combatant.hidden, token?.hidden);
+    if (!visible || (!actor && !game.user?.isGM)) {
+        return {
+            combat,
+            combatant,
+            actor: null,
+            token: null,
+            linkedUser: null,
+            target: null,
+            targets: [],
+            concealed: true,
+        };
+    }
+    if (!actor) return null;
     const linkedUser = getLinkedUser(combatant, actor);
     const targets = getTargetsForUser(linkedUser);
     const target = targets.at(-1) ?? null;
     return { combat, combatant, actor, token, linkedUser, target, targets };
+}
+
+function getPersonalHudCandidates(activeContext = getHudContext()) {
+    const combat = activeContext?.combat;
+    if (!combat || game.user?.isGM) return [];
+    return Array.from(combat.combatants ?? []).map((combatant) => {
+        const actor = combatant.actor;
+        const token = combatant.token?.document ?? combatant.token ?? resolveCombatantToken(combatant);
+        return {
+            id: combatant.id,
+            combatant,
+            actor,
+            token,
+            tokenId: token?.id ?? combatant.tokenId ?? null,
+            tokenUuid: tokenUuid(token),
+            owned: Boolean(actor?.testUserPermission?.(game.user, "OWNER") ?? actor?.isOwner),
+        };
+    }).filter((candidate) => candidate.owned && candidate.actor);
+}
+
+function getPersonalHudContext(activeContext = getHudContext()) {
+    const combat = activeContext?.combat;
+    if (!combat || game.user?.isGM) return null;
+    const candidates = getPersonalHudCandidates(activeContext);
+    const controlledToken = getControlledTokenDocument();
+    const preferredCombatantId = runtime.personalCombatId === combat.id ? runtime.personalCombatantId : null;
+    const selected = selectPersonalCombatant(
+        candidates,
+        tokenUuid(controlledToken) ?? controlledToken?.id,
+        preferredCombatantId
+    );
+    if (!selected?.actor || !selected.combatant) return null;
+    const targets = getTargetsForUser(game.user);
+    return {
+        combat,
+        combatant: selected.combatant,
+        actor: selected.actor,
+        token: selected.token,
+        linkedUser: game.user,
+        target: targets.at(-1) ?? null,
+        targets,
+        personal: true,
+    };
+}
+
+function selectPersonalCombatantFromMenu(activeContext, combatantId) {
+    const selected = getPersonalHudCandidates(activeContext)
+        .find((candidate) => candidate.combatant.id === combatantId);
+    if (!selected) return;
+    runtime.personalCombatId = activeContext.combat.id;
+    runtime.personalCombatantId = selected.combatant.id;
+    const tokenObject = selected.token?.object ?? canvas?.tokens?.get?.(selected.token?.id);
+    tokenObject?.control?.({ releaseOthers: true });
+    scheduleRender(0);
+}
+
+function resolveHudActionContext(activeContext, element) {
+    if (!activeContext) return null;
+    const scope = element?.closest?.("[data-sf-context-combatant-id]");
+    if (!scope) return activeContext;
+    const combatantId = scope.dataset.sfContextCombatantId;
+    if (combatantId && combatantId === activeContext.combatant?.id) return activeContext;
+    const personalContext = getPersonalHudContext(activeContext);
+    return personalContext?.combatant?.id === combatantId ? personalContext : null;
 }
 
 function getLinkedUser(combatant, actor) {
@@ -1831,7 +2374,8 @@ function tokenUuid(tokenOrObject) {
 }
 
 function collectCombatEventGroups(context) {
-    const messages = Array.from(game.messages?.contents ?? game.messages ?? []);
+    const messages = Array.from(game.messages?.contents ?? game.messages ?? [])
+        .filter((message) => message.visible !== false);
     const combatActorIds = new Set(Array.from(context.combat.combatants ?? []).map((c) => c.actorId).filter(Boolean));
     const primaryMessages = messages.filter((message) => {
         if (isDiceAnimationPending(message)) return false;
@@ -1886,14 +2430,15 @@ function collectCombatEventGroups(context) {
 }
 
 async function performAttack(context, attackId) {
-    if (!context.target) {
+    const attack = context.actor.attacks?.find((candidate) => candidate.id === attackId);
+    if (!attack) return;
+    const preparedAttackId = context.actor.getFlag?.("splittermond", "preparedAttack");
+    const readiness = attackReadiness(isRangedAttack(attack), attack.id, preparedAttackId);
+    if (actionRequiresTarget(readiness.ready) && !context.target) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
         return;
     }
-    const attack = context.actor.attacks?.find((candidate) => candidate.id === attackId);
-    if (!attack) return;
-    const prepared = attack.isPrepared || context.actor.getFlag?.("splittermond", "preparedAttack") === attackId;
-    if (prepared) {
+    if (readiness.ready) {
         runtime.pendingOffenseKinds.set(context.actor.id, {
             kind: isRangedAttack(attack) ? "ranged" : "attack",
             expiresAt: Date.now() + 60_000,
@@ -1918,14 +2463,51 @@ async function cancelPreparedAttack(context) {
     scheduleRender(0);
 }
 
+async function toggleDefaultAttack(context, attackId) {
+    const attack = context.actor.attacks?.find((candidate) => candidate.id === attackId);
+    if (!attack) return;
+    const current = context.actor.getFlag?.(MODULE_ID, "defaultAttackId");
+    const next = current === attackId ? null : attackId;
+    await context.actor.setFlag(MODULE_ID, "defaultAttackId", next);
+    ui.notifications.info(t(next ? "SMOOTHER_FIGHT.HUD.DefaultAttackSet" : "SMOOTHER_FIGHT.HUD.DefaultAttackCleared", { attack: attack.name }));
+    scheduleRender(0);
+}
+
+async function toggleFavoriteSkill(context, skillId) {
+    const skills = Object.values(context.actor.skills ?? {});
+    const skill = skills.find((candidate) => candidate.id === skillId);
+    if (!skill) return;
+    const result = toggleFavoriteSkillId(
+        context.actor.getFlag?.(MODULE_ID, "favoriteSkillIds"),
+        skillId,
+        skills.map((candidate) => candidate.id),
+        MAX_FAVORITE_SKILLS
+    );
+    if (result.limitReached) {
+        runtime.actionMenuExpansionRequest = null;
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.FavoriteSkillLimit", { max: MAX_FAVORITE_SKILLS }));
+        return;
+    }
+    if (!result.changed) {
+        runtime.actionMenuExpansionRequest = null;
+        return;
+    }
+    await context.actor.setFlag(MODULE_ID, "favoriteSkillIds", result.ids);
+    ui.notifications.info(t(result.added ? "SMOOTHER_FIGHT.HUD.FavoriteSkillSet" : "SMOOTHER_FIGHT.HUD.FavoriteSkillCleared", {
+        skill: displayLabel(skill.label, skill.id),
+    }));
+    scheduleRender(0);
+}
+
 async function performSpell(context, spellId) {
     const spell = context.actor.spells?.find((candidate) => candidate.id === spellId);
     if (!spell) return;
-    if (isTargetDependentDifficulty(spell.difficulty ?? spell.system?.difficulty) && !context.target) {
+    const prepared = context.actor.getFlag("splittermond", "preparedSpell") === spellId;
+    const targetDependent = isTargetDependentDifficulty(spell.difficulty ?? spell.system?.difficulty);
+    if (actionRequiresTarget(prepared, targetDependent) && !context.target) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
         return;
     }
-    const prepared = context.actor.getFlag("splittermond", "preparedSpell") === spellId;
     if (prepared) {
         const success = await context.actor.rollSpell(spellId);
         if (success) await context.actor.setFlag("splittermond", "preparedSpell", null);
@@ -1984,10 +2566,7 @@ async function resumeCombatant(context) {
 }
 
 function focusCombatantToken(context) {
-    const object = context.token?.object ?? canvas?.tokens?.get(context.token?.id);
-    if (!object?.center) return;
-    canvas?.animatePan?.({ x: object.center.x, y: object.center.y });
-    canvas?.ping?.(object.center);
+    return showTokenOnCanvas(context.token);
 }
 
 function showTokenOnCanvas(token) {
@@ -2001,21 +2580,44 @@ function showTokenOnCanvas(token) {
     }
 
     const { x, y } = object.center;
-    const hud = document.querySelector(`#${MODULE_ID}-hud:not(.is-hidden)`);
-    const hudTop = hud?.getBoundingClientRect?.().top;
-    const viewportCenter = (document.documentElement.clientHeight || window.innerHeight) / 2;
-    const desiredScreenY = Number.isFinite(hudTop)
-        ? Math.min(viewportCenter, Math.max(90, hudTop - 90))
-        : viewportCenter;
-    const scale = Math.max(Number(canvas.stage?.scale?.y) || 1, 0.1);
-    const yOffset = Math.max(0, viewportCenter - desiredScreenY) / scale;
+    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+    const viewportCenter = viewportHeight / 2;
+    const desiredScreenY = canvasFocusScreenY(viewportHeight);
+    const currentScale = Math.max(Number(canvas.stage?.scale?.x) || 1, 0.1);
+    const defaultScale = Math.max(Number(canvas.dimensions?.scale?.default) || 1, 0.1);
+    const targetScale = Math.max(currentScale, defaultScale);
+    const yOffset = (viewportCenter - desiredScreenY) / targetScale;
     const animation = canvas.animatePan({
         x,
         y: y + yOffset,
-        scale: Math.max(canvas.stage.scale.x, canvas.dimensions.scale.default),
+        scale: targetScale,
     });
     canvas.ping?.(object.center);
     return animation;
+}
+
+function canvasFocusScreenY(viewportHeight) {
+    const tickBarRects = visibleElementRects("#tick-bar-hud, .tick-bar-hud", viewportHeight);
+    const tickBarBottom = tickBarRects.length
+        ? Math.max(...tickBarRects.map((bounds) => bounds.bottom))
+        : null;
+    const hudTop = visibleElementRects(`#${MODULE_ID}-hud:not(.is-hidden)`, viewportHeight)[0]?.top ?? null;
+    return visibleCanvasCenterY(viewportHeight, tickBarBottom, hudTop);
+}
+
+function visibleElementRects(selector, viewportHeight) {
+    return Array.from(document.querySelectorAll(selector)).flatMap((element) => {
+        const style = window.getComputedStyle(element);
+        const bounds = element.getBoundingClientRect();
+        const visible = style.display !== "none"
+            && style.visibility !== "hidden"
+            && Number.parseFloat(style.opacity || "1") > 0
+            && bounds.width > 0
+            && bounds.height > 0
+            && bounds.bottom > 0
+            && bounds.top < viewportHeight;
+        return visible ? [bounds] : [];
+    });
 }
 
 async function toggleCombatantVisibility(context) {
@@ -2024,6 +2626,17 @@ async function toggleCombatantVisibility(context) {
     const updates = [context.combatant.update({ hidden: nextHidden })];
     if (context.token?.update) updates.push(context.token.update({ hidden: nextHidden }));
     await Promise.all(updates);
+    scheduleRender(0);
+}
+
+async function toggleTokenHidden(context) {
+    if (!context.token?.update) return;
+    await context.token.update({ hidden: !context.token.hidden });
+    scheduleRender(0);
+}
+
+async function toggleCombatantHidden(context) {
+    await context.combatant.update({ hidden: !context.combatant.hidden });
     scheduleRender(0);
 }
 
@@ -2113,7 +2726,11 @@ function canChooseTarget(context) {
 }
 
 function bindQuickTargetHover(root) {
-    for (const button of root.querySelectorAll('.sf-quick-targets [data-sf-action="set-target"]')) {
+    for (const button of root.querySelectorAll([
+        '.sf-quick-targets [data-sf-action="set-target"]',
+        '.sf-personal-combatant-picker [data-sf-action="select-personal-combatant"]',
+    ].join(", "))) {
+        if (!button.dataset.tokenUuid) continue;
         const highlight = () => highlightToken(button.dataset.tokenUuid);
         button.addEventListener("pointerenter", highlight);
         button.addEventListener("focus", highlight);
@@ -2178,7 +2795,6 @@ function announceMessageFeedback(message) {
     if (!message?.id || runtime.heardMessageIds.has(message.id)) return;
     let kind = null;
     if (isDefenseMessage(message)) kind = "defense";
-    else if (isDamageMessage(message)) kind = "damage";
     else if (isSpellMessage(message)) kind = "spell";
     else if (combatMessageKind(message) === "attack") {
         const contextKind = getMessageContext(message)?.actionKind;
@@ -2187,13 +2803,151 @@ function announceMessageFeedback(message) {
     if (!kind) return;
 
     runtime.heardMessageIds.add(message.id);
-    const messageContext = getMessageContext(message);
     const speakerActor = resolveSpeakerActor(message);
-    const damageTarget = kind === "damage" ? resolveDamageApplicationTarget(message) : null;
-    const tokenUuid = kind === "damage"
-        ? messageContext?.targetTokenUuid ?? damageTarget?.uuid ?? null
-        : speakerTokenUuid(message) ?? messageContext?.defenderTokenUuid ?? messageContext?.attackerTokenUuid ?? null;
-    triggerFeedback(kind, { tokenUuid, actorUuid: damageTarget?.actor?.uuid ?? speakerActor?.uuid ?? null });
+    const messageContext = getMessageContext(message);
+    const tokenUuid = speakerTokenUuid(message)
+        ?? messageContext?.defenderTokenUuid
+        ?? messageContext?.attackerTokenUuid
+        ?? null;
+    triggerFeedback(kind, { tokenUuid, actorUuid: speakerActor?.uuid ?? null });
+}
+
+function seedHealthFeedbackState() {
+    runtime.healthCostsByActor.clear();
+    for (const actor of game.actors?.contents ?? game.actors ?? []) rememberActorHealthCost(actor);
+    for (const token of getSceneTokens()) rememberActorHealthCost(token.actor);
+}
+
+function actorHealthFeedbackKey(actor) {
+    return actor?.uuid ?? actor?.id ?? null;
+}
+
+function rememberActorHealthCost(actor) {
+    const key = actorHealthFeedbackKey(actor);
+    if (!key || runtime.healthCostsByActor.has(key)) return;
+    runtime.healthCostsByActor.set(key, healthCostTotal(actor?.system?.health));
+}
+
+function forgetActorHealthCost(actor) {
+    const key = actorHealthFeedbackKey(actor);
+    if (key) runtime.healthCostsByActor.delete(key);
+}
+
+function announceAppliedDamageFeedback(actor) {
+    const key = actorHealthFeedbackKey(actor);
+    if (!key) return;
+    const previous = runtime.healthCostsByActor.get(key);
+    const current = healthCostTotal(actor?.system?.health);
+    runtime.healthCostsByActor.set(key, current);
+    if (healthCostFeedbackKind(previous, current) !== "damage") return;
+
+    const tokens = getSceneTokens();
+    const token = tokens.find((candidate) => candidate.actor?.uuid === actor.uuid)
+        ?? tokens.find((candidate) => candidate.actorId === actor.id || candidate.actor?.id === actor.id)
+        ?? null;
+    const mayObserve = Boolean(actor.testUserPermission?.(game.user, "OBSERVER"));
+    if (!game.user?.isGM && !token && !mayObserve) return;
+    triggerFeedback("damage", { tokenUuid: token?.uuid ?? null, actorUuid: actor.uuid });
+}
+
+function installHealthCostFeedbackInterceptor() {
+    const prototype = CONFIG?.Actor?.documentClass?.prototype;
+    if (!prototype || typeof prototype.consumeCost !== "function") return;
+    const marker = Symbol.for(`${MODULE_ID}.healthCostFeedbackInterceptor`);
+    if (prototype[marker]) return;
+
+    const original = prototype.consumeCost;
+    prototype.consumeCost = function smootherFightConsumeCost(resource, cost, ...args) {
+        const tracksHealth = String(resource ?? "").toLocaleLowerCase() === "health";
+        const previous = tracksHealth ? healthCostTotal(this.system?.health) : null;
+        const damageApplication = tracksHealth
+            ? [...runtime.pendingDamageApplications].reverse().find((candidate) =>
+                !candidate.actorUuids.size || candidate.actorUuids.has(this.uuid)
+            ) ?? null
+            : null;
+        const result = original.call(this, resource, cost, ...args);
+        if (tracksHealth) {
+            void Promise.resolve(result).then(() => {
+                const current = healthCostTotal(this.system?.health);
+                if (damageApplication) void markDamageApplicationCompleted(damageApplication.messageId, this);
+                if (healthCostFeedbackKind(previous, current, true) !== "damageBlocked") return;
+                publishFeedback("damageBlocked", feedbackReferenceForActor(this));
+            }, () => {});
+        }
+        return result;
+    };
+    Object.defineProperty(prototype, marker, { value: true });
+}
+
+async function markDamageApplicationCompleted(messageId, actor) {
+    if (!messageId || runtime.completedDamageApplicationMessageIds.has(messageId)) return;
+    runtime.completedDamageApplicationMessageIds.add(messageId);
+    scheduleRender(0);
+    const message = game.messages.get(messageId);
+    if (!message) return;
+
+    if (game.user.isGM || isOwnMessage(message)) {
+        const updated = await safeSetFlag(message, "damageApplicationCompleted", true);
+        if (updated) return;
+    }
+
+    const gm = getActiveGm();
+    if (!gm) return;
+    const reference = feedbackReferenceForActor(actor);
+    game.socket.emit(SOCKET, {
+        type: "damage-application-completed",
+        senderId: game.user.id,
+        recipientId: gm.id,
+        messageId,
+        actorUuid: reference.actorUuid,
+        tokenUuid: reference.tokenUuid,
+    });
+}
+
+function resolveActorUuid(uuid) {
+    if (!uuid) return null;
+    try {
+        const resolved = globalThis.fromUuidSync?.(uuid) ?? null;
+        return resolved?.documentName === "Actor" || resolved?.constructor?.name?.includes("Actor") ? resolved : null;
+    } catch (error) {
+        console.debug(`${MODULE_ID} | Could not resolve actor ${uuid}`, error);
+        return null;
+    }
+}
+
+function mayUserApplyDamageToActor(user, actor) {
+    if (!user || !actor) return false;
+    if (user.isGM || actor.testUserPermission?.(user, "OWNER")) return true;
+    return getSceneTokens().some((token) =>
+        (token.actor?.uuid === actor.uuid || token.actorId === actor.id)
+        && getExplicitTokenOwnerId(token) === user.id
+    );
+}
+
+function feedbackReferenceForActor(actor) {
+    const tokens = getSceneTokens();
+    const token = tokens.find((candidate) => candidate.actor?.uuid === actor?.uuid)
+        ?? tokens.find((candidate) => candidate.actorId === actor?.id || candidate.actor?.id === actor?.id)
+        ?? null;
+    return { tokenUuid: token?.uuid ?? null, actorUuid: actor?.uuid ?? null };
+}
+
+function publishFeedback(kind, reference) {
+    triggerFeedback(kind, reference);
+    game.socket?.emit(SOCKET, {
+        type: "combat-feedback",
+        senderId: game.user?.id,
+        kind,
+        ...reference,
+    });
+}
+
+function receivePublishedFeedback(kind, { tokenUuid = null, actorUuid = null } = {}) {
+    const token = resolveToken(tokenUuid);
+    const actor = token?.actor ?? globalThis.fromUuidSync?.(actorUuid) ?? null;
+    const mayObserve = Boolean(actor?.testUserPermission?.(game.user, "OBSERVER"));
+    if (!game.user?.isGM && !token && !mayObserve) return;
+    triggerFeedback(kind, { tokenUuid: token?.uuid ?? null, actorUuid: actor?.uuid ?? actorUuid });
 }
 
 function announceTurnFeedback(combat) {
@@ -2203,7 +2957,7 @@ function announceTurnFeedback(combat) {
     runtime.lastTurnCombatantId = combatantId;
     const actor = combatant.actor;
     const token = combatant.token ?? resolveCombatantToken(combatant);
-    if (!actor || !isCombatantVisibleToUser(game.user?.isGM, combatant.hidden)) return;
+    if (!actor || !isCombatantVisibleToUser(game.user?.isGM, combatant.hidden, token?.hidden)) return;
     const linkedUser = getLinkedUser(combatant, actor);
     const ownTurn = linkedUser?.id === game.user?.id
         || (!linkedUser && Boolean(actor.testUserPermission?.(game.user, "OWNER")));
@@ -2230,6 +2984,7 @@ function feedbackMarkup(token, actor) {
     const icons = {
         defense: "fa-shield-halved",
         damage: "fa-droplet",
+        damageBlocked: "fa-shield",
         spell: "fa-wand-sparkles",
         ranged: "fa-crosshairs",
         turn: "fa-bolt",
@@ -2237,8 +2992,27 @@ function feedbackMarkup(token, actor) {
     return `<span class="sf-action-feedback is-${escapeAttr(feedback.kind)}"><i class="fa-solid ${icons[feedback.kind] ?? "fa-burst"}"></i></span>`;
 }
 
+async function migrateAudioFeedbackSettings() {
+    if (getSetting("audioFeedbackMigrated", false)) return;
+    try {
+        if (!getSetting("audioFeedback", true)) {
+            for (const config of Object.values(AUDIO_FEEDBACK_EVENTS)) {
+                await game.settings.set(MODULE_ID, config.enabled, false);
+            }
+        }
+        await game.settings.set(MODULE_ID, "audioFeedbackMigrated", true);
+    } catch (error) {
+        console.warn(`${MODULE_ID} | Could not migrate audio feedback settings`, error);
+    }
+}
+
+function isFeedbackSoundEnabled(kind) {
+    const config = AUDIO_FEEDBACK_EVENTS[kind];
+    return Boolean(config && getSetting(config.enabled, true));
+}
+
 function unlockFeedbackAudio() {
-    if (!getSetting("audioFeedback", true)) return;
+    if (!Object.keys(AUDIO_FEEDBACK_EVENTS).some(isFeedbackSoundEnabled)) return;
     const AudioContext = window.AudioContext ?? window.webkitAudioContext;
     if (!AudioContext) return;
     runtime.audioContext ??= new AudioContext();
@@ -2246,23 +3020,19 @@ function unlockFeedbackAudio() {
 }
 
 function playFeedbackTone(kind) {
-    if (!getSetting("audioFeedback", true)) return;
+    const eventConfig = AUDIO_FEEDBACK_EVENTS[kind];
+    if (!eventConfig || !isFeedbackSoundEnabled(kind)) return;
     unlockFeedbackAudio();
     const audio = runtime.audioContext;
     if (!audio || audio.state !== "running") return;
-    const patterns = {
-        defense: [[330, 0], [494, 0.08], [659, 0.16]],
-        damage: [[180, 0], [125, 0.1]],
-        spell: [[523, 0], [659, 0.07], [784, 0.14]],
-        ranged: [[880, 0], [440, 0.06]],
-        turn: [[440, 0], [660, 0.11], [880, 0.22]],
-    };
-    const notes = patterns[kind] ?? [];
+    const soundId = getSetting(eventConfig.sound, eventConfig.defaultSound);
+    const profile = AUDIO_SOUND_PROFILES[soundId] ?? AUDIO_SOUND_PROFILES[eventConfig.defaultSound];
+    const notes = profile?.notes ?? [];
     const now = audio.currentTime;
     for (const [frequency, delay] of notes) {
         const oscillator = audio.createOscillator();
         const gain = audio.createGain();
-        oscillator.type = kind === "damage" ? "triangle" : "sine";
+        oscillator.type = profile.wave;
         oscillator.frequency.setValueAtTime(frequency, now + delay);
         gain.gain.setValueAtTime(0.0001, now + delay);
         gain.gain.exponentialRampToValueAtTime(0.055, now + delay + 0.012);
@@ -3058,6 +3828,9 @@ async function handleChatCardAction(event, button) {
         return;
     }
 
+    const startsDamageRoll = isOutgoingDamageControl(button);
+    if (startsDamageRoll) markDamageRollPending(message.id);
+
     try {
         if (String(localAction).toLocaleLowerCase() === "activedefense") {
             await beginActiveDefense(message);
@@ -3067,7 +3840,7 @@ async function handleChatCardAction(event, button) {
         const action = localAction || remoteAction;
         const actionData = { ...button.dataset, action };
         if (localAction && String(action).toLocaleLowerCase() === "applydamagetousertargets") {
-            await applyDamageToLinkedTarget(message, actionData);
+            await withTrackedDamageApplication(message, () => applyDamageToLinkedTarget(message, actionData));
             scheduleRender();
             return;
         }
@@ -3075,10 +3848,11 @@ async function handleChatCardAction(event, button) {
             return;
         }
         if (localAction) {
-            await message.system.handleGenericAction(actionData);
+            await withTrackedDamageApplication(message, () => message.system.handleGenericAction(actionData), action);
         } else if (!game.user.isGM) {
             const activeGm = Array.from(game.users ?? []).some((user) => user.isGM && user.active);
             if (!activeGm) {
+                if (startsDamageRoll) clearPendingDamageRoll(message.id);
                 ui.notifications.warn(localizeSystem("splittermond.chatCard.noGMConnected", "Kein GM verbunden."));
                 return;
             }
@@ -3095,9 +3869,63 @@ async function handleChatCardAction(event, button) {
         }
         scheduleRender();
     } catch (error) {
+        if (startsDamageRoll) clearPendingDamageRoll(message.id);
         console.error(`${MODULE_ID} | Chat card action failed`, error);
         ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
     }
+}
+
+function markDamageRollPending(messageId) {
+    if (!messageId) return;
+    const existing = runtime.pendingDamageRolls.get(messageId);
+    if (existing) clearTimeout(existing);
+    const timeoutId = setTimeout(() => {
+        runtime.pendingDamageRolls.delete(messageId);
+        scheduleRender(0);
+    }, 60_000);
+    runtime.pendingDamageRolls.set(messageId, timeoutId);
+    scheduleRender(0);
+}
+
+function clearPendingDamageRoll(messageId) {
+    const timeoutId = runtime.pendingDamageRolls.get(messageId);
+    if (timeoutId) clearTimeout(timeoutId);
+    runtime.pendingDamageRolls.delete(messageId);
+}
+
+async function withTrackedDamageApplication(message, callback, action = "applyDamageToUserTargets") {
+    if (!isDamageApplicationAction(action)) return callback();
+    const application = {
+        messageId: message.id,
+        actorUuids: damageApplicationActorUuids(message, action),
+    };
+    runtime.pendingDamageApplications.push(application);
+    try {
+        return await callback();
+    } finally {
+        const index = runtime.pendingDamageApplications.lastIndexOf(application);
+        if (index >= 0) runtime.pendingDamageApplications.splice(index, 1);
+    }
+}
+
+function damageApplicationActorUuids(message, action) {
+    const actorUuids = new Set();
+    const normalized = String(action ?? "").trim().toLocaleLowerCase();
+    if (normalized === "applydamagetotargets") {
+        for (const target of game.user?.targets ?? []) {
+            const actorUuid = target?.document?.actor?.uuid ?? target?.actor?.uuid;
+            if (actorUuid) actorUuids.add(actorUuid);
+        }
+    }
+    const linkedTarget = resolveDamageApplicationTarget(message);
+    if (linkedTarget?.actor?.uuid) actorUuids.add(linkedTarget.actor.uuid);
+    return actorUuids;
+}
+
+function isDamageApplicationAction(action) {
+    return ["applydamagetotargets", "applydamagetousertargets", "applydamagetoself"].includes(
+        String(action ?? "").trim().toLocaleLowerCase()
+    );
 }
 
 async function applyDefenseNumbingDamage(message, fallbackDamage) {
@@ -3147,6 +3975,7 @@ function isLegacyTickAction(control) {
 }
 
 async function advanceLegacyChatTicks(message, button) {
+    if (runtime.pendingLegacyTickMessages.has(message.id)) return;
     const actor = resolveSpeakerActor(message);
     const ticks = Number(button.dataset.ticks);
     const mayAdvance = Boolean(game.user.isGM || actor?.testUserPermission?.(game.user, "OWNER") || actor?.isOwner);
@@ -3155,13 +3984,33 @@ async function advanceLegacyChatTicks(message, button) {
         return;
     }
 
-    button.disabled = true;
+    const combatant = resolveMessageSpeakerCombatant(message, actor);
+    const previousInitiative = Number(combatant?.initiative);
+    runtime.pendingLegacyTickMessages.add(message.id);
     try {
         await actor.addTicks(ticks, button.dataset.message || undefined);
+        const currentCombatant = game.combat?.combatants?.get?.(combatant?.id) ?? combatant;
+        if (tickAdvanceConfirmed(previousInitiative, currentCombatant?.initiative)) {
+            await safeSetFlag(message, "legacyTickAdvanceApplied", true);
+        }
         scheduleRender(0);
     } finally {
-        if (button.isConnected) button.disabled = false;
+        runtime.pendingLegacyTickMessages.delete(message.id);
     }
+}
+
+function resolveMessageSpeakerCombatant(message, actor = resolveSpeakerActor(message)) {
+    const combat = game.combat;
+    if (!combat) return null;
+    const context = getMessageContext(message);
+    const token = resolveToken(
+        (isDefenseMessage(message) ? context?.defenderTokenUuid : context?.attackerTokenUuid)
+        ?? speakerTokenUuid(message)
+    );
+    return Array.from(combat.combatants ?? []).find((combatant) =>
+        (token?.uuid && tokenUuid(resolveCombatantToken(combatant)) === token.uuid)
+        || (token?.id && combatant.tokenId === token.id)
+    ) ?? Array.from(combat.combatants ?? []).find((combatant) => combatant.actorId === actor?.id) ?? null;
 }
 
 function forwardToOriginalChatHandler(message, sourceButton, action) {
@@ -3408,14 +4257,11 @@ function measureTokenDistance(left, right) {
 }
 
 function tokenCenter(token) {
+    const documentCenter = tokenDocumentCenter(token, canvas?.grid?.size);
+    if (documentCenter) return documentCenter;
     const object = token?.object ?? canvas?.tokens?.get?.(token?.id);
     if (object?.center) return { x: object.center.x, y: object.center.y };
-    if (!Number.isFinite(Number(token?.x)) || !Number.isFinite(Number(token?.y))) return null;
-    const gridSize = Number(canvas?.grid?.size) || 100;
-    return {
-        x: Number(token.x) + Number(token.width ?? 1) * gridSize / 2,
-        y: Number(token.y) + Number(token.height ?? 1) * gridSize / 2,
-    };
+    return null;
 }
 
 function canUserSubmitDefense(user, pending, message) {
@@ -3522,6 +4368,7 @@ function enforceChatPermissions(root, hudContext) {
         const message = game.messages.get(element.dataset.messageId);
         if (!message) continue;
         synchronizeRenderedTickAction(element, message);
+        synchronizeLegacyTickActionState(element, message);
         const mayManageRoll = mayManageMessageRoll(message);
         if (!mayManageRoll) removeRollManagementControls(element);
         if (!mayControlSpeakerActor(message)) removeOutgoingDamageControls(element);
@@ -3529,7 +4376,8 @@ function enforceChatPermissions(root, hudContext) {
         if (renderedActions) {
             for (const button of element.querySelectorAll(".splittermond-chat-action[data-action], .splittermond-chat-action[data-localaction], .splittermond-chat-action[data-local-action]")) {
                 const key = chatActionKey(button);
-                if (key && !renderedActions.has(key)) button.remove();
+                const assignedRollAction = mayManageRoll && isRollManagementControl(button);
+                if (key && !renderedActions.has(key) && !assignedRollAction) button.remove();
             }
         } else {
             if (!mayManageRoll) {
@@ -3555,6 +4403,16 @@ function enforceChatPermissions(root, hudContext) {
         element.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action, .add-tick[data-ticks])), .sf-promoted-actions:not(:has(.splittermond-chat-action, .add-tick[data-ticks]))").forEach((container) => container.remove());
         element.querySelectorAll(".sf-promoted-degree-options:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
         element.querySelectorAll(".sf-promoted-controls:not(:has(.splittermond-chat-action, .add-tick[data-ticks]))").forEach((container) => container.remove());
+    }
+}
+
+function synchronizeLegacyTickActionState(element, message) {
+    const applied = message?.getFlag?.(MODULE_ID, "legacyTickAdvanceApplied")
+        ?? message?.flags?.[MODULE_ID]?.legacyTickAdvanceApplied;
+    if (!applied) return;
+    for (const button of element.querySelectorAll(".add-tick[data-ticks]")) {
+        button.disabled = true;
+        button.classList.add("is-applied");
     }
 }
 
@@ -3590,29 +4448,106 @@ function isTickAdvanceControl(control) {
         || String(control?.dataset?.action ?? "").toLocaleLowerCase() === "advancetoken";
 }
 
+function isFocusCostControl(control) {
+    return String(control?.dataset?.action ?? "").toLocaleLowerCase() === "consumecosts";
+}
+
+function isUsableActionControl(control) {
+    return !control?.disabled && control?.getAttribute?.("aria-disabled") !== "true";
+}
+
+function hasOffenseFollowUpStarted(message) {
+    const system = message?.system;
+    return Boolean(
+        system?.damageHandler?.used
+        || system?.damageHandler?.damageUsed
+        || system?.focusCostHandler?.used
+        || system?.tickCostHandler?.used
+    );
+}
+
 function decorateEventActionButtons(element, message) {
     const ownsSpeaker = isMessageSpeakerAssignedToCurrentUser(message);
-    const groupHasDamage = Boolean(element.closest(".sf-event-group")?.querySelector(".sf-associated-card.is-damage"));
-    for (const button of element.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks], .rollable[data-roll-type]")) {
+    const associatedDamageMessages = getAssociatedDamageMessages(element, message);
+    const groupHasDamage = associatedDamageMessages.length > 0;
+    if (groupHasDamage && isOffensiveCombatMessage(message)) clearPendingDamageRoll(message.id);
+    const damageRollPending = isOffensiveCombatMessage(message)
+        && !groupHasDamage
+        && runtime.pendingDamageRolls.has(message.id);
+    const hasPendingDamageApplication = isOffensiveCombatMessage(message)
+        && associatedDamageMessages.some((damageMessage) => !isDamageApplicationCompleted(damageMessage));
+    const buttons = Array.from(element.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks], .rollable[data-roll-type]"));
+    const degreeOptions = element.querySelector(".sf-promoted-degree-options");
+    const hasPendingDegreeOptions = Number(message?.system?.openDegreesOfSuccess) > 0
+        && Boolean(degreeOptions?.querySelector('input.splittermond-chat-action:not(:checked):not(:disabled)'));
+    const actionHighlight = combatActionHighlightState({
+        isOffense: isOffensiveCombatMessage(message),
+        hasPendingDegreeOptions,
+        followUpStarted: hasOffenseFollowUpStarted(message),
+        isSpell: isSpellMessage(message),
+        hasPendingFocusCost: buttons.some((button) => isFocusCostControl(button) && isUsableActionControl(button)),
+        hasPendingDamage: damageRollPending || (!groupHasDamage && buttons.some((button) =>
+            isOutgoingDamageControl(button) && isUsableActionControl(button)
+        )),
+        hasPendingDamageApplication,
+    });
+    const damageApplicationCompleted = isDamageApplicationCompleted(message);
+    if (ownsSpeaker && actionHighlight.degrees) {
+        degreeOptions?.classList.add("is-next-degree-options");
+        element.querySelector(".degree-of-success")?.classList.add("has-next-open-degrees");
+    }
+    for (const button of buttons) {
         const action = String(button.dataset.action ?? button.dataset.localaction ?? button.dataset.localAction ?? "").toLocaleLowerCase();
+        if (isFocusCostControl(button) && ownsSpeaker && actionHighlight.focus && isUsableActionControl(button)) {
+            button.classList.add("is-next-focus-cost");
+        }
+        if (isOutgoingDamageControl(button) && ownsSpeaker && actionHighlight.damage && isUsableActionControl(button)) {
+            button.classList.add("is-next-damage-roll");
+        }
         if (isTickAdvanceControl(button)) {
             button.classList.add("sf-tick-advance-action");
-            if (isDefenseMessage(message) && ownsSpeaker) button.classList.add("is-own-defense-ticks");
-            if (isDamageMessage(message) || (groupHasDamage && isOffensiveCombatMessage(message))) {
+            if (ownsSpeaker && actionHighlight.ticks && isUsableActionControl(button)) button.classList.add("is-own-action-ticks");
+            if (isDefenseMessage(message) && ownsSpeaker && actionHighlight.ticks && isUsableActionControl(button)) button.classList.add("is-own-defense-ticks");
+            if (actionHighlight.ticks && isUsableActionControl(button) && (isDamageMessage(message) || (groupHasDamage && isOffensiveCombatMessage(message)))) {
                 button.classList.add("is-damage-ticks");
             }
         }
         if (isCombatFumbleRollControl(button) && ownsSpeaker) button.classList.add("is-own-fumble-roll");
-        if (action === "applydamagetoself" || action === "applydamagetousertargets") {
+        if (action === "applydamagetousertargets" && game.user?.isGM && !damageApplicationCompleted) {
+            button.classList.add("is-gm-target-application");
+        }
+        if (!damageApplicationCompleted && (action === "applydamagetoself" || action === "applydamagetousertargets")) {
             const target = resolveDamageApplicationTarget(message);
             if (target && isCurrentUserTarget(target)) button.classList.add("is-self-target");
         }
     }
 }
 
+function getAssociatedDamageMessages(element, message) {
+    if (isDamageMessage(message)) return [message];
+    const group = element.closest(".sf-event-group");
+    if (!group) return [];
+    return Array.from(group.querySelectorAll(".sf-associated-card.is-damage .sf-chat-message[data-message-id]"))
+        .map((damageElement) => game.messages.get(damageElement.dataset.messageId))
+        .filter((damageMessage) => damageMessage && isDamageMessage(damageMessage));
+}
+
+function isDamageApplicationCompleted(message) {
+    return Boolean(
+        message
+        && (runtime.completedDamageApplicationMessageIds.has(message.id)
+            || message.getFlag?.(MODULE_ID, "damageApplicationCompleted")
+            || message.flags?.[MODULE_ID]?.damageApplicationCompleted)
+    );
+}
+
 function isMessageSpeakerAssignedToCurrentUser(message) {
-    const token = resolveToken(speakerTokenUuid(message));
-    if (token) return isCurrentUserTarget(token);
+    const context = getMessageContext(message);
+    const token = resolveToken(
+        (isDefenseMessage(message) ? context?.defenderTokenUuid : context?.attackerTokenUuid)
+        ?? speakerTokenUuid(message)
+    );
+    if (token && isCurrentUserTarget(token)) return true;
     const actor = resolveSpeakerActor(message);
     const combatant = Array.from(game.combat?.combatants ?? []).find((candidate) => candidate.actorId === actor?.id);
     if (combatant && actor) {
@@ -3632,7 +4567,12 @@ function mayManageMessageRoll(message, user = game.user) {
     const speakerActor = resolveSpeakerActor(message);
     const ownsSpeakerActor = Boolean(speakerActor?.testUserPermission?.(user, "OWNER") ?? speakerActor?.isOwner);
     const authorId = message?.author?.id ?? message?.user?.id ?? message?.user;
-    return mayUseRemoteChatActions(Boolean(user?.isGM), ownsSpeakerActor, authorId === user?.id);
+    const assignedSpeaker = Boolean(
+        user?.id
+        && user.id === game.user?.id
+        && isMessageSpeakerAssignedToCurrentUser(message)
+    );
+    return mayUseRemoteChatActions(Boolean(user?.isGM), ownsSpeakerActor, authorId === user?.id, assignedSpeaker);
 }
 
 function mayControlSpeakerActor(message, user = game.user) {
@@ -3789,6 +4729,21 @@ function scheduleRender(delay = 40) {
     runtime.renderTimer = setTimeout(() => void runtime.hud?.render(), delay);
 }
 
+function scheduleRenderAfterTokenMovement(token) {
+    queueMicrotask(() => {
+        const object = token?.object ?? canvas?.tokens?.get?.(token?.id);
+        const movement = object?.movementAnimationPromise;
+        if (!movement || typeof movement.then !== "function") {
+            scheduleRender(0);
+            return;
+        }
+        movement.then(
+            () => scheduleRender(0),
+            () => scheduleRender(0),
+        );
+    });
+}
+
 function toggleHudMinimizedFromKeybinding() {
     if (!getSetting("enabled", true) || !getHudContext()) return false;
     void setHudMinimized(!getSetting("minimized", false));
@@ -3919,18 +4874,15 @@ async function getAttackSpeed(attack) {
 
 function isRangedAttack(attack) {
     const item = attack?.item ?? attack;
-    const fields = [
-        attack?.name,
-        attack?.type,
-        attack?.skill?.id,
-        displayLabel(attack?.skill?.label),
-        item?.type,
-        item?.system?.category,
-        item?.system?.weaponType,
-        item?.system?.skill,
-        item?.system?.range,
-    ];
-    return fields.some((value) => /fern|range|marksman|shoot|missile|schuss|wurf|throw|bow|bogen|crossbow|armbrust/iu.test(String(value ?? "")));
+    if (typeof attack?.isRanged === "boolean") return attack.isRanged;
+    const rawSkill = attack?.skill?.id
+        ?? attack?.skill
+        ?? item?.skill?.id
+        ?? item?.system?.skill?.id
+        ?? item?.system?.skill;
+    const skillId = typeof rawSkill === "string" ? rawSkill : rawSkill?.id;
+    const rangedSkills = globalThis.CONFIG?.splittermond?.skillGroups?.ranged ?? ["throwing", "longrange"];
+    return Boolean(skillId && Array.from(rangedSkills).includes(skillId));
 }
 
 function isRangedAttackMessage(message) {

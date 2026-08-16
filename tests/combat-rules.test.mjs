@@ -1,14 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+    actionRequiresTarget,
     activeDefenseChangesDifficulty,
     actorLinkUuid,
+    attackControlSelection,
+    attackControlState,
+    attackReadiness,
     bestActiveDefenseValue,
     calculateActiveDefenseValue,
+    combatActionHighlightState,
     combatMessageKind,
     findDefensiveFeatureValue,
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
+    hasTokenPositionUpdate,
+    healthCostFeedbackKind,
+    healthCostTotal,
     isCombatantVisibleToUser,
     isDamageSelectionAction,
     isDefenderMasteryName,
@@ -22,16 +30,23 @@ import {
     mayViewTargetDifficulty,
     mergeActiveDefenseCheck,
     normalizeActorUserLinks,
+    normalizeFavoriteSkillIds,
     normalizeSearchText,
     normalizeTargetReferences,
     normalizeUserTokenLinks,
     parseActiveDefenseDescription,
     parseStatusEffectLabel,
     recalculateAttackReport,
+    reorderFavoriteSkillIds,
     requiresRollManagementPermission,
     resolveCombatEventOpenIds,
+    selectPersonalCombatant,
+    tickAdvanceConfirmed,
+    tokenDocumentCenter,
     totalDegreesOfSuccess,
+    toggleFavoriteSkillId,
     uniqueTokensByReference,
+    visibleCanvasCenterY,
     withTemporarySetValues,
 } from "../Modul/splittermond-smoother-fight/scripts/combat-rules.js";
 
@@ -60,6 +75,51 @@ test("successful active defense increases the base defense by 1 + EG + Defensiv"
 
 test("failed active defense leaves the base defense unchanged", () => {
     assert.equal(calculateActiveDefenseValue({ baseDefense: 20, succeeded: false }, 3), 20);
+});
+
+test("combat action highlighting advances from open degrees through focus costs to ticks", () => {
+    assert.deepEqual(combatActionHighlightState({
+        isOffense: true,
+        hasPendingDegreeOptions: true,
+        isSpell: true,
+        hasPendingFocusCost: true,
+        hasPendingDamage: true,
+    }), { degrees: true, focus: false, damage: false, ticks: false });
+    assert.deepEqual(combatActionHighlightState({
+        isOffense: true,
+        hasPendingDegreeOptions: true,
+        followUpStarted: true,
+        isSpell: true,
+        hasPendingFocusCost: true,
+        hasPendingDamage: true,
+    }), { degrees: false, focus: true, damage: false, ticks: false });
+    assert.deepEqual(combatActionHighlightState({ isSpell: true, hasPendingFocusCost: true }), {
+        degrees: false,
+        focus: true,
+        damage: false,
+        ticks: false,
+    });
+    assert.deepEqual(combatActionHighlightState({ isOffense: true, hasPendingDamage: true }), {
+        degrees: false,
+        focus: false,
+        damage: true,
+        ticks: false,
+    });
+    assert.deepEqual(combatActionHighlightState({
+        isOffense: true,
+        hasPendingDamageApplication: true,
+    }), {
+        degrees: false,
+        focus: false,
+        damage: false,
+        ticks: false,
+    });
+    assert.deepEqual(combatActionHighlightState({ isSpell: true }), {
+        degrees: false,
+        focus: false,
+        damage: false,
+        ticks: true,
+    });
 });
 
 test("active defense uses the rendered check report when the message flag only contains input data", () => {
@@ -137,6 +197,123 @@ test("grazing hit penalty is recalculated from selected maneuvers", () => {
     const result = recalculateAttackReport(attackReport({ maneuvers: [{}, {}] }), 24);
     assert.equal(result.grazingHitPenalty, 4);
     assert.equal(totalDegreesOfSuccess(result), 0);
+});
+
+test("health damage totals include consumed, exhausted, and channeled costs", () => {
+    assert.equal(healthCostTotal({
+        consumed: { value: "5" },
+        exhausted: { value: 3 },
+        channeled: { value: 2 },
+    }), 10);
+    assert.equal(healthCostTotal({ consumed: { value: -4 } }), 0);
+    assert.equal(healthCostTotal(undefined), 0);
+});
+
+test("confirmed zero damage uses different feedback from applied damage", () => {
+    assert.equal(healthCostFeedbackKind(4, 7, true), "damage");
+    assert.equal(healthCostFeedbackKind(4, 4, true), "damageBlocked");
+    assert.equal(healthCostFeedbackKind(4, 4, false), null);
+    assert.equal(healthCostFeedbackKind(4, 2, true), null);
+});
+
+test("legacy tick movement is consumed only after initiative actually advances", () => {
+    assert.equal(tickAdvanceConfirmed(9, 12), true);
+    assert.equal(tickAdvanceConfirmed(9, 9), false);
+    assert.equal(tickAdvanceConfirmed(9, undefined), false);
+});
+
+test("only ranged attacks use the persistent prepared-attack state", () => {
+    assert.deepEqual(attackReadiness(false, "melee", null), { ready: true, prepared: false });
+    assert.deepEqual(attackReadiness(false, "melee", "melee"), { ready: true, prepared: false });
+    assert.deepEqual(attackReadiness(true, "bow", null), { ready: false, prepared: false });
+    assert.deepEqual(attackReadiness(true, "bow", "bow"), { ready: true, prepared: true });
+    assert.deepEqual(attackReadiness(true, "bow", "crossbow"), { ready: false, prepared: false });
+});
+
+test("preparing attacks and spells does not require a target until execution", () => {
+    assert.equal(actionRequiresTarget(false), false);
+    assert.equal(actionRequiresTarget(false, true), false);
+    assert.equal(actionRequiresTarget(true, false), false);
+    assert.equal(actionRequiresTarget(true, true), true);
+});
+
+test("token focus uses the center between the tick bar and HUD", () => {
+    assert.equal(visibleCanvasCenterY(800, 140, 560), 350);
+    assert.equal(visibleCanvasCenterY(800, null, 560), 280);
+    assert.equal(visibleCanvasCenterY(800, 140, null), 470);
+    assert.equal(visibleCanvasCenterY(800, 600, 500), 400);
+});
+
+test("attack controls expose a sole attack or an explicit default directly", () => {
+    assert.deepEqual(attackControlState(["sword"], null, 0), {
+        defaultAttackId: "sword",
+        automaticDefaultAttackId: "sword",
+        directAttackId: "sword",
+        showMenu: false,
+    });
+    assert.deepEqual(attackControlState(["sword"], null, 1), {
+        defaultAttackId: "sword",
+        automaticDefaultAttackId: "sword",
+        directAttackId: "sword",
+        showMenu: true,
+    });
+    assert.deepEqual(attackControlState(["sword", "bow"], "bow", 2), {
+        defaultAttackId: "bow",
+        automaticDefaultAttackId: null,
+        directAttackId: "bow",
+        showMenu: true,
+    });
+    assert.deepEqual(attackControlState(["sword", "bow"], "missing", 0), {
+        defaultAttackId: null,
+        automaticDefaultAttackId: null,
+        directAttackId: null,
+        showMenu: true,
+    });
+});
+
+test("a prepared ranged attack takes priority over the default attack", () => {
+    assert.deepEqual(attackControlSelection("bow", "sword"), { attackId: "bow", mode: "prepared" });
+    assert.deepEqual(attackControlSelection(null, "sword"), { attackId: "sword", mode: "default" });
+    assert.deepEqual(attackControlSelection(null, null), { attackId: null, mode: "menu" });
+});
+
+test("skill favorites are normalized, removable, and limited to four", () => {
+    assert.deepEqual(normalizeFavoriteSkillIds(["stealth", "stale", "stealth", "athletics"], ["stealth", "athletics"]), [
+        "stealth",
+        "athletics",
+    ]);
+    assert.deepEqual(toggleFavoriteSkillId(["stealth"], "stealth", ["stealth", "athletics"]), {
+        ids: [],
+        changed: true,
+        added: false,
+        limitReached: false,
+    });
+    assert.deepEqual(toggleFavoriteSkillId(["a", "b", "c", "d"], "e", ["a", "b", "c", "d", "e"]), {
+        ids: ["a", "b", "c", "d"],
+        changed: false,
+        added: false,
+        limitReached: true,
+    });
+});
+
+test("skill favorites can be reordered before or after another favorite", () => {
+    assert.deepEqual(reorderFavoriteSkillIds(["a", "b", "c", "d"], "d", "b"), ["a", "d", "b", "c"]);
+    assert.deepEqual(reorderFavoriteSkillIds(["a", "b", "c", "d"], "a", "c", true), ["b", "c", "a", "d"]);
+    assert.deepEqual(reorderFavoriteSkillIds(["a", "b"], "missing", "b"), ["a", "b"]);
+});
+
+test("personal HUD controls use the selected owned token or the only owned combatant", () => {
+    const first = { id: "first", tokenId: "token-a", tokenUuid: "Scene.scene.Token.token-a", owned: true };
+    const second = { id: "second", tokenId: "token-b", tokenUuid: "Scene.scene.Token.token-b", owned: true };
+    const foreign = { id: "foreign", tokenId: "token-c", tokenUuid: "Scene.scene.Token.token-c", owned: false };
+
+    assert.equal(selectPersonalCombatant([first, second, foreign], second.tokenUuid), second);
+    assert.equal(selectPersonalCombatant([first, second, foreign], first.tokenId), first);
+    assert.equal(selectPersonalCombatant([first, second, foreign]), null);
+    assert.equal(selectPersonalCombatant([first, second, foreign], null, second.id), second);
+    assert.equal(selectPersonalCombatant([first, second, foreign], first.tokenId, second.id), first);
+    assert.equal(selectPersonalCombatant([first, foreign]), first);
+    assert.equal(selectPersonalCombatant([first, second, foreign], foreign.tokenUuid), null);
 });
 
 test("Defensiv is found in serialized feature lists", () => {
@@ -232,7 +409,9 @@ test("target defenses stay private by default and can be revealed by the world o
 test("players never receive hidden combatants as their current HUD actor", () => {
     assert.equal(isCombatantVisibleToUser(false, false), true);
     assert.equal(isCombatantVisibleToUser(false, true), false);
+    assert.equal(isCombatantVisibleToUser(false, false, true), false);
     assert.equal(isCombatantVisibleToUser(true, true), true);
+    assert.equal(isCombatantVisibleToUser(true, true, true), true);
 });
 
 test("multi-target references are stable and de-duplicated", () => {
@@ -255,14 +434,17 @@ test("remote chat actions match Splittermond's owner, author, and GM permissions
     assert.equal(mayUseRemoteChatActions(false, false, false), false);
     assert.equal(mayUseRemoteChatActions(false, true, false), true);
     assert.equal(mayUseRemoteChatActions(false, false, true), true);
+    assert.equal(mayUseRemoteChatActions(false, false, false, true), true);
     assert.equal(mayUseRemoteChatActions(true, false, false), true);
 });
 
-test("the active player is identified without highlighting the GM or other owners", () => {
+test("the assigned user receives the turn highlight, including an assigned GM", () => {
     assert.equal(isPlayersTurn({ userId: "player", linkedUserId: "player" }), true);
     assert.equal(isPlayersTurn({ userId: "player", linkedUserId: "other", ownsActor: true }), false);
     assert.equal(isPlayersTurn({ userId: "player", ownsActor: true }), true);
-    assert.equal(isPlayersTurn({ isGm: true, userId: "gm", linkedUserId: "gm" }), false);
+    assert.equal(isPlayersTurn({ isGm: true, userId: "gm", linkedUserId: "gm" }), true);
+    assert.equal(isPlayersTurn({ isGm: true, userId: "gm", linkedUserId: "player", ownsActor: true }), false);
+    assert.equal(isPlayersTurn({ isGm: true, userId: "gm", ownsActor: true }), false);
 });
 
 test("roll management permissions cover EG, focus, ticks, and splinter points", () => {
@@ -289,6 +471,23 @@ test("Splittermond check updates are detected for flat and nested Foundry change
     assert.equal(hasSplittermondCheckUpdate({ flags: { "splittermond.check": { succeeded: true } } }), true);
     assert.equal(hasSplittermondCheckUpdate({ flags: { "splittermond-smoother-fight": { context: {} } } }), false);
     assert.equal(hasSplittermondCheckUpdate({ content: "updated card" }), false);
+});
+
+test("token movement and size changes trigger a Defender distance refresh", () => {
+    assert.equal(hasTokenPositionUpdate({ x: 120 }), true);
+    assert.equal(hasTokenPositionUpdate({ y: 240, elevation: 1 }), true);
+    assert.equal(hasTokenPositionUpdate({ width: 2, height: 2 }), true);
+    assert.equal(hasTokenPositionUpdate({ hidden: false }), false);
+    assert.equal(hasTokenPositionUpdate({ rotation: 90 }), false);
+});
+
+test("Defender distance uses current token document coordinates before a stale canvas center", () => {
+    assert.deepEqual(tokenDocumentCenter({
+        document: { x: 200, y: 300, width: 2, height: 1 },
+        center: { x: 50, y: 50 },
+    }, 100), { x: 300, y: 350 });
+    assert.deepEqual(tokenDocumentCenter({ x: 0, y: 0 }, 70), { x: 35, y: 35 });
+    assert.equal(tokenDocumentCenter({ x: null, y: 10 }, 100), null);
 });
 
 test("a new combat event closes older cards and opens only the newest event", () => {
