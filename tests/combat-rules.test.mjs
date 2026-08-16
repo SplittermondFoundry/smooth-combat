@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+    activeDefenseChangesDifficulty,
     actorLinkUuid,
     bestActiveDefenseValue,
     calculateActiveDefenseValue,
@@ -8,6 +9,8 @@ import {
     findDefensiveFeatureValue,
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
+    isCombatantVisibleToUser,
+    isDamageSelectionAction,
     isDefenderMasteryName,
     isPlayersTurn,
     isTargetDependentDifficulty,
@@ -15,10 +18,14 @@ import {
     linkMatchesCombatant,
     mayUseRemoteChatActions,
     mayViewActorResources,
+    mayViewTargetDefenses,
     mayViewTargetDifficulty,
+    mergeActiveDefenseCheck,
     normalizeActorUserLinks,
     normalizeSearchText,
+    normalizeTargetReferences,
     normalizeUserTokenLinks,
+    parseActiveDefenseDescription,
     parseStatusEffectLabel,
     recalculateAttackReport,
     requiresRollManagementPermission,
@@ -53,6 +60,35 @@ test("successful active defense increases the base defense by 1 + EG + Defensiv"
 
 test("failed active defense leaves the base defense unchanged", () => {
     assert.equal(calculateActiveDefenseValue({ baseDefense: 20, succeeded: false }, 3), 20);
+});
+
+test("active defense uses the rendered check report when the message flag only contains input data", () => {
+    const check = mergeActiveDefenseCheck({
+        type: "defense",
+        baseDefense: 22,
+        succeeded: false,
+        itemData: { name: "Turmschild" },
+    }, {
+        succeeded: true,
+        degreeOfSuccess: { fromRoll: 2, modification: 0 },
+    });
+    assert.equal(check.succeeded, true);
+    assert.deepEqual(check.degreeOfSuccess, { fromRoll: 2, modification: 0 });
+    assert.equal(calculateActiveDefenseValue(check, 1), 26);
+});
+
+test("active defense descriptions separate defense values from stun damage", () => {
+    assert.deepEqual(parseActiveDefenseDescription("VTD: 23 + 3 Punkte Betäubungsschaden"), {
+        defenseLabel: "VTD",
+        defenseValue: 23,
+        defensePrefixLength: 7,
+        numbingDamage: 3,
+    });
+});
+
+test("a narrowly failed defense still counts when the system card reports a higher defense", () => {
+    assert.equal(activeDefenseChangesDifficulty({ baseDefense: 22, succeeded: false }, 23), true);
+    assert.equal(activeDefenseChangesDifficulty({ baseDefense: 22, succeeded: false }, 22), false);
 });
 
 test("multiple active defenses retain the better defense value", () => {
@@ -186,6 +222,28 @@ test("health and focus require observer permission unless the viewer is a GM", (
     assert.equal(mayViewActorResources(true, false), true);
 });
 
+test("target defenses stay private by default and can be revealed by the world option", () => {
+    assert.equal(mayViewTargetDefenses(false, false, false), false);
+    assert.equal(mayViewTargetDefenses(false, false, true), true);
+    assert.equal(mayViewTargetDefenses(false, true, false), true);
+    assert.equal(mayViewTargetDefenses(true, false, false), true);
+});
+
+test("players never receive hidden combatants as their current HUD actor", () => {
+    assert.equal(isCombatantVisibleToUser(false, false), true);
+    assert.equal(isCombatantVisibleToUser(false, true), false);
+    assert.equal(isCombatantVisibleToUser(true, true), true);
+});
+
+test("multi-target references are stable and de-duplicated", () => {
+    assert.deepEqual(normalizeTargetReferences([
+        { document: { uuid: "Scene.s.Token.a" } },
+        { uuid: "Scene.s.Token.b" },
+        "Scene.s.Token.a",
+        null,
+    ]), ["Scene.s.Token.a", "Scene.s.Token.b"]);
+});
+
 test("target-dependent difficulties require observer permission unless the viewer is a GM", () => {
     assert.equal(mayViewTargetDifficulty(true, false, false), false);
     assert.equal(mayViewTargetDifficulty(true, false, true), true);
@@ -211,9 +269,17 @@ test("roll management permissions cover EG, focus, ticks, and splinter points", 
     assert.equal(requiresRollManagementPermission("anyDegreeOption", true), true);
     assert.equal(requiresRollManagementPermission("consumeCosts"), true);
     assert.equal(requiresRollManagementPermission("advanceToken"), true);
+    assert.equal(requiresRollManagementPermission("addTick"), true);
     assert.equal(requiresRollManagementPermission("useSplinterpoint"), true);
     assert.equal(requiresRollManagementPermission("activeDefense"), false);
     assert.equal(requiresRollManagementPermission("applyDamage"), false);
+});
+
+test("damage selection is owner-only while damage application remains available to its recipient", () => {
+    assert.equal(isDamageSelectionAction("applyDamage"), true);
+    assert.equal(isDamageSelectionAction("damageUpdate"), true);
+    assert.equal(isDamageSelectionAction("applyDamageToSelf"), false);
+    assert.equal(isDamageSelectionAction("applyDamageToUserTargets"), false);
 });
 
 test("Splittermond check updates are detected for flat and nested Foundry changes", () => {
@@ -236,10 +302,11 @@ test("a new combat event closes older cards and opens only the newest event", ()
     );
 });
 
-test("the latest event closes when its combatant is no longer active", () => {
+test("all events close when the latest event does not belong to the active combatant", () => {
     const turn = {
         previousCombatantId: "combatant-1",
         currentCombatantId: "combatant-2",
+        currentActorId: "actor-2",
         eventCombatantIds: new Map([
             ["attack-old", "combatant-3"],
             ["attack-current", "combatant-1"],
@@ -252,7 +319,7 @@ test("the latest event closes when its combatant is no longer active", () => {
             ["attack-old", "attack-current"],
             turn
         )],
-        ["attack-old"]
+        []
     );
     assert.deepEqual(
         [...resolveCombatEventOpenIds(
@@ -262,6 +329,94 @@ test("the latest event closes when its combatant is no longer active", () => {
             { ...turn, eventCombatantIds: new Map([["attack-next", "combatant-2"]]) }
         )],
         ["attack-next"]
+    );
+});
+
+test("deleting a combat event opens only the newest remaining event of the active actor", () => {
+    const previous = ["attack-old", "attack-current", "attack-deleted"];
+    const current = ["attack-old", "attack-current"];
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(previous, ["attack-old", "attack-deleted"], current, {
+            currentCombatantId: "combatant-2",
+            currentActorId: "actor-2",
+            eventCombatantIds: new Map([
+                ["attack-old", "combatant-1"],
+                ["attack-current", "combatant-2"],
+            ]),
+        })],
+        ["attack-current"]
+    );
+});
+
+test("deleting the current event leaves older actors' events collapsed", () => {
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["attack-old", "attack-deleted"],
+            ["attack-deleted"],
+            ["attack-old"],
+            {
+                currentCombatantId: "combatant-2",
+                currentActorId: "actor-2",
+                eventCombatantIds: new Map([["attack-old", "combatant-1"]]),
+                eventActorIds: new Map([["attack-old", "actor-1"]]),
+            }
+        )],
+        []
+    );
+});
+
+test("deleting an associated message reselects the newest event even when event IDs stay unchanged", () => {
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["attack-old", "attack-current"],
+            ["attack-old"],
+            ["attack-old", "attack-current"],
+            {
+                forceLatestEvent: true,
+                currentCombatantId: "combatant-2",
+                eventCombatantIds: new Map([
+                    ["attack-old", "combatant-1"],
+                    ["attack-current", "combatant-2"],
+                ]),
+            }
+        )],
+        ["attack-current"]
+    );
+});
+
+test("a Defender subevent closes with the defender's completed turn", () => {
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["attack"],
+            ["attack"],
+            ["attack"],
+            {
+                previousCombatantId: "defender-combatant",
+                currentCombatantId: "next-combatant",
+                previousActorId: "defender-actor",
+                currentActorId: "next-actor",
+                eventCombatantIds: new Map([["attack", "attacker-combatant"]]),
+                eventActorIds: new Map([["attack", "defender-actor"]]),
+            }
+        )],
+        []
+    );
+});
+
+test("a Defender result keeps the current attacker's event open", () => {
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["attack"],
+            ["attack"],
+            ["attack"],
+            {
+                currentCombatantId: "attacker-combatant",
+                currentActorId: "attacker-actor",
+                eventCombatantIds: new Map([["attack", "attacker-combatant"]]),
+                eventActorIds: new Map([["attack", "attacker-actor"]]),
+            }
+        )],
+        ["attack"]
     );
 });
 

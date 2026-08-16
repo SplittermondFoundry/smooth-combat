@@ -1,4 +1,5 @@
 import {
+    activeDefenseChangesDifficulty,
     actorLinkUuid,
     bestActiveDefenseValue,
     calculateActiveDefenseValue,
@@ -6,6 +7,8 @@ import {
     findDefensiveFeatureValue,
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
+    isCombatantVisibleToUser,
+    isDamageSelectionAction,
     isDefenderMasteryName,
     isPlayersTurn,
     isTargetDependentDifficulty,
@@ -13,10 +16,14 @@ import {
     linkMatchesCombatant,
     mayUseRemoteChatActions,
     mayViewActorResources,
+    mayViewTargetDefenses,
     mayViewTargetDifficulty,
+    mergeActiveDefenseCheck,
     normalizeActorUserLinks,
     normalizeSearchText,
+    normalizeTargetReferences,
     normalizeUserTokenLinks,
+    parseActiveDefenseDescription,
     parseStatusEffectLabel,
     recalculateAttackReport,
     requiresRollManagementPermission,
@@ -43,6 +50,13 @@ const runtime = {
     cardsCollapsed: false,
     hiddenByShortcut: false,
     eventExpansionRequest: null,
+    feedback: null,
+    feedbackTimer: null,
+    audioContext: null,
+    lastTurnCombatantId: null,
+    heardMessageIds: new Set(),
+    pendingOffenseKinds: new Map(),
+    combatEventDeletionPending: false,
     startedAt: Date.now(),
 };
 
@@ -58,6 +72,8 @@ Hooks.once("ready", async () => {
     registerHooks();
     registerSocket();
     publishOwnTarget();
+    runtime.lastTurnCombatantId = game.combat?.combatant?.id ?? null;
+    window.addEventListener("pointerdown", unlockFeedbackAudio, { once: true, capture: true });
     await runtime.hud.render();
 });
 
@@ -114,6 +130,31 @@ function registerSettings() {
         config: true,
         type: Boolean,
         default: true,
+    });
+    game.settings.register(MODULE_ID, "revealTargetDefenses", {
+        name: "SMOOTHER_FIGHT.Settings.RevealTargetDefensesName",
+        hint: "SMOOTHER_FIGHT.Settings.RevealTargetDefensesHint",
+        scope: "world",
+        config: true,
+        restricted: true,
+        type: Boolean,
+        default: false,
+        onChange: rerender,
+    });
+    game.settings.register(MODULE_ID, "audioFeedback", {
+        name: "SMOOTHER_FIGHT.Settings.AudioFeedbackName",
+        hint: "SMOOTHER_FIGHT.Settings.AudioFeedbackHint",
+        scope: "client",
+        config: true,
+        type: Boolean,
+        default: true,
+    });
+    game.settings.register(MODULE_ID, "theme", {
+        scope: "client",
+        config: false,
+        type: String,
+        default: "dark",
+        onChange: rerender,
     });
     game.settings.register(MODULE_ID, "userTokenLinks", {
         scope: "world",
@@ -423,13 +464,25 @@ function registerHooks() {
     rerenderHooks.forEach((hook) => Hooks.on(hook, scheduleRender));
 
     Hooks.on("targetToken", (user, token, targeted) => {
+        const targets = new Set(normalizeTargetReferences(user.targets));
         const changedUuid = tokenUuid(token);
-        const remaining = Array.from(user.targets ?? []).filter((candidate) => tokenUuid(candidate) !== changedUuid);
-        const target = targeted ? token : remaining.at(-1) ?? null;
-        const uuid = tokenUuid(target);
-        runtime.targetByUser.set(user.id, uuid);
-        if (user.id === game.user.id) publishOwnTarget(uuid);
+        if (changedUuid) {
+            if (targeted) targets.add(changedUuid);
+            else targets.delete(changedUuid);
+        }
+        const references = Array.from(targets);
+        runtime.targetByUser.set(user.id, references);
+        if (user.id === game.user.id) publishOwnTarget(references);
         scheduleRender();
+    });
+
+    Hooks.on("combatTurn", (combat) => {
+        announceTurnFeedback(combat);
+        scheduleRender();
+    });
+    Hooks.on("combatStart", (combat) => {
+        runtime.lastTurnCombatantId = null;
+        announceTurnFeedback(combat);
     });
 
     Hooks.on("createChatMessage", (message) => {
@@ -440,7 +493,11 @@ function registerHooks() {
         void onUpdateChatMessage(message, changes).finally(() => scheduleRender(0));
         scheduleRender();
     });
-    Hooks.on("deleteChatMessage", scheduleRender);
+    Hooks.on("deleteChatMessage", (message) => {
+        if (isCombatEventMessage(message)) runtime.combatEventDeletionPending = true;
+        runtime.eventExpansionRequest = null;
+        scheduleRender(0);
+    });
     Hooks.on("diceSoNiceRollComplete", (messageId) => {
         if (game.messages?.get?.(messageId)) scheduleRender(0);
     });
@@ -457,7 +514,8 @@ function registerSocket() {
         if (payload.type === "target-update" && typeof payload.userId === "string") {
             const sender = game.users.get(payload.senderId);
             if (payload.senderId !== payload.userId && !sender?.isGM) return;
-            runtime.targetByUser.set(payload.userId, payload.tokenUuid || null);
+            const targetUuids = normalizeTargetReferences(payload.targetUuids ?? [payload.tokenUuid]);
+            runtime.targetByUser.set(payload.userId, targetUuids);
             scheduleRender();
             return;
         }
@@ -467,14 +525,14 @@ function registerSocket() {
             if (!sender?.isGM) return;
             const target = resolveToken(payload.tokenUuid);
             if (!target) return;
-            setLocalTarget(target);
-            publishOwnTarget(target.uuid);
+            setLocalTarget(target, payload.targeted !== false, Boolean(payload.releaseOthers));
+            publishOwnTarget();
             return;
         }
 
         if (payload.type === "recalculate-defense" && payload.recipientId === game.user.id && game.user.isGM) {
             const sender = game.users.get(payload.senderId);
-            const message = game.messages.get(payload.defenseMessageId);
+            const message = await waitForChatMessage(payload.defenseMessageId);
             const authorId = message?.author?.id ?? message?.user?.id ?? message?.user;
             if (!sender || !message || (!sender.isGM && authorId !== sender.id)) return;
 
@@ -483,6 +541,7 @@ function registerSocket() {
             if (!pending || !offense || !isOffensiveCombatMessage(offense)) return;
             if (!sender.isGM && !canUserSubmitDefense(sender, pending, message)) return;
 
+            await waitForDefenseProcessing(message.id);
             await processDefenseMessage(message, pending, { allowForeign: true });
         }
     });
@@ -509,6 +568,7 @@ class SmootherFightHud {
         if (!this.element) return;
         const generation = ++this.renderGeneration;
         const viewState = captureHudViewState(this.element);
+        const forceLatestEvent = runtime.combatEventDeletionPending;
         const context = getHudContext();
         const enabled = getSetting("enabled", true);
         if (!enabled || !context) {
@@ -517,10 +577,12 @@ class SmootherFightHud {
         }
         const visible = Boolean(enabled && context && !runtime.hiddenByShortcut);
         const minimized = Boolean(visible && getSetting("minimized", false));
+        this.element.classList.toggle("sf-theme-light", getSetting("theme", "dark") === "light");
         this.element.classList.toggle("is-hidden", !visible);
         syncSystemActionBar(visible);
         syncMinimizedHudPosition(this.element, minimized);
         if (!visible) {
+            runtime.combatEventDeletionPending = false;
             delete this.element.dataset.activeCombatantId;
             delete this.element.dataset.activeActorId;
             clearHoveredToken();
@@ -540,7 +602,8 @@ class SmootherFightHud {
         enforceFumbleActionState(this.element);
         bindQuickTargetHover(this.element);
         bindSpellTooltips(this.element, context);
-        restoreHudViewState(this.element, viewState);
+        restoreHudViewState(this.element, viewState, { forceLatestEvent });
+        if (forceLatestEvent) runtime.combatEventDeletionPending = false;
         applyCombatEventExpansionRequest(this.element);
     }
 
@@ -600,6 +663,11 @@ class SmootherFightHud {
                 case "open-sheet":
                     context.actor.sheet.render({ force: true });
                     break;
+                case "open-token-sheet": {
+                    const token = resolveToken(target.dataset.sfTokenUuid);
+                    token?.actor?.sheet?.render?.({ force: true });
+                    break;
+                }
                 case "skill":
                     await requireOwner(context, () => context.actor.rollSkill(target.dataset.skillId));
                     break;
@@ -614,6 +682,9 @@ class SmootherFightHud {
                     break;
                 case "cancel-prepared-spell":
                     await requireOwner(context, () => cancelPreparedSpell(context));
+                    break;
+                case "cancel-prepared-attack":
+                    await requireOwner(context, () => cancelPreparedAttack(context));
                     break;
                 case "add-ticks":
                     await requireOwner(context, () => addCombatTicks(context, target.dataset.ticks));
@@ -632,6 +703,9 @@ class SmootherFightHud {
                     break;
                 case "toggle-combatant-hidden":
                     await requireGm(() => context.combatant.update({ hidden: !context.combatant.hidden }));
+                    break;
+                case "toggle-combatant-visibility":
+                    await requireGm(() => toggleCombatantVisibility(context));
                     break;
                 case "toggle-combatant-defeated":
                     await requireGm(() => context.combatant.update({ defeated: !context.combatant.isDefeated }));
@@ -660,7 +734,10 @@ class SmootherFightHud {
                     scheduleRender(0);
                     break;
                 case "toggle-hud":
-                    await game.settings.set(MODULE_ID, "minimized", !getSetting("minimized", false));
+                    await setHudMinimized(!getSetting("minimized", false));
+                    break;
+                case "toggle-theme":
+                    await game.settings.set(MODULE_ID, "theme", getSetting("theme", "dark") === "light" ? "dark" : "light");
                     break;
             }
         } catch (error) {
@@ -671,16 +748,17 @@ class SmootherFightHud {
 }
 
 async function buildHud(context) {
-    const { combat, combatant, actor, token, linkedUser, target } = context;
+    const { combat, combatant, actor, token, linkedUser, target, targets } = context;
     const canAct = Boolean(game.user.isGM || actor.isOwner);
     const tick = combat.currentTick ?? Math.round(Number(combatant.initiative) || 0);
     const userName = linkedUser?.name ?? t("SMOOTHER_FIGHT.HUD.AutomaticOwner");
-    const targetLine = target
-        ? t("SMOOTHER_FIGHT.HUD.PlayerTargetName", { user: userName, target: target.name })
+    const targetNames = targets.map((candidate) => candidate.name ?? candidate.actor?.name).filter(Boolean).join(", ");
+    const targetLine = targets.length
+        ? t("SMOOTHER_FIGHT.HUD.PlayerTargetName", { user: userName, target: targetNames })
         : t("SMOOTHER_FIGHT.HUD.NoTargetDetail");
     const minimized = getSetting("minimized", false);
     const hudToggle = buildHudToggle(minimized);
-    const personalTarget = isCurrentUserTarget(target);
+    const personalTarget = targets.some((candidate) => isCurrentUserTarget(candidate));
     const currentPlayersTurn = isPlayersTurn({
         isGm: game.user?.isGM,
         userId: game.user?.id,
@@ -702,6 +780,7 @@ async function buildHud(context) {
                         <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
                         ${turnNotice}
                         <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
+                        ${buildThemeToggle()}
                         ${hudToggle}
                     </header>
                 </main>
@@ -719,6 +798,7 @@ async function buildHud(context) {
                     <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
                     ${turnNotice}
                     <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
+                    ${buildThemeToggle()}
                     ${hudToggle}
                 </header>
                 ${canAct ? buildCombatControls(context) : ""}
@@ -727,7 +807,15 @@ async function buildHud(context) {
             </main>
             <div class="sf-target-column">
                 ${canChooseTarget(context) ? buildQuickTargets(context) : ""}
-                ${target ? portraitPanel({ side: "target", token: target, actor: target.actor, eyebrow: t("SMOOTHER_FIGHT.HUD.Target"), highlighted: personalTarget }) : noTargetPanel()}
+                ${targets.length ? `<div class="sf-target-list ${targets.length > 1 ? "is-multi" : ""}">${targets.map((candidate) => portraitPanel({
+                    side: "target",
+                    token: candidate,
+                    actor: candidate.actor,
+                    eyebrow: t("SMOOTHER_FIGHT.HUD.Target"),
+                    action: "open-token-sheet",
+                    highlighted: isCurrentUserTarget(candidate),
+                    showDefenses: canViewTargetDefenseValues(candidate.actor),
+                })).join("")}</div>` : noTargetPanel()}
             </div>
         </div>
     `;
@@ -739,7 +827,13 @@ function buildHudToggle(minimized) {
     return `<button type="button" class="sf-hud-toggle" data-sf-action="toggle-hud" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid ${icon}"></i></button>`;
 }
 
-function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false }) {
+function buildThemeToggle() {
+    const light = getSetting("theme", "dark") === "light";
+    const label = t(light ? "SMOOTHER_FIGHT.HUD.UseDarkMode" : "SMOOTHER_FIGHT.HUD.UseLightMode");
+    return `<button type="button" class="sf-hud-toggle sf-theme-toggle" data-sf-action="toggle-theme" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid ${light ? "fa-moon" : "fa-sun"}"></i></button>`;
+}
+
+function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false, showDefenses = true }) {
     const image = token?.texture?.src ?? actor?.img ?? "icons/svg/mystery-man.svg";
     const clickable = action ? `data-sf-action="${action}" role="button" tabindex="0"` : "";
     const tokenReference = token?.uuid ? `data-sf-token-uuid="${escapeAttr(token.uuid)}"` : "";
@@ -751,16 +845,22 @@ function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted =
             <div class="sf-portrait-image" style="--sf-token-image:url('${escapeCssUrl(image)}')">
                 <span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>
                 ${highlighted ? `<span class="sf-target-alert"><i class="fa-solid fa-bullseye"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YouAreTarget"))}</span></span>` : ""}
+                ${feedbackMarkup(token, actor)}
             </div>
             <div class="sf-portrait-name">${escapeHtml(token?.name ?? actor?.name ?? "–")}</div>
-            <div class="sf-defense-row" aria-label="VTD, KW, GW">
+            ${showDefenses ? `<div class="sf-defense-row" aria-label="VTD, KW, GW">
                 <span><small>VTD</small>${escapeHtml(defense)}</span>
                 <span><small>KW</small>${escapeHtml(body)}</span>
                 <span><small>GW</small>${escapeHtml(mind)}</span>
-            </div>
+            </div>` : `<div class="sf-defense-row is-concealed"><i class="fa-solid fa-eye-slash"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefensesHidden"))}</span></div>`}
             ${canViewResources(actor) ? resourceBars(actor) : ""}
         </aside>
     `;
+}
+
+function canViewTargetDefenseValues(actor) {
+    const observer = Boolean(actor?.testUserPermission?.(game.user, "OBSERVER"));
+    return mayViewTargetDefenses(getSetting("revealTargetDefenses", false), game.user?.isGM, observer);
 }
 
 function noTargetPanel() {
@@ -809,11 +909,12 @@ function buildCombatControls(context) {
         : `<button type="button" data-sf-action="pause-combatant" data-pause-type="wait" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Wait"))}"><i class="fa-solid fa-hourglass-half"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Wait"))}</span></button>
            <button type="button" data-sf-action="pause-combatant" data-pause-type="keepReady" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.KeepReady"))}"><i class="fa-solid fa-hand"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.KeepReady"))}</span></button>`;
     const focusLabel = t("SMOOTHER_FIGHT.HUD.FocusCombatant");
-    const visibilityLabel = t(context.combatant.hidden ? "SMOOTHER_FIGHT.HUD.ShowCombatant" : "SMOOTHER_FIGHT.HUD.HideCombatant");
+    const visibilityHidden = Boolean(context.combatant.hidden || context.token?.hidden);
+    const visibilityLabel = t(visibilityHidden ? "SMOOTHER_FIGHT.HUD.ShowTokenAndCombatant" : "SMOOTHER_FIGHT.HUD.HideTokenAndCombatant");
     const defeatedLabel = t(context.combatant.isDefeated ? "SMOOTHER_FIGHT.HUD.RestoreCombatant" : "SMOOTHER_FIGHT.HUD.MarkDefeated");
     const removeLabel = t("SMOOTHER_FIGHT.HUD.RemoveCombatant");
     const gmControls = game.user.isGM ? `
-        <button type="button" data-sf-action="toggle-combatant-hidden" class="sf-icon-button ${context.combatant.hidden ? "is-active" : ""}" title="${escapeAttr(visibilityLabel)}"><i class="fa-solid ${context.combatant.hidden ? "fa-eye" : "fa-eye-slash"}"></i><span class="sf-control-label">${escapeHtml(visibilityLabel)}</span></button>
+        <button type="button" data-sf-action="toggle-combatant-visibility" class="sf-icon-button ${visibilityHidden ? "is-active" : ""}" title="${escapeAttr(visibilityLabel)}"><i class="fa-solid ${visibilityHidden ? "fa-eye" : "fa-eye-slash"}"></i><span class="sf-control-label">${escapeHtml(visibilityLabel)}</span></button>
         <button type="button" data-sf-action="toggle-combatant-defeated" class="sf-icon-button ${context.combatant.isDefeated ? "is-active" : ""}" title="${escapeAttr(defeatedLabel)}"><i class="fa-solid fa-skull"></i><span class="sf-control-label">${escapeHtml(defeatedLabel)}</span></button>
         <button type="button" data-sf-action="remove-combatant" class="sf-icon-button is-danger" title="${escapeAttr(removeLabel)}"><i class="fa-solid fa-circle-minus"></i><span class="sf-control-label">${escapeHtml(removeLabel)}</span></button>
     ` : "";
@@ -831,6 +932,7 @@ function buildCombatControls(context) {
 async function buildActionBar(context) {
     const actor = context.actor;
     const preparedSpellId = actor.getFlag?.("splittermond", "preparedSpell");
+    const preparedAttackId = actor.getFlag?.("splittermond", "preparedAttack");
     const skills = Object.values(actor.skills ?? {})
         .filter((skill) => numericValue(skill.points) > 0 || ["acrobatics", "athletics", "determination", "stealth", "perception", "endurance"].includes(skill.id))
         .sort((a, b) => displayLabel(a.label).localeCompare(displayLabel(b.label), game.i18n.lang));
@@ -838,7 +940,12 @@ async function buildActionBar(context) {
         Number(b.id === preparedSpellId) - Number(a.id === preparedSpellId) || sortByName(a, b)
     );
     const preparedSpell = spells.find((spell) => spell.id === preparedSpellId) ?? null;
-    const attacks = [...(actor.attacks ?? [])].sort(sortByName);
+    const availableSpells = spells.filter((spell) => spell.enoughFocus !== false).length;
+    const spellLabel = `${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells})`;
+    const attacks = [...(actor.attacks ?? [])].sort((a, b) =>
+        Number(b.id === preparedAttackId || b.isPrepared) - Number(a.id === preparedAttackId || a.isPrepared) || sortByName(a, b)
+    );
+    const preparedAttack = attacks.find((attack) => attack.id === preparedAttackId || attack.isPrepared) ?? null;
     const attackSpeeds = new Map(await Promise.all(attacks.map(async (attack) => [attack.id, await getAttackSpeed(attack)])));
     const equipment = Array.from(actor.items ?? []).filter((item) => ["weapon", "shield"].includes(item.type)).sort(sortByName);
 
@@ -847,7 +954,16 @@ async function buildActionBar(context) {
             <button type="button" data-sf-action="skill" data-skill-id="${escapeAttr(skill.id)}">
                 <span>${escapeHtml(displayLabel(skill.label, skill.id))}</span><b>${escapeHtml(displayValue(skill.value))}</b>
             </button>`).join(""))}
-        ${preparedSpell ? preparedSpellMenu(preparedSpell) : actionMenu("fa-solid fa-wand-sparkles", t("SMOOTHER_FIGHT.HUD.Spells"), spells.map((spell) => {
+        ${preparedAttack ? preparedAttackMenu(preparedAttack) : actionMenu("fa-solid fa-hand-fist", t("SMOOTHER_FIGHT.HUD.Attacks"), `
+            ${attacks.map((attack) => `<button type="button" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" class="${attack.isPrepared ? "is-prepared" : ""}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
+                <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small></span>
+                <b>${escapeHtml(attack.isPrepared ? (displayValue(attack.damage, "–")) : `${attackSpeeds.get(attack.id) ?? "–"} T`)}</b>
+            </button>`).join("") || emptyMenuText()}
+            ${equipment.length ? `<h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Equip"))}</h4>${equipment.map((item) => `<button type="button" data-sf-action="toggle-equipped" data-item-id="${escapeAttr(item.id)}" class="${item.system?.equipped ? "is-equipped" : "is-unequipped"}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
+                <img src="${escapeAttr(item.img)}" alt=""><span>${escapeHtml(item.name)}</span><i class="fa-solid ${item.system?.equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i>
+            </button>`).join("")}` : ""}
+        `)}
+        ${preparedSpell ? preparedSpellMenu(preparedSpell, availableSpells) : actionMenu("fa-solid fa-wand-sparkles", spellLabel, spells.map((spell) => {
             const preparing = runtime.preparingSpellId === spell.id;
             const skillLabel = displayLabel(spell.skill?.label);
             const skillValue = displayValue(spell.skill?.value, "");
@@ -861,15 +977,6 @@ async function buildActionBar(context) {
                 <b>${escapeHtml(status)}</b>
             </button>`;
         }).join("") || emptyMenuText())}
-        ${actionMenu("fa-solid fa-hand-fist", t("SMOOTHER_FIGHT.HUD.Attacks"), `
-            ${attacks.map((attack) => `<button type="button" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" class="${attack.isPrepared ? "is-prepared" : ""}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
-                <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small></span>
-                <b>${escapeHtml(attack.isPrepared ? (displayValue(attack.damage, "–")) : `${attackSpeeds.get(attack.id) ?? "–"} T`)}</b>
-            </button>`).join("") || emptyMenuText()}
-            ${equipment.length ? `<h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Equip"))}</h4>${equipment.map((item) => `<button type="button" data-sf-action="toggle-equipped" data-item-id="${escapeAttr(item.id)}" class="${item.system?.equipped ? "is-equipped" : "is-unequipped"}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
-                <img src="${escapeAttr(item.img)}" alt=""><span>${escapeHtml(item.name)}</span><i class="fa-solid ${item.system?.equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i>
-            </button>`).join("")}` : ""}
-        `)}
         ${actionMenu("fa-solid fa-shield-halved", t("SMOOTHER_FIGHT.HUD.Defense"), [
             defenseButton(actor, "defense", "VTD"),
             defenseButton(actor, "bodyresist", "KW"),
@@ -885,21 +992,34 @@ async function buildActionBar(context) {
 
 function actionMenu(icon, label, body, className = "") {
     return `<details class="sf-action-menu ${escapeAttr(className)}">
-        <summary><i class="${icon}"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-up sf-chevron"></i></summary>
+        <summary><i class="${icon}"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
         <div class="sf-action-popover">${body}</div>
     </details>`;
 }
 
-function preparedSpellMenu(spell) {
+function preparedSpellMenu(spell, availableSpells) {
     const cast = t("SMOOTHER_FIGHT.HUD.Cast");
     const cancel = t("SMOOTHER_FIGHT.HUD.CancelSpell");
     return `<div class="sf-action-menu sf-prepared-spell-menu">
         <button type="button" class="sf-prepared-spell-cast sf-spell-action" data-sf-action="cast-prepared-spell" data-spell-id="${escapeAttr(spell.id)}" aria-label="${escapeAttr(`${spell.name}: ${cast}`)}">
             <img src="${escapeAttr(spell.img ?? "icons/svg/daze.svg")}" alt="">
-            <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.PreparedSpell"))}</small><strong>${escapeHtml(spell.name)}</strong></span>
+            <span><small>${escapeHtml(`${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells}) · ${t("SMOOTHER_FIGHT.HUD.PreparedSpell")}`)}</small><strong>${escapeHtml(spell.name)}</strong></span>
             <b><i class="fa-solid fa-wand-sparkles"></i><span>${escapeHtml(cast)}</span></b>
         </button>
         <button type="button" class="sf-prepared-spell-cancel" data-sf-action="cancel-prepared-spell" title="${escapeAttr(cancel)}" aria-label="${escapeAttr(cancel)}"><i class="fa-solid fa-xmark"></i></button>
+    </div>`;
+}
+
+function preparedAttackMenu(attack) {
+    const release = t("SMOOTHER_FIGHT.HUD.ReleaseAttack");
+    const cancel = t("SMOOTHER_FIGHT.HUD.CancelAttack");
+    return `<div class="sf-action-menu sf-prepared-spell-menu sf-prepared-attack-menu">
+        <button type="button" class="sf-prepared-spell-cast sf-prepared-attack-release" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" aria-label="${escapeAttr(`${attack.name}: ${release}`)}">
+            <img src="${escapeAttr(attack.img ?? "icons/svg/sword.svg")}" alt="">
+            <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.PreparedAttack"))}</small><strong>${escapeHtml(attack.name)}</strong></span>
+            <b><i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(release)}</span></b>
+        </button>
+        <button type="button" class="sf-prepared-spell-cancel" data-sf-action="cancel-prepared-attack" title="${escapeAttr(cancel)}" aria-label="${escapeAttr(cancel)}"><i class="fa-solid fa-xmark"></i></button>
     </div>`;
 }
 
@@ -1029,7 +1149,7 @@ function buildCombatEvents(context) {
     return `<section class="sf-events ${runtime.cardsCollapsed ? "is-collapsed" : ""}">
         <button type="button" class="sf-events-heading" data-sf-action="toggle-cards" title="${escapeAttr(title)}">
             <span><i class="fa-solid fa-message"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CombatEvents"))}</span>
-            <i class="fa-solid fa-chevron-${runtime.cardsCollapsed ? "up" : "down"}"></i>
+            <i class="fa-solid fa-chevron-down sf-events-chevron"></i>
         </button>
         <div class="sf-event-scroller">${body}</div>
     </section>`;
@@ -1055,14 +1175,15 @@ function buildEventGroup(group, isLatest, hudContext) {
     const belongsToActiveCombatant = messageBelongsToCombatant(primary, hudContext.combatant, context);
     const open = isLatest && belongsToActiveCombatant && !runtime.cardsCollapsed ? "open" : "";
     const hasDamage = group.damages.length > 0;
-    return `<details class="sf-event-group ${defenseAlert ? "is-defense-alert" : ""}" data-event-id="${escapeAttr(primary.id)}" data-event-combatant-id="${escapeAttr(context?.combatantId ?? "")}" data-event-actor-id="${escapeAttr(primary.speaker?.actor ?? "")}" ${open}>
+    const eventActorId = primary.speaker?.actor ?? "";
+    return `<details class="sf-event-group ${defenseAlert ? "is-defense-alert" : ""}" data-event-id="${escapeAttr(primary.id)}" data-event-combatant-id="${escapeAttr(context?.combatantId ?? "")}" data-event-actor-id="${escapeAttr(eventActorId)}" ${open}>
         <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}${defenseBadge}${targetBadge}<i class="fa-solid fa-chevron-down"></i></summary>
         <div class="sf-event-body">
-            ${group.defenses.map((message, index) => buildAssociatedEvent(message, {
+            ${group.defenses.map((message) => buildAssociatedEvent(message, {
                 kind: "defense",
                 icon: "fa-shield",
-                label: t("SMOOTHER_FIGHT.HUD.DefenseResult"),
-                open: !hasDamage && index === group.defenses.length - 1,
+                label: `${t("SMOOTHER_FIGHT.HUD.DefenseResult")} · ${message.speaker?.alias ?? message.author?.name ?? "–"}`,
+                open: !hasDamage,
             })).join("")}
             ${chatMessageHtml(primary)}
             ${group.damages.map((message, index) => buildAssociatedEvent(message, {
@@ -1074,7 +1195,9 @@ function buildEventGroup(group, isLatest, hudContext) {
             ${group.fumbles.map((message, index) => buildAssociatedEvent(message, {
                 kind: "fumble",
                 icon: "fa-burst",
-                label: t("SMOOTHER_FIGHT.HUD.MagicFumble"),
+                label: getFumbleData(message)?.kind === "fight"
+                    ? t("SMOOTHER_FIGHT.HUD.CombatFumble")
+                    : t("SMOOTHER_FIGHT.HUD.MagicFumble"),
                 open: index === group.fumbles.length - 1,
             })).join("")}
         </div>
@@ -1082,7 +1205,7 @@ function buildEventGroup(group, isLatest, hudContext) {
 }
 
 function buildAssociatedEvent(message, { kind, icon, label, open = false }) {
-    return `<details class="sf-associated-card is-${escapeAttr(kind)}" data-subevent-id="${escapeAttr(message.id)}" data-subevent-kind="${escapeAttr(kind)}" ${open ? "open" : ""}>
+    return `<details class="sf-associated-card is-${escapeAttr(kind)}" data-subevent-id="${escapeAttr(message.id)}" data-subevent-kind="${escapeAttr(kind)}" data-subevent-actor-id="${escapeAttr(message.speaker?.actor ?? "")}" ${open ? "open" : ""}>
         <summary><span><i class="fa-solid ${escapeAttr(icon)}"></i>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down"></i></summary>
         <div class="sf-associated-body">${chatMessageHtml(message)}</div>
     </details>`;
@@ -1096,15 +1219,19 @@ function buildEventTargetBadge(context) {
 }
 
 function getMessageTargetName(context) {
+    if (Array.isArray(context?.targetNames) && context.targetNames.length) return context.targetNames.join(", ");
     const target = resolveMessageTarget(context);
     return context?.targetName ?? target?.token?.name ?? target?.actor?.name ?? "";
 }
 
 function shouldHighlightActiveDefense(group, isLatest, hudContext, messageContext) {
-    if (game.user?.isGM || !messageOffersActiveDefense(group.primary)) return false;
-    if (messageContext?.recalculatedFrom || messageContext?.supersededBy || group.defenses.length) return false;
+    if (!messageOffersActiveDefense(group.primary) && !messageContext?.recalculatedFrom) return false;
+    if (messageContext?.supersededBy) return false;
     const storedTarget = resolveToken(messageContext?.targetTokenUuid);
-    if (storedTarget) return isCurrentUserTarget(storedTarget);
+    if (storedTarget) {
+        const alreadyDefended = messageContext?.attemptedDefenseActorUuids?.includes?.(storedTarget.actor?.uuid);
+        return !alreadyDefended && isCurrentUserTarget(storedTarget);
+    }
     return Boolean(isLatest && isCurrentUserTarget(hudContext?.target));
 }
 
@@ -1128,7 +1255,7 @@ function captureHudViewState(root) {
     };
 }
 
-function restoreHudViewState(root, state) {
+function restoreHudViewState(root, state, { forceLatestEvent = false } = {}) {
     if (!state) return;
     const scroller = root?.querySelector?.(".sf-event-scroller");
     if (!scroller) return;
@@ -1144,6 +1271,7 @@ function restoreHudViewState(root, state) {
         currentActorId: root.dataset.activeActorId || null,
         eventCombatantIds,
         eventActorIds,
+        forceLatestEvent,
     });
     groups.forEach((group) => {
         group.open = openEventIds.has(group.dataset.eventId);
@@ -1217,9 +1345,9 @@ function messageBelongsToCombatant(message, combatant, messageContext = getMessa
 
 function chatMessageHtml(message) {
     let content = message.content ?? "";
-    if (isMagicFumbleMessage(message)) {
-        const fumble = getFumbleData(message) ?? createMagicFumbleData(message, content);
-        if (fumble) content = decorateMagicFumbleCard(content, fumble);
+    if (isFumbleTableMessage(message)) {
+        const fumble = getFumbleData(message) ?? createFumbleData(message, content);
+        if (fumble) content = decorateFumbleCard(content, fumble);
     }
     content = promoteChatCardActions(content, message);
     content = scopeChatCardIds(content, message.id);
@@ -1279,8 +1407,8 @@ function arrangeCheckResults(root, message) {
         if (defenseMessage) {
             const defenseValue = card.querySelector(":scope > .degree-of-success-description");
             if (defenseValue) {
-                decorateDefenseValue(defenseValue);
-                degrees.append(defenseValue);
+                const defenseBadge = decorateDefenseValue(defenseValue, message, summary);
+                if (defenseBadge) degrees.append(defenseBadge);
             }
         }
         if (recalculated && card.matches(".attack, .spell")) degrees.append(recalculated);
@@ -1345,15 +1473,62 @@ function makeRollCollapsible(roll) {
     roll.append(toggle, breakdown);
 }
 
-function decorateDefenseValue(element) {
-    element.classList.add("sf-defense-value");
-    const match = String(element.textContent ?? "").trim().match(/^(.+?)\s*:\s*(-?\d+)$/u);
-    if (!match) return;
+function decorateDefenseValue(element, message, summary) {
+    const parsed = parseActiveDefenseDescription(element.textContent);
+    if (!parsed.defenseLabel || !Number.isFinite(parsed.defenseValue)) return null;
+
+    const badge = document.createElement("div");
+    badge.className = "sf-defense-value";
     const label = document.createElement("span");
-    label.textContent = match[1].trim();
+    label.textContent = parsed.defenseLabel;
     const value = document.createElement("strong");
-    value.textContent = match[2];
-    element.replaceChildren(label, value);
+    value.textContent = String(parsed.defenseValue);
+    badge.append(label, value);
+
+    removeLeadingText(element, parsed.defensePrefixLength);
+    if (!String(element.textContent ?? "").trim()) {
+        element.remove();
+        return badge;
+    }
+
+    element.classList.add("sf-defense-consequences");
+    if (parsed.numbingDamage > 0) addDefenseNumbingDamageAction(element, message, parsed.numbingDamage);
+    summary.after(element);
+    return badge;
+}
+
+function removeLeadingText(element, length) {
+    let remaining = Math.max(0, length);
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node && remaining > 0) {
+        const take = Math.min(remaining, node.data.length);
+        node.data = node.data.slice(take);
+        remaining -= take;
+        node = walker.nextNode();
+    }
+    element.normalize();
+}
+
+function addDefenseNumbingDamageAction(element, message, damage) {
+    const actor = resolveSpeakerActor(message);
+    const context = getMessageContext(message) ?? {};
+    const allowed = Boolean(actor && (game.user.isGM || actor.isOwner));
+    const applied = Boolean(context.numbingDamageApplied);
+    const actions = document.createElement("div");
+    actions.className = "sf-defense-consequence-actions";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `sf-defense-damage-action ${allowed ? "is-own-defense-damage" : ""} ${applied ? "is-applied" : ""}`.trim();
+    button.dataset.sfDefenseNumbingDamage = String(damage);
+    button.disabled = applied || !allowed;
+    button.title = applied ? t("SMOOTHER_FIGHT.HUD.AlreadyApplied") : "";
+    button.innerHTML = `<i class="fa-solid fa-heart-crack"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyDefenseNumbingDamage", {
+        damage,
+        name: actor?.name ?? message.speaker?.alias ?? "–",
+    }))}`;
+    actions.append(button);
+    element.append(actions);
 }
 
 function scopeChatCardIds(content, messageId) {
@@ -1378,15 +1553,16 @@ function scopeChatCardIds(content, messageId) {
 function buildQuickTargets(context) {
     const candidates = getTargetSceneTokens(context.combat).filter((token) => token.uuid !== context.token?.uuid);
     const labels = quickTargetLabels(candidates);
+    const selected = new Set(context.targets.map((token) => token.uuid));
     const body = candidates.length
-        ? candidates.map((token) => `<button type="button" data-sf-action="set-target" data-token-uuid="${escapeAttr(token.uuid)}" class="${context.target?.uuid === token.uuid ? "is-current" : ""}">
+        ? candidates.map((token) => `<button type="button" data-sf-action="set-target" data-token-uuid="${escapeAttr(token.uuid)}" class="${selected.has(token.uuid) ? "is-current" : ""}" aria-pressed="${selected.has(token.uuid)}">
             <img src="${escapeAttr(token.texture?.src ?? token.actor?.img ?? "icons/svg/mystery-man.svg")}" alt=""><span>${escapeHtml(labels.get(token.uuid) ?? token.name)}</span>
-            ${context.target?.uuid === token.uuid ? '<i class="fa-solid fa-crosshairs"></i>' : ""}
+            ${selected.has(token.uuid) ? '<i class="fa-solid fa-crosshairs"></i>' : ""}
         </button>`).join("")
         : `<p>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoCombatants"))}</p>`;
     const label = t("SMOOTHER_FIGHT.HUD.QuickTarget");
     return `<details class="sf-quick-targets">
-        <summary title="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-up"></i></summary>
+        <summary title="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
         <div>${body}</div>
     </details>`;
 }
@@ -1412,9 +1588,11 @@ function getHudContext() {
     const actor = combatant?.actor ?? null;
     if (!combatant || !actor) return null;
     const token = combatant.token ?? resolveCombatantToken(combatant);
+    if (!isCombatantVisibleToUser(game.user?.isGM, combatant.hidden)) return null;
     const linkedUser = getLinkedUser(combatant, actor);
-    const target = getTargetForUser(linkedUser);
-    return { combat, combatant, actor, token, linkedUser, target };
+    const targets = getTargetsForUser(linkedUser);
+    const target = targets.at(-1) ?? null;
+    return { combat, combatant, actor, token, linkedUser, target, targets };
 }
 
 function getLinkedUser(combatant, actor) {
@@ -1502,13 +1680,16 @@ function getEffectiveTokenOwner(token) {
 }
 
 function isCurrentUserTarget(token) {
-    if (!token || !game.user || game.user.isGM) return false;
+    if (!token || !game.user) return false;
     const explicitOwnerId = getExplicitTokenOwnerId(token);
     if (explicitOwnerId) return explicitOwnerId === game.user.id;
 
     const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
     const actorOwnerId = actorLinks[actorAssignmentUuid(token.actor, token.actorId)];
     if (actorOwnerId) return actorOwnerId === game.user.id;
+    const primaryGmId = getSetting("primaryGmId", "");
+    if (primaryGmId && game.user.isGM) return primaryGmId === game.user.id;
+    if (game.user.isGM) return false;
     return Boolean(token.actor?.testUserPermission?.(game.user, "OWNER"));
 }
 
@@ -1606,16 +1787,18 @@ async function setExplicitTokenOwner(token, userId) {
     canvas?.hud?.token?.render?.();
 }
 
-function getTargetForUser(user) {
-    if (!user) return null;
-    let uuid = runtime.targetByUser.get(user.id);
+function getTargetsForUser(user) {
+    if (!user) return [];
+    let uuids = normalizeTargetReferences(runtime.targetByUser.get(user.id));
     if (user.id === game.user.id) {
-        const localTarget = Array.from(user.targets ?? []).at(-1);
-        uuid = tokenUuid(localTarget);
-        runtime.targetByUser.set(user.id, uuid || null);
+        uuids = normalizeTargetReferences(user.targets);
+        runtime.targetByUser.set(user.id, uuids);
     }
-    const target = uuid ? resolveToken(uuid) : null;
-    return !game.user.isGM && target?.hidden ? null : target;
+    return uuids.map(resolveToken).filter((target) => target && (game.user.isGM || !target.hidden));
+}
+
+function getTargetForUser(user) {
+    return getTargetsForUser(user).at(-1) ?? null;
 }
 
 function getSceneTokens() {
@@ -1667,7 +1850,7 @@ function collectCombatEventGroups(context) {
     }));
     for (const message of messages) {
         if (isDiceAnimationPending(message)) continue;
-        if (!isDamageMessage(message) && !isDefenseMessage(message) && !isMagicFumbleMessage(message)) continue;
+        if (!isDamageMessage(message) && !isDefenseMessage(message) && !isFumbleTableMessage(message)) continue;
         const fumble = getFumbleData(message);
         const cardContext = getMessageContext(message);
         let group = isDefenseMessage(message)
@@ -1685,15 +1868,16 @@ function collectCombatEventGroups(context) {
         if (!group) {
             group = [...groups].reverse().find((candidate) =>
                 message.timestamp >= candidate.primary.timestamp &&
-                (isMagicFumbleMessage(message)
-                    ? candidate.kind === "spell" && message.speaker?.actor === candidate.primary.speaker?.actor
+                (isFumbleTableMessage(message)
+                    ? (fumble?.kind === "fight" ? candidate.kind === "attack" : candidate.kind === "spell")
+                        && message.speaker?.actor === candidate.primary.speaker?.actor
                     : isDefenseMessage(message)
                     ? candidate.kind === "attack"
                     : message.speaker?.actor === candidate.primary.speaker?.actor)
             );
         }
         if (!group) continue;
-        if (isMagicFumbleMessage(message)) group.fumbles.push(message);
+        if (isFumbleTableMessage(message)) group.fumbles.push(message);
         else (isDamageMessage(message) ? group.damages : group.defenses).push(message);
     }
 
@@ -1708,14 +1892,30 @@ async function performAttack(context, attackId) {
     }
     const attack = context.actor.attacks?.find((candidate) => candidate.id === attackId);
     if (!attack) return;
-    if (attack.isPrepared) {
-        const success = await context.actor.rollAttack(attackId);
-        if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
+    const prepared = attack.isPrepared || context.actor.getFlag?.("splittermond", "preparedAttack") === attackId;
+    if (prepared) {
+        runtime.pendingOffenseKinds.set(context.actor.id, {
+            kind: isRangedAttack(attack) ? "ranged" : "attack",
+            expiresAt: Date.now() + 60_000,
+        });
+        try {
+            const success = await context.actor.rollAttack(attackId);
+            if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
+        } catch (error) {
+            runtime.pendingOffenseKinds.delete(context.actor.id);
+            throw error;
+        }
     } else {
         await context.actor.addTicks(await getAttackSpeed(attack), `${localizeSystem("splittermond.attack", "Angriff")}: ${attack.name}`);
         await context.actor.setFlag("splittermond", "preparedAttack", attackId);
     }
     scheduleRender();
+}
+
+async function cancelPreparedAttack(context) {
+    await context.actor.setFlag("splittermond", "preparedAttack", null);
+    ui.notifications.info(t("SMOOTHER_FIGHT.HUD.AttackCancelled"));
+    scheduleRender(0);
 }
 
 async function performSpell(context, spellId) {
@@ -1801,13 +2001,30 @@ function showTokenOnCanvas(token) {
     }
 
     const { x, y } = object.center;
+    const hud = document.querySelector(`#${MODULE_ID}-hud:not(.is-hidden)`);
+    const hudTop = hud?.getBoundingClientRect?.().top;
+    const viewportCenter = (document.documentElement.clientHeight || window.innerHeight) / 2;
+    const desiredScreenY = Number.isFinite(hudTop)
+        ? Math.min(viewportCenter, Math.max(90, hudTop - 90))
+        : viewportCenter;
+    const scale = Math.max(Number(canvas.stage?.scale?.y) || 1, 0.1);
+    const yOffset = Math.max(0, viewportCenter - desiredScreenY) / scale;
     const animation = canvas.animatePan({
         x,
-        y,
+        y: y + yOffset,
         scale: Math.max(canvas.stage.scale.x, canvas.dimensions.scale.default),
     });
     canvas.ping?.(object.center);
     return animation;
+}
+
+async function toggleCombatantVisibility(context) {
+    const hidden = Boolean(context.combatant.hidden || context.token?.hidden);
+    const nextHidden = !hidden;
+    const updates = [context.combatant.update({ hidden: nextHidden })];
+    if (context.token?.update) updates.push(context.token.update({ hidden: nextHidden }));
+    await Promise.all(updates);
+    scheduleRender(0);
 }
 
 async function requireGm(callback) {
@@ -1852,32 +2069,39 @@ async function setTargetFromQuickMenu(context, uuid) {
     const token = resolveToken(uuid);
     if (!token) return;
     const recipient = game.user.isGM ? (context.linkedUser ?? game.user) : game.user;
-    runtime.targetByUser.set(recipient.id, token.uuid);
+    const current = new Set(context.targets.map((candidate) => candidate.uuid));
+    const targeted = !current.has(token.uuid);
+    if (targeted) current.add(token.uuid);
+    else current.delete(token.uuid);
+    const targetUuids = Array.from(current);
+    runtime.targetByUser.set(recipient.id, targetUuids);
 
     if (recipient.id === game.user.id) {
-        setLocalTarget(token);
-        publishOwnTarget(token.uuid);
+        setLocalTarget(token, targeted, false);
+        publishOwnTarget();
     } else {
         game.socket.emit(SOCKET, {
             type: "set-target",
             senderId: game.user.id,
             recipientId: recipient.id,
             tokenUuid: token.uuid,
+            targeted,
+            releaseOthers: false,
         });
         game.socket.emit(SOCKET, {
             type: "target-update",
             senderId: game.user.id,
             userId: recipient.id,
-            tokenUuid: token.uuid,
+            tokenUuids: targetUuids,
         });
     }
-    ui.notifications.info(t("SMOOTHER_FIGHT.HUD.TargetChanged", { target: token.name }));
+    ui.notifications.info(t(targeted ? "SMOOTHER_FIGHT.HUD.TargetAdded" : "SMOOTHER_FIGHT.HUD.TargetRemoved", { target: token.name }));
     scheduleRender();
 }
 
-function setLocalTarget(tokenDocument) {
+function setLocalTarget(tokenDocument, targeted = true, releaseOthers = false) {
     const tokenObject = tokenDocument.object ?? canvas?.tokens?.get(tokenDocument.id);
-    tokenObject?.setTarget(true, { user: game.user, releaseOthers: true, groupSelection: false });
+    tokenObject?.setTarget(targeted, { user: game.user, releaseOthers, groupSelection: false });
 }
 
 function canChooseTarget(context) {
@@ -1925,16 +2149,16 @@ function refreshTokenHover(tokenObject) {
     }
 }
 
-function publishOwnTarget(explicitUuid) {
+function publishOwnTarget(explicitUuids) {
     if (!game.user) return;
-    const selected = Array.from(game.user.targets ?? []).at(-1);
-    const uuid = explicitUuid === undefined ? tokenUuid(selected) : explicitUuid;
-    runtime.targetByUser.set(game.user.id, uuid || null);
+    const targetUuids = normalizeTargetReferences(explicitUuids === undefined ? game.user.targets : explicitUuids);
+    runtime.targetByUser.set(game.user.id, targetUuids);
     game.socket?.emit(SOCKET, {
         type: "target-update",
         senderId: game.user.id,
         userId: game.user.id,
-        tokenUuid: uuid || null,
+        targetUuids,
+        tokenUuid: targetUuids.at(-1) ?? null,
     });
 }
 
@@ -1942,19 +2166,155 @@ async function onCreateChatMessage(message) {
     try {
         await waitForDiceSoNice(message);
         if (isOffensiveCombatMessage(message)) await attachCombatContext(message);
-        if (isMagicFumbleMessage(message)) await attachMagicFumbleActions(message);
+        if (isFumbleTableMessage(message)) await attachFumbleActions(message);
         if (isDefenseMessage(message)) await processDefenseMessage(message);
+        announceMessageFeedback(message);
     } catch (error) {
         console.error(`${MODULE_ID} | Failed to process chat message`, error);
     }
 }
 
+function announceMessageFeedback(message) {
+    if (!message?.id || runtime.heardMessageIds.has(message.id)) return;
+    let kind = null;
+    if (isDefenseMessage(message)) kind = "defense";
+    else if (isDamageMessage(message)) kind = "damage";
+    else if (isSpellMessage(message)) kind = "spell";
+    else if (combatMessageKind(message) === "attack") {
+        const contextKind = getMessageContext(message)?.actionKind;
+        if (contextKind === "ranged" || isRangedAttackMessage(message)) kind = "ranged";
+    }
+    if (!kind) return;
+
+    runtime.heardMessageIds.add(message.id);
+    const messageContext = getMessageContext(message);
+    const speakerActor = resolveSpeakerActor(message);
+    const damageTarget = kind === "damage" ? resolveDamageApplicationTarget(message) : null;
+    const tokenUuid = kind === "damage"
+        ? messageContext?.targetTokenUuid ?? damageTarget?.uuid ?? null
+        : speakerTokenUuid(message) ?? messageContext?.defenderTokenUuid ?? messageContext?.attackerTokenUuid ?? null;
+    triggerFeedback(kind, { tokenUuid, actorUuid: damageTarget?.actor?.uuid ?? speakerActor?.uuid ?? null });
+}
+
+function announceTurnFeedback(combat) {
+    const combatant = combat?.combatant ?? null;
+    const combatantId = combatant?.id ?? null;
+    if (!combatantId || combatantId === runtime.lastTurnCombatantId) return;
+    runtime.lastTurnCombatantId = combatantId;
+    const actor = combatant.actor;
+    const token = combatant.token ?? resolveCombatantToken(combatant);
+    if (!actor || !isCombatantVisibleToUser(game.user?.isGM, combatant.hidden)) return;
+    const linkedUser = getLinkedUser(combatant, actor);
+    const ownTurn = linkedUser?.id === game.user?.id
+        || (!linkedUser && Boolean(actor.testUserPermission?.(game.user, "OWNER")));
+    if (ownTurn) triggerFeedback("turn", { tokenUuid: token?.uuid ?? null, actorUuid: actor.uuid });
+}
+
+function triggerFeedback(kind, { tokenUuid = null, actorUuid = null } = {}) {
+    runtime.feedback = { kind, tokenUuid, actorUuid, id: foundry?.utils?.randomID?.() ?? `${Date.now()}` };
+    clearTimeout(runtime.feedbackTimer);
+    runtime.feedbackTimer = setTimeout(() => {
+        runtime.feedback = null;
+        scheduleRender(0);
+    }, 1400);
+    playFeedbackTone(kind);
+    scheduleRender(0);
+}
+
+function feedbackMarkup(token, actor) {
+    const feedback = runtime.feedback;
+    if (!feedback) return "";
+    const matches = (feedback.tokenUuid && feedback.tokenUuid === token?.uuid)
+        || (feedback.actorUuid && feedback.actorUuid === actor?.uuid);
+    if (!matches) return "";
+    const icons = {
+        defense: "fa-shield-halved",
+        damage: "fa-droplet",
+        spell: "fa-wand-sparkles",
+        ranged: "fa-crosshairs",
+        turn: "fa-bolt",
+    };
+    return `<span class="sf-action-feedback is-${escapeAttr(feedback.kind)}"><i class="fa-solid ${icons[feedback.kind] ?? "fa-burst"}"></i></span>`;
+}
+
+function unlockFeedbackAudio() {
+    if (!getSetting("audioFeedback", true)) return;
+    const AudioContext = window.AudioContext ?? window.webkitAudioContext;
+    if (!AudioContext) return;
+    runtime.audioContext ??= new AudioContext();
+    void runtime.audioContext.resume?.();
+}
+
+function playFeedbackTone(kind) {
+    if (!getSetting("audioFeedback", true)) return;
+    unlockFeedbackAudio();
+    const audio = runtime.audioContext;
+    if (!audio || audio.state !== "running") return;
+    const patterns = {
+        defense: [[330, 0], [494, 0.08], [659, 0.16]],
+        damage: [[180, 0], [125, 0.1]],
+        spell: [[523, 0], [659, 0.07], [784, 0.14]],
+        ranged: [[880, 0], [440, 0.06]],
+        turn: [[440, 0], [660, 0.11], [880, 0.22]],
+    };
+    const notes = patterns[kind] ?? [];
+    const now = audio.currentTime;
+    for (const [frequency, delay] of notes) {
+        const oscillator = audio.createOscillator();
+        const gain = audio.createGain();
+        oscillator.type = kind === "damage" ? "triangle" : "sine";
+        oscillator.frequency.setValueAtTime(frequency, now + delay);
+        gain.gain.setValueAtTime(0.0001, now + delay);
+        gain.gain.exponentialRampToValueAtTime(0.055, now + delay + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.18);
+        oscillator.connect(gain).connect(audio.destination);
+        oscillator.start(now + delay);
+        oscillator.stop(now + delay + 0.2);
+    }
+}
+
 async function onUpdateChatMessage(message, changes) {
-    if (!hasSplittermondCheckUpdate(changes) || !isDefenseMessage(message)) return;
+    if ((!hasSplittermondCheckUpdate(changes) && !hasDefenseContextUpdate(changes)) || !isDefenseMessage(message)) return;
     try {
-        await processDefenseMessage(message);
+        const author = message.author ?? game.users.get(message.user?.id ?? message.user);
+        const pending = normalizePendingDefense(getMessageContext(message));
+        const processForAuthor = Boolean(
+            game.user.isGM
+            && !isOwnMessage(message)
+            && author
+            && pending
+            && canUserSubmitDefense(author, pending, message)
+        );
+        await processDefenseMessage(
+            message,
+            processForAuthor ? pending : null,
+            { allowForeign: processForAuthor }
+        );
+        announceMessageFeedback(message);
     } catch (error) {
         console.error(`${MODULE_ID} | Failed to process updated defense message`, error);
+    }
+}
+
+function hasDefenseContextUpdate(changes) {
+    if (!changes || typeof changes !== "object") return false;
+    const contextPath = `flags.${MODULE_ID}.context`;
+    return Object.keys(changes).some((key) => key === contextPath || key.startsWith(`${contextPath}.`))
+        || Boolean(changes.flags?.[MODULE_ID]?.context);
+}
+
+async function waitForChatMessage(messageId, attempts = 12) {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+        const message = game.messages.get(messageId);
+        if (message) return message;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return null;
+}
+
+async function waitForDefenseProcessing(messageId, attempts = 20) {
+    for (let attempt = 0; attempt < attempts && runtime.processingDefenseMessages.has(messageId); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
     }
 }
 
@@ -1995,7 +2355,10 @@ async function attachCombatContext(message) {
     );
     const actor = speakerCombatant?.actor ?? (message.speaker?.actor ? game.actors.get(message.speaker.actor) : null);
     const linkedUser = speakerCombatant && actor ? getLinkedUser(speakerCombatant, actor) : game.user;
-    const target = getTargetForUser(linkedUser);
+    const targets = getTargetsForUser(linkedUser);
+    const target = targets.at(-1) ?? null;
+    const pendingKind = runtime.pendingOffenseKinds.get(actor?.id);
+    if (pendingKind && pendingKind.expiresAt < Date.now()) runtime.pendingOffenseKinds.delete(actor.id);
     const context = {
         combatId: combat?.id ?? null,
         combatantId: speakerCombatant?.id ?? null,
@@ -2004,9 +2367,14 @@ async function attachCombatContext(message) {
         targetTokenUuid: target?.uuid ?? null,
         targetActorUuid: target?.actor?.uuid ?? null,
         targetName: target?.name ?? target?.actor?.name ?? null,
+        targetTokenUuids: targets.map((candidate) => candidate.uuid),
+        targetActorUuids: targets.map((candidate) => candidate.actor?.uuid).filter(Boolean),
+        targetNames: targets.map((candidate) => candidate.name ?? candidate.actor?.name).filter(Boolean),
+        actionKind: pendingKind?.expiresAt >= Date.now() ? pendingKind.kind : null,
         linkedUserId: linkedUser?.id ?? game.user.id,
         createdAt: Date.now(),
     };
+    if (pendingKind) runtime.pendingOffenseKinds.delete(actor?.id);
     await safeSetFlag(message, "context", context);
 }
 
@@ -2028,46 +2396,89 @@ function captureSystemActiveDefense(message, html) {
 
 function prepareRenderedChatMessage(message, html) {
     if (!html) return;
-    if (isMagicFumbleMessage(message) && !getFumbleData(message)) void attachMagicFumbleActions(message, html);
+    if (isFumbleTableMessage(message) && !getFumbleData(message)) void attachFumbleActions(message, html);
+    if (!mayControlSpeakerActor(message)) {
+        removeOutgoingDamageControls(html);
+        html.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
+    }
     captureSystemActiveDefense(message, html);
-    bindMagicFumbleActions(message, html);
+    bindFumbleActions(message, html);
 }
 
-async function attachMagicFumbleActions(message, renderedRoot = null) {
-    if (!(game.user.isGM || isOwnMessage(message)) || getFumbleData(message)) return;
+async function attachFumbleActions(message, renderedRoot = null, sourceMessageId = null, sourceItemId = null) {
+    const existing = getFumbleData(message);
+    if (!(game.user.isGM || isOwnMessage(message)) || (existing && !sourceMessageId && !sourceItemId)) return;
     const renderedContent = renderedRoot
         ? (renderedRoot.matches?.(".message-content") ? renderedRoot : renderedRoot.querySelector?.(".message-content"))
         : null;
-    const fumble = createMagicFumbleData(message, renderedContent ?? message.content);
-    if (!fumble) return;
-    const content = decorateMagicFumbleCard(renderedContent?.innerHTML ?? message.content, fumble);
+    const baseFumble = existing ?? createFumbleData(message, renderedContent ?? message.content);
+    if (!baseFumble) return;
+    const fumble = {
+        ...baseFumble,
+        sourceMessageId: sourceMessageId ?? baseFumble.sourceMessageId ?? null,
+        sourceItemId: sourceItemId ?? baseFumble.sourceItemId ?? null,
+    };
+    const content = decorateFumbleCard(renderedContent?.innerHTML ?? message.content, fumble);
     if (renderedContent) renderedContent.innerHTML = content;
     await message.update({ content, [`flags.${MODULE_ID}.fumble`]: fumble });
 }
 
-function createMagicFumbleData(message, contentOrRoot = message.content) {
-    const extracted = extractMagicFumbleEffects(contentOrRoot);
-    if (!extracted.damage && !extracted.conditions.length) return null;
+function createFumbleData(message, contentOrRoot = message.content) {
+    const kind = fumbleTableKind(message);
+    if (!kind) return null;
+    const extracted = extractFumbleEffects(contentOrRoot);
     const actor = resolveSpeakerActor(message);
-    const sourceMessage = [...Array.from(game.messages?.contents ?? [])].reverse().find((candidate) =>
-        candidate.id !== message.id &&
-        isSpellMessage(candidate) &&
-        candidate.speaker?.actor === message.speaker?.actor &&
-        Number(candidate.timestamp) <= Number(message.timestamp)
-    );
+    const sourceMessage = findFumbleSourceMessage(message, kind);
+    const sourceContext = getMessageContext(sourceMessage);
     return {
+        kind,
         actorUuid: actor?.uuid ?? null,
         actorName: actor?.name ?? message.speaker?.alias ?? "",
-        sourceMessageId: sourceMessage?.id ?? null,
+        sourceMessageId: sourceContext?.attackMessageId ?? sourceMessage?.id ?? null,
+        sourceItemId: resolveFumbleSourceItemId(sourceMessage),
         damage: extracted.damage,
+        ticks: extracted.ticks,
+        tickMessage: extracted.tickMessage,
+        damagesWeapon: extracted.damagesWeapon,
         conditions: extracted.conditions,
         conditionMode: extracted.conditionMode,
         damageApplied: false,
+        ticksApplied: false,
+        weaponDamageApplied: false,
         conditionsApplied: false,
     };
 }
 
-function extractMagicFumbleEffects(contentOrRoot) {
+function resolveFumbleSourceItemId(message) {
+    if (!message) return null;
+    const actor = resolveSpeakerActor(message);
+    const itemData = getDefenseCheck(message)?.itemData
+        ?? message.system?.checkReport?.itemData
+        ?? message.system?.itemData;
+    const ids = [itemData?.id, itemData?._id, itemData?.item?.id, itemData?.item?._id].filter(Boolean);
+    const direct = ids.map((id) => actor?.items?.get?.(id)).find(Boolean);
+    if (direct) return direct.id;
+    const name = String(itemData?.name ?? itemData?.item?.name ?? "").trim();
+    return Array.from(actor?.items ?? []).find((item) =>
+        ["weapon", "shield"].includes(item.type) && item.name === name
+    )?.id ?? null;
+}
+
+function findFumbleSourceMessage(message, kind) {
+    return [...Array.from(game.messages?.contents ?? [])].reverse().find((candidate) => {
+        if (candidate.id === message.id || isFumbleTableMessage(candidate)) return false;
+        if (candidate.speaker?.actor !== message.speaker?.actor) return false;
+        if (Number(candidate.timestamp) > Number(message.timestamp)) return false;
+        if (kind === "magic") return isSpellMessage(candidate);
+        if (isDefenseMessage(candidate)) {
+            const check = getDefenseCheck(candidate);
+            return Boolean(check?.isFumble || String(candidate.content ?? "").includes("attackFumble"));
+        }
+        return isOffensiveCombatMessage(candidate) && Boolean(candidate.system?.checkReport?.isFumble);
+    }) ?? null;
+}
+
+function extractFumbleEffects(contentOrRoot) {
     let root = contentOrRoot;
     if (typeof contentOrRoot === "string") {
         const template = document.createElement("template");
@@ -2075,10 +2486,14 @@ function extractMagicFumbleEffects(contentOrRoot) {
         root = template.content;
     }
     const active = root?.querySelector?.(".fumble-table-result-item-active");
-    if (!active) return { damage: 0, conditions: [], conditionMode: "all" };
+    if (!active) return { damage: 0, ticks: 0, tickMessage: "", damagesWeapon: false, conditions: [], conditionMode: "all" };
     const inlineRoll = active.querySelector(".inline-roll, [data-roll]");
     const damageMatch = inlineRoll?.textContent?.trim().match(/-?\d+/u);
     const damage = Math.max(0, Number.parseInt(damageMatch?.[0] ?? "0", 10) || 0);
+    const tickLink = active.querySelector(".add-tick[data-ticks]");
+    const tickDirective = String(active.innerHTML ?? "").match(/@Ticks\[\s*(\d+)\s*Ticks?(?:\s*,\s*([^\]]+))?\]/iu);
+    const ticks = Math.max(0, Number.parseInt(tickLink?.dataset?.ticks ?? tickDirective?.[1] ?? "0", 10) || 0);
+    const tickMessage = String(tickLink?.dataset?.message ?? tickDirective?.[2] ?? "").trim();
     const conditions = [];
     for (const link of active.querySelectorAll("a[data-uuid], a[data-pack], a.content-link")) {
         const pack = link.dataset.pack ?? "";
@@ -2088,11 +2503,21 @@ function extractMagicFumbleEffects(contentOrRoot) {
         if (!parsed.name) continue;
         conditions.push({ uuid: uuid || null, name: parsed.name, level: parsed.level });
     }
+    const activeText = String(active.textContent ?? "");
+    const damagesWeapon = /\b(?:beschädigte\s+Waffe|damaged\s+weapon)\b/iu.test(activeText);
+    if (/\b(?:liegend|prone)\b/iu.test(activeText)
+        && !conditions.some((condition) => /^(?:liegend|prone)$/iu.test(condition.name))) {
+        conditions.push({
+            uuid: null,
+            name: String(game.i18n.lang ?? "").toLocaleLowerCase().startsWith("de") ? "Liegend" : "Prone",
+            level: 1,
+        });
+    }
     const conditionMode = /\b(?:oder|or)\b/iu.test(active.textContent ?? "") ? "choose" : "all";
-    return { damage, conditions, conditionMode };
+    return { damage, ticks, tickMessage, damagesWeapon, conditions, conditionMode };
 }
 
-function decorateMagicFumbleCard(content, fumble) {
+function decorateFumbleCard(content, fumble) {
     if (String(content).includes("sf-fumble-actions")) return content;
     const template = document.createElement("template");
     template.innerHTML = content ?? "";
@@ -2106,6 +2531,8 @@ function decorateMagicFumbleCard(content, fumble) {
             : "";
     const actions = `<div class="sf-fumble-actions">
         <strong><i class="fa-solid fa-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumble"))}</strong>
+        ${fumble.ticks ? `<button type="button" data-sf-fumble-action="ticks"><i class="fa-solid fa-stopwatch"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleTicks", { ticks: fumble.ticks }))}</button>` : ""}
+        ${fumble.damagesWeapon && fumble.sourceItemId ? `<button type="button" data-sf-fumble-action="weapon"><i class="fa-solid fa-hammer"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleWeaponDamage"))}</button>` : ""}
         ${fumble.damage ? `<button type="button" data-sf-fumble-action="damage"><i class="fa-solid fa-heart-crack"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleDamage", { damage: fumble.damage }))}</button>` : ""}
         ${conditionActions}
     </div>`;
@@ -2115,7 +2542,7 @@ function decorateMagicFumbleCard(content, fumble) {
     return wrapper.innerHTML;
 }
 
-function bindMagicFumbleActions(message, html) {
+function bindFumbleActions(message, html) {
     applyFumbleActionState(message, html);
     for (const button of html.querySelectorAll("[data-sf-fumble-action]")) {
         if (button.dataset.smootherFightBound) continue;
@@ -2123,7 +2550,7 @@ function bindMagicFumbleActions(message, html) {
         button.addEventListener("click", async (event) => {
             event.preventDefault();
             event.stopPropagation();
-            await handleMagicFumbleAction(message, button.dataset.sfFumbleAction);
+            await handleFumbleAction(message, button.dataset.sfFumbleAction);
         });
     }
 }
@@ -2136,20 +2563,27 @@ function enforceFumbleActionState(root) {
 }
 
 function applyFumbleActionState(message, root) {
-    const fumble = getFumbleData(message) ?? createMagicFumbleData(message);
+    const fumble = getFumbleData(message) ?? createFumbleData(message);
     if (!fumble) return;
     const actor = resolveFumbleActor(message, fumble);
     const allowed = Boolean(game.user.isGM || actor?.isOwner);
     for (const button of root.querySelectorAll("[data-sf-fumble-action]")) {
-        const applied = button.dataset.sfFumbleAction === "damage" ? fumble.damageApplied : fumble.conditionsApplied;
+        const action = button.dataset.sfFumbleAction;
+        const applied = action === "damage"
+            ? fumble.damageApplied
+            : action === "ticks"
+                ? fumble.ticksApplied
+                : action === "weapon"
+                    ? fumble.weaponDamageApplied
+                : fumble.conditionsApplied;
         button.disabled = applied || !allowed;
         button.classList.toggle("is-applied", Boolean(applied));
         if (applied) button.title = t("SMOOTHER_FIGHT.HUD.AlreadyApplied");
     }
 }
 
-async function handleMagicFumbleAction(message, action) {
-    const fumble = getFumbleData(message) ?? createMagicFumbleData(message);
+async function handleFumbleAction(message, action) {
+    const fumble = getFumbleData(message) ?? createFumbleData(message);
     if (!fumble) return;
     const actor = resolveFumbleActor(message, fumble);
     if (!actor || !(game.user.isGM || actor.isOwner)) {
@@ -2157,8 +2591,25 @@ async function handleMagicFumbleAction(message, action) {
         return;
     }
     const updated = { ...fumble };
+    const fumbleLabel = updated.kind === "fight"
+        ? t("SMOOTHER_FIGHT.HUD.CombatFumble")
+        : t("SMOOTHER_FIGHT.HUD.MagicFumble");
+    if (action === "ticks" && !updated.ticksApplied && updated.ticks > 0) {
+        await actor.addTicks(updated.ticks, updated.tickMessage || fumbleLabel, false);
+        updated.ticksApplied = true;
+        ui.notifications.info(t("SMOOTHER_FIGHT.HUD.FumbleTicksApplied", { ticks: updated.ticks, name: actor.name }));
+    }
+    if (action === "weapon" && !updated.weaponDamageApplied && updated.sourceItemId) {
+        const item = actor.items?.get?.(updated.sourceItemId);
+        if (!item || !["weapon", "shield"].includes(item.type)) throw new Error("Fumble weapon could not be resolved");
+        const currentDamageLevel = Math.max(0, numericValue(item.system?.damageLevel));
+        const nextDamageLevel = Math.min(2, currentDamageLevel + 1);
+        await item.update({ "system.damageLevel": nextDamageLevel });
+        updated.weaponDamageApplied = true;
+        ui.notifications.info(t("SMOOTHER_FIGHT.HUD.FumbleWeaponDamageApplied", { item: item.name }));
+    }
     if (action === "damage" && !updated.damageApplied && updated.damage > 0) {
-        await actor.consumeCost("health", fullyConsumedCost(updated.damage), t("SMOOTHER_FIGHT.HUD.MagicFumble"));
+        await actor.consumeCost("health", fullyConsumedCost(updated.damage), fumbleLabel);
         updated.damageApplied = true;
         ui.notifications.info(t("SMOOTHER_FIGHT.HUD.FumbleDamageApplied", { damage: updated.damage, name: actor.name }));
     }
@@ -2234,16 +2685,23 @@ function getFumbleData(message) {
     return message?.getFlag?.(MODULE_ID, "fumble") ?? message?.flags?.[MODULE_ID]?.fumble ?? null;
 }
 
-function isMagicFumbleMessage(message) {
+function isFumbleTableMessage(message) {
     const content = String(message?.content ?? "");
-    if (!content.includes("fumble-table-result")) return false;
+    return content.includes("fumble-table-result");
+}
+
+function fumbleTableKind(message) {
+    if (!isFumbleTableMessage(message)) return null;
+    const content = String(message?.content ?? "");
+    const attackLabel = localizeSystem("splittermond.attackFumble", "Kampfpatzer");
+    if (content.includes(attackLabel)) return "fight";
     const formula = String(message?.rolls?.[0]?.formula ?? "");
     const labels = [
         localizeSystem("splittermond.magicFumbleSorcerer", "Zauberpatzer (Zauberer)"),
         localizeSystem("splittermond.magicFumblePriest", "Zauberpatzer (Priester)"),
         localizeSystem("splittermond.focusCosts", "Fokuskosten"),
     ];
-    return labels.some((label) => content.includes(label) || formula.includes(label));
+    return labels.some((label) => content.includes(label) || formula.includes(label)) ? "magic" : "fight";
 }
 
 function rememberPendingDefense(message, targetOverride = null, options = {}) {
@@ -2259,6 +2717,8 @@ function rememberPendingDefense(message, targetOverride = null, options = {}) {
         targetActorUuid: target?.actor?.uuid ?? null,
         defenderTokenUuid: defender?.uuid ?? null,
         defenderActorUuid: defender?.actor?.uuid ?? null,
+        defenseId: options.defense?.id ?? null,
+        defenseSkillId: options.defense?.skill?.id ?? null,
         assisted: Boolean(options.assisted),
         expiresAt: Date.now() + 10 * 60 * 1000,
     };
@@ -2278,6 +2738,8 @@ function normalizePendingDefense(value) {
         targetActorUuid: typeof value.targetActorUuid === "string" ? value.targetActorUuid : null,
         defenderTokenUuid: typeof value.defenderTokenUuid === "string" ? value.defenderTokenUuid : null,
         defenderActorUuid: typeof value.defenderActorUuid === "string" ? value.defenderActorUuid : null,
+        defenseId: typeof value.defenseId === "string" ? value.defenseId : null,
+        defenseSkillId: typeof value.defenseSkillId === "string" ? value.defenseSkillId : null,
         assisted: Boolean(value.assisted),
         expiresAt: Number(value.expiresAt) || Date.now() + 60 * 1000,
     };
@@ -2313,14 +2775,25 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
     const expectedActor = pending.assisted ? defender?.actor : target?.actor;
     if (expectedActor && message.speaker?.actor && expectedActor.id !== message.speaker.actor) return;
     if (pending.assisted && !isValidDefenderAttempt(pending, message)) return;
+    requestLatestEventForDefense(pending);
 
+    const existingDefenseContext = getMessageContext(message) ?? {};
+    const contentTemplate = document.createElement("template");
+    contentTemplate.innerHTML = message.content ?? "";
+    const defensePresentation = parseActiveDefenseDescription(contentTemplate.content.textContent);
+    const numbingDamage = defensePresentation.numbingDamage;
     await safeSetFlag(message, "context", {
+        ...existingDefenseContext,
         attackMessageId: pending.attackMessageId,
         targetTokenUuid: pending.targetTokenUuid,
         targetActorUuid: pending.targetActorUuid,
         defenderTokenUuid: pending.defenderTokenUuid,
         defenderActorUuid: pending.defenderActorUuid,
+        defenseId: pending.defenseId,
+        defenseSkillId: pending.defenseSkillId,
         assisted: pending.assisted,
+        numbingDamage: existingDefenseContext.numbingDamage ?? (numbingDamage || null),
+        numbingDamageApplied: Boolean(existingDefenseContext.numbingDamageApplied),
     });
 
     if (!game.user.isGM) {
@@ -2340,16 +2813,29 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
         return;
     }
 
-    if (!check.succeeded) {
+    if (!activeDefenseChangesDifficulty(check, defensePresentation.defenseValue)) {
         await recordDefenseAttempt(pending.attackMessageId, message, pending);
         runtime.pendingDefense = null;
         scheduleRender(0);
         return;
     }
 
-    const newOffense = await recreateOffenseAfterDefense(pending.attackMessageId, message, check);
+    const newOffense = await recreateOffenseAfterDefense(
+        pending.attackMessageId,
+        message,
+        check,
+        defensePresentation.defenseValue
+    );
     runtime.pendingDefense = null;
     if (newOffense) scheduleRender(0);
+}
+
+function requestLatestEventForDefense(pending) {
+    const offense = game.messages.get(pending?.attackMessageId);
+    const combatant = game.combat?.combatant;
+    if (!offense || !combatant || !messageBelongsToCombatant(offense, combatant)) return;
+    runtime.eventExpansionRequest = "latest";
+    scheduleRender(0);
 }
 
 async function recordDefenseAttempt(offenseMessageId, defenseMessage, pending = null) {
@@ -2392,18 +2878,21 @@ function findPendingOffenseForDefense(message) {
     };
 }
 
-async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, defenseCheck) {
+async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, defenseCheck, displayedDefenseValue = null) {
     const original = game.messages.get(offenseMessageId);
     if (!original || !isOffensiveCombatMessage(original)) return null;
 
     const featureValue = findDefensiveFeatureValue(defenseCheck.itemData);
     const originalContext = getMessageContext(original) ?? {};
+    if (originalContext.supersededBy) return game.messages.get(originalContext.supersededBy) ?? null;
     const target = resolveToken(originalContext.targetTokenUuid);
     const calculatedBase = await target?.actor?.derivedValues?.[defenseCheck.defenseType]?.value?.calculate?.();
-    const candidateDefense = calculateActiveDefenseValue({
-        ...defenseCheck,
-        baseDefense: Number.isFinite(Number(calculatedBase)) ? Number(calculatedBase) : defenseCheck.baseDefense,
-    }, featureValue);
+    const candidateDefense = displayedDefenseValue !== null && Number.isFinite(Number(displayedDefenseValue))
+        ? Number(displayedDefenseValue)
+        : calculateActiveDefenseValue({
+            ...defenseCheck,
+            baseDefense: Number.isFinite(Number(calculatedBase)) ? Number(calculatedBase) : defenseCheck.baseDefense,
+        }, featureValue);
     const newDefense = bestActiveDefenseValue(originalContext.defenseValue, candidateDefense);
     const pending = normalizePendingDefense(getMessageContext(defenseMessage)) ?? runtime.pendingDefense;
     const actorUuid = pending?.defenderActorUuid ?? resolveSpeakerActor(defenseMessage)?.uuid ?? null;
@@ -2416,6 +2905,11 @@ async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, def
         originalContext.defenseMessageId,
         defenseMessage.id,
     ].filter(Boolean)));
+    await safeSetFlag(defenseMessage, "context", {
+        ...(getMessageContext(defenseMessage) ?? pending ?? {}),
+        resultingDefenseValue: candidateDefense,
+        defensiveFeatureValue: featureValue,
+    });
 
     if (Number.isFinite(Number(originalContext.defenseValue)) && newDefense <= Number(originalContext.defenseValue)) {
         await safeSetFlag(original, "context", {
@@ -2470,7 +2964,12 @@ async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, def
     const banner = `<div class="sf-chat-recalculated${hiddenClass}"><i class="fa-solid fa-shield-halved"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NewDefense", { defense: defenseLabel }))}</span><strong>${escapeHtml(newDefense)}</strong></div>`;
     const decorated = decorateRecalculatedCard(rendered, banner);
     await created.update({ content: decorated });
-    await safeSetFlag(original, "context", { ...getMessageContext(original), supersededBy: created.id });
+    await safeSetFlag(original, "context", {
+        ...getMessageContext(original),
+        attemptedDefenseActorUuids,
+        defenseMessageIds,
+        supersededBy: created.id,
+    });
     return created;
 }
 
@@ -2506,10 +3005,44 @@ async function handleChatCardAction(event, button) {
     const messageElement = button.closest(".sf-chat-message");
     const message = game.messages.get(messageElement?.dataset.messageId);
     if (!message || button.disabled) return;
+    const defenseNumbingDamage = Number.parseInt(button.dataset.sfDefenseNumbingDamage ?? "", 10);
+    if (Number.isFinite(defenseNumbingDamage) && defenseNumbingDamage > 0) {
+        event.preventDefault();
+        await applyDefenseNumbingDamage(message, defenseNumbingDamage);
+        return;
+    }
     const fumbleAction = button.dataset.sfFumbleAction;
     if (fumbleAction) {
         event.preventDefault();
-        await handleMagicFumbleAction(message, fumbleAction);
+        await handleFumbleAction(message, fumbleAction);
+        return;
+    }
+    if (isCombatFumbleRollControl(button)) {
+        event.preventDefault();
+        event.stopPropagation();
+        button.disabled = true;
+        try {
+            await rollCombatFumble(message);
+        } catch (error) {
+            console.error(`${MODULE_ID} | Combat fumble roll failed`, error);
+            ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+        } finally {
+            if (button.isConnected) button.disabled = false;
+        }
+        return;
+    }
+    if (isLegacyTickAction(button)) {
+        event.preventDefault();
+        if (!mayManageMessageRoll(message)) {
+            ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.NoOwner"));
+            return;
+        }
+        try {
+            await advanceLegacyChatTicks(message, button);
+        } catch (error) {
+            console.error(`${MODULE_ID} | Failed to advance legacy chat ticks`, error);
+            ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+        }
         return;
     }
     const localAction = button.dataset.localaction ?? button.dataset.localAction;
@@ -2518,6 +3051,10 @@ async function handleChatCardAction(event, button) {
     event.preventDefault();
     if (isRollManagementControl(button) && !mayManageMessageRoll(message)) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.NoOwner"));
+        return;
+    }
+    if (isOutgoingDamageControl(button) && !mayControlSpeakerActor(message)) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageOwnerOnly"));
         return;
     }
 
@@ -2563,6 +3100,70 @@ async function handleChatCardAction(event, button) {
     }
 }
 
+async function applyDefenseNumbingDamage(message, fallbackDamage) {
+    const actor = resolveSpeakerActor(message);
+    if (!actor || !(game.user.isGM || actor.isOwner)) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseDamageNotAllowed"));
+        return;
+    }
+    const context = getMessageContext(message) ?? {};
+    if (context.numbingDamageApplied) return;
+    const damage = Math.max(0, Number.parseInt(context.numbingDamage ?? fallbackDamage, 10) || 0);
+    if (!damage) return;
+
+    await actor.consumeCost("health", String(damage), t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageSource"));
+    await safeSetFlag(message, "context", {
+        ...context,
+        numbingDamage: damage,
+        numbingDamageApplied: true,
+    });
+    ui.notifications.info(t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageApplied", { damage, name: actor.name }));
+    scheduleRender(0);
+}
+
+function isCombatFumbleRollControl(control) {
+    const rollType = String(control?.dataset?.rollType ?? control?.dataset?.rolltype ?? "").toLocaleLowerCase();
+    const action = String(control?.dataset?.localaction ?? control?.dataset?.localAction ?? "").toLocaleLowerCase();
+    return rollType === "attackfumble" || action === "rollfumble";
+}
+
+async function rollCombatFumble(message) {
+    const actor = resolveSpeakerActor(message);
+    if (!actor || !(game.user.isGM || actor.testUserPermission?.(game.user, "OWNER") || actor.isOwner)) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.FumbleNotAllowed"));
+        return;
+    }
+    const sourceMessageId = getMessageContext(message)?.attackMessageId
+        ?? (isOffensiveCombatMessage(message) ? message.id : null);
+    const sourceItemId = resolveFumbleSourceItemId(message);
+    const created = await actor.rollAttackFumble();
+    if (created) await attachFumbleActions(created, null, sourceMessageId, sourceItemId);
+    runtime.eventExpansionRequest = "latest";
+    scheduleRender(0);
+}
+
+function isLegacyTickAction(control) {
+    return Boolean(control?.matches?.(".add-tick[data-ticks]"));
+}
+
+async function advanceLegacyChatTicks(message, button) {
+    const actor = resolveSpeakerActor(message);
+    const ticks = Number(button.dataset.ticks);
+    const mayAdvance = Boolean(game.user.isGM || actor?.testUserPermission?.(game.user, "OWNER") || actor?.isOwner);
+    if (!actor || !Number.isFinite(ticks) || ticks < 1 || !mayAdvance) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.NoOwner"));
+        return;
+    }
+
+    button.disabled = true;
+    try {
+        await actor.addTicks(ticks, button.dataset.message || undefined);
+        scheduleRender(0);
+    } finally {
+        if (button.isConnected) button.disabled = false;
+    }
+}
+
 function forwardToOriginalChatHandler(message, sourceButton, action) {
     const messageRoots = Array.from(document.querySelectorAll(".message[data-message-id]"))
         .filter((element) => element.dataset.messageId === message.id && !element.closest(`#${MODULE_ID}-hud`));
@@ -2586,6 +3187,10 @@ async function applyDamageToLinkedTarget(message, actionData) {
     const currentTargets = game.user?.targets;
     if (!target || !tokenObject || !currentTargets?.clear || !currentTargets?.add) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageTargetMissing"));
+        return;
+    }
+    if (!(game.user.isGM || target.actor?.testUserPermission?.(game.user, "OWNER"))) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageTargetNotOwned"));
         return;
     }
 
@@ -2618,6 +3223,7 @@ function resolveDamageApplicationTarget(message) {
 }
 
 async function beginActiveDefense(message) {
+    message = resolveLatestOffenseMessage(message);
     const target = rememberPendingDefense(message);
     if (!target?.actor || !(game.user.isGM || target.actor.isOwner)) {
         runtime.pendingDefense = null;
@@ -2631,6 +3237,7 @@ async function beginActiveDefense(message) {
 
 async function beginAdditionalTargetDefense(message) {
     if (!message) return;
+    message = resolveLatestOffenseMessage(message);
     const context = getMessageContext(message);
     const target = resolveToken(context?.targetTokenUuid);
     const attempted = new Set(context?.attemptedDefenseActorUuids ?? []);
@@ -2646,6 +3253,7 @@ async function beginAdditionalTargetDefense(message) {
 
 async function beginDefenderDefense(message) {
     if (!message) return;
+    message = resolveLatestOffenseMessage(message);
     const choices = getEligibleDefenderChoices(message, game.user);
     if (!choices.length) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenderUnavailable"));
@@ -2699,7 +3307,11 @@ async function beginDefenderDefense(message) {
         return;
     }
 
-    rememberPendingDefense(message, target, { defender: current.token, assisted: true });
+    rememberPendingDefense(message, target, {
+        defender: current.token,
+        defense: current.defense,
+        assisted: true,
+    });
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.WaitingForDefender", {
         defender: current.token.name ?? current.actor.name,
         target: target.name,
@@ -2730,6 +3342,7 @@ function getEligibleDefenderChoices(message, user) {
     if (!message || !user || !isOffensiveCombatMessage(message)) return [];
     const context = getMessageContext(message);
     if (context?.supersededBy || !message.system?.checkReport?.succeeded) return [];
+    if (!messageOffersActiveDefense(message) && !context?.recalculatedFrom) return [];
     const defenseType = String(message.system?.checkReport?.defenseType ?? context?.defenseType ?? "defense").toLocaleLowerCase();
     if (defenseType !== "defense" && defenseType !== "vtd") return [];
     const target = resolveToken(context?.targetTokenUuid);
@@ -2745,6 +3358,19 @@ function getEligibleDefenderChoices(message, user) {
         for (const defense of getCombatDefenseOptions(actor, { requireDefenderMastery: true })) choices.push({ token, actor, defense });
     }
     return choices;
+}
+
+function resolveLatestOffenseMessage(message) {
+    let current = message;
+    const visited = new Set();
+    while (current && !visited.has(current.id)) {
+        visited.add(current.id);
+        const nextId = getMessageContext(current)?.supersededBy;
+        const next = nextId ? game.messages.get(nextId) : null;
+        if (!next || !isOffensiveCombatMessage(next)) break;
+        current = next;
+    }
+    return current;
 }
 
 function getCombatDefenseOptions(actor, { requireDefenderMastery = false } = {}) {
@@ -2805,16 +3431,37 @@ function isValidDefenderAttempt(pending, message) {
     const defender = resolveToken(pending?.defenderTokenUuid);
     const check = getDefenseCheck(message);
     const offense = game.messages.get(pending?.attackMessageId);
-    const attempted = new Set(getMessageContext(offense)?.attemptedDefenseActorUuids ?? []);
+    const offenseContext = getMessageContext(offense);
+    const attempted = new Set(offenseContext?.attemptedDefenseActorUuids ?? []);
     if (!target?.actor || !defender?.actor || !check || target.actor.id === defender.actor.id) return false;
+    if (offenseContext?.supersededBy) return false;
     if (pending.defenderActorUuid && pending.defenderActorUuid !== defender.actor.uuid) return false;
     if (message.speaker?.actor && message.speaker.actor !== defender.actor.id) return false;
     if (attempted.has(defender.actor.uuid) || !hasDefenderMastery(defender.actor)) return false;
     if (String(check.defenseType).toLocaleLowerCase() !== "defense") return false;
     if (check.itemData?.id === "acrobatics" || check.itemData?.skill?.id === "acrobatics") return false;
     const validOption = getCombatDefenseOptions(defender.actor, { requireDefenderMastery: true })
-        .some((defense) => defense.id === check.itemData?.id);
+        .some((defense) => defenseMatchesPendingCheck(defense, pending, check.itemData));
     return validOption && measureTokenDistance(defender, target) <= 2;
+}
+
+function defenseMatchesPendingCheck(defense, pending, itemData) {
+    if (!defense) return false;
+    if (pending.defenseId && defense.id !== pending.defenseId) return false;
+    if (pending.defenseSkillId && defense.skill?.id !== pending.defenseSkillId) return false;
+
+    const submittedIds = new Set([
+        itemData?.id,
+        itemData?._id,
+        itemData?.item?.id,
+        itemData?.item?._id,
+    ].filter(Boolean));
+    if (submittedIds.has(defense.id)) return true;
+
+    const submittedSkillId = itemData?.skill?.id ?? itemData?.skill?._id;
+    const sameSkill = Boolean(submittedSkillId && submittedSkillId === defense.skill?.id);
+    const submittedName = String(itemData?.name ?? itemData?.item?.name ?? "").trim();
+    return sameSkill && Boolean(submittedName && submittedName === String(defense.name ?? "").trim());
 }
 
 function addEventDefenseActions(element, message) {
@@ -2874,8 +3521,10 @@ function enforceChatPermissions(root, hudContext) {
     for (const element of root.querySelectorAll(".sf-chat-message")) {
         const message = game.messages.get(element.dataset.messageId);
         if (!message) continue;
+        synchronizeRenderedTickAction(element, message);
         const mayManageRoll = mayManageMessageRoll(message);
         if (!mayManageRoll) removeRollManagementControls(element);
+        if (!mayControlSpeakerActor(message)) removeOutgoingDamageControls(element);
         const renderedActions = getRenderedChatActionKeys(message.id);
         if (renderedActions) {
             for (const button of element.querySelectorAll(".splittermond-chat-action[data-action], .splittermond-chat-action[data-localaction], .splittermond-chat-action[data-local-action]")) {
@@ -2902,9 +3551,81 @@ function enforceChatPermissions(root, hudContext) {
             });
         }
         addEventDefenseActions(element, message);
-        element.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action)), .sf-promoted-actions:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
-        element.querySelectorAll(".sf-promoted-controls:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
+        decorateEventActionButtons(element, message);
+        element.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action, .add-tick[data-ticks])), .sf-promoted-actions:not(:has(.splittermond-chat-action, .add-tick[data-ticks]))").forEach((container) => container.remove());
+        element.querySelectorAll(".sf-promoted-degree-options:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
+        element.querySelectorAll(".sf-promoted-controls:not(:has(.splittermond-chat-action, .add-tick[data-ticks]))").forEach((container) => container.remove());
     }
+}
+
+function synchronizeRenderedTickAction(element, message) {
+    const existing = Array.from(element.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks]"))
+        .some(isTickAdvanceControl);
+    if (existing) return;
+    const source = getRenderedChatActionElements(message.id)
+        .find((button) => isTickAdvanceControl(button) && !button.disabled);
+    if (!source) return;
+
+    const card = element.querySelector(".splittermond.check, .splittermond.damage");
+    if (!card) return;
+    let controls = card.querySelector(":scope > .sf-promoted-controls");
+    if (!controls) {
+        controls = document.createElement("div");
+        controls.className = "sf-promoted-controls";
+        const header = card.querySelector(":scope > .chat-message-header, :scope > header");
+        if (header) header.after(controls);
+        else card.prepend(controls);
+    }
+    let actions = controls.querySelector(":scope > .sf-promoted-actions");
+    if (!actions) {
+        actions = document.createElement("div");
+        actions.className = "actions splittermond-chat-action-container sf-promoted-actions";
+        controls.prepend(actions);
+    }
+    actions.append(source.cloneNode(true));
+}
+
+function isTickAdvanceControl(control) {
+    return isLegacyTickAction(control)
+        || String(control?.dataset?.action ?? "").toLocaleLowerCase() === "advancetoken";
+}
+
+function decorateEventActionButtons(element, message) {
+    const ownsSpeaker = isMessageSpeakerAssignedToCurrentUser(message);
+    const groupHasDamage = Boolean(element.closest(".sf-event-group")?.querySelector(".sf-associated-card.is-damage"));
+    for (const button of element.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks], .rollable[data-roll-type]")) {
+        const action = String(button.dataset.action ?? button.dataset.localaction ?? button.dataset.localAction ?? "").toLocaleLowerCase();
+        if (isTickAdvanceControl(button)) {
+            button.classList.add("sf-tick-advance-action");
+            if (isDefenseMessage(message) && ownsSpeaker) button.classList.add("is-own-defense-ticks");
+            if (isDamageMessage(message) || (groupHasDamage && isOffensiveCombatMessage(message))) {
+                button.classList.add("is-damage-ticks");
+            }
+        }
+        if (isCombatFumbleRollControl(button) && ownsSpeaker) button.classList.add("is-own-fumble-roll");
+        if (action === "applydamagetoself" || action === "applydamagetousertargets") {
+            const target = resolveDamageApplicationTarget(message);
+            if (target && isCurrentUserTarget(target)) button.classList.add("is-self-target");
+        }
+    }
+}
+
+function isMessageSpeakerAssignedToCurrentUser(message) {
+    const token = resolveToken(speakerTokenUuid(message));
+    if (token) return isCurrentUserTarget(token);
+    const actor = resolveSpeakerActor(message);
+    const combatant = Array.from(game.combat?.combatants ?? []).find((candidate) => candidate.actorId === actor?.id);
+    if (combatant && actor) {
+        const linkedUser = getLinkedUser(combatant, actor);
+        if (linkedUser) return linkedUser.id === game.user?.id;
+    }
+    return Boolean(!game.user?.isGM && actor?.testUserPermission?.(game.user, "OWNER"));
+}
+
+function getRenderedChatActionElements(messageId) {
+    return Array.from(document.querySelectorAll(".message[data-message-id]"))
+        .filter((element) => element.dataset.messageId === messageId && !element.closest(`#${MODULE_ID}-hud`))
+        .flatMap((element) => Array.from(element.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks]")));
 }
 
 function mayManageMessageRoll(message, user = game.user) {
@@ -2914,12 +3635,32 @@ function mayManageMessageRoll(message, user = game.user) {
     return mayUseRemoteChatActions(Boolean(user?.isGM), ownsSpeakerActor, authorId === user?.id);
 }
 
+function mayControlSpeakerActor(message, user = game.user) {
+    if (user?.isGM) return true;
+    const speakerActor = resolveSpeakerActor(message);
+    return Boolean(speakerActor?.testUserPermission?.(user, "OWNER") ?? speakerActor?.isOwner);
+}
+
+function isOutgoingDamageControl(control) {
+    const action = String(control?.dataset?.action ?? control?.dataset?.localaction ?? control?.dataset?.localAction ?? "")
+        .trim();
+    return isDamageSelectionAction(action);
+}
+
+function removeOutgoingDamageControls(element) {
+    for (const control of element.querySelectorAll(".splittermond-chat-action")) {
+        if (!isOutgoingDamageControl(control)) continue;
+        (control.closest(".splittermond-inline-label-input") ?? control).remove();
+    }
+}
+
 function isRollManagementControl(control) {
     const isDegreeOption = Boolean(
         control?.closest?.(".sf-promoted-degree-options")
         || control?.matches?.('input[type="checkbox"].splittermond-chat-action[data-action]')
     );
-    return requiresRollManagementPermission(control?.dataset?.action, isDegreeOption);
+    const action = isLegacyTickAction(control) ? "addTick" : control?.dataset?.action;
+    return requiresRollManagementPermission(action, isDegreeOption);
 }
 
 function removeRollManagementControls(element) {
@@ -2928,6 +3669,7 @@ function removeRollManagementControls(element) {
         '.splittermond-chat-action[data-action="consumeCosts" i]',
         '.splittermond-chat-action[data-action="advanceToken" i]',
         '.splittermond-chat-action[data-action="useSplinterpoint" i]',
+        ".add-tick[data-ticks]",
     ].join(", ")).forEach((control) => control.remove());
 }
 
@@ -2990,7 +3732,8 @@ function getMessageContext(message) {
 }
 
 function getDefenseCheck(message) {
-    return message?.getFlag?.("splittermond", "check") ?? message?.flags?.splittermond?.check ?? null;
+    const checkData = message?.getFlag?.("splittermond", "check") ?? message?.flags?.splittermond?.check ?? null;
+    return mergeActiveDefenseCheck(checkData, message?.system?.checkReport);
 }
 
 function isSpellMessage(message) {
@@ -3003,6 +3746,15 @@ function isDamageMessage(message) {
 
 function isDefenseMessage(message) {
     return getDefenseCheck(message)?.type === "defense";
+}
+
+function isCombatEventMessage(message) {
+    return Boolean(
+        isOffensiveCombatMessage(message)
+        || isDefenseMessage(message)
+        || isDamageMessage(message)
+        || isFumbleTableMessage(message)
+    );
 }
 
 function isOwnMessage(message) {
@@ -3039,8 +3791,47 @@ function scheduleRender(delay = 40) {
 
 function toggleHudMinimizedFromKeybinding() {
     if (!getSetting("enabled", true) || !getHudContext()) return false;
-    void game.settings.set(MODULE_ID, "minimized", !getSetting("minimized", false));
+    void setHudMinimized(!getSetting("minimized", false));
     return true;
+}
+
+async function setHudMinimized(minimized) {
+    const hud = runtime.hud?.element;
+    const shell = hud?.querySelector?.(".sf-shell");
+    const previousBounds = shell?.getBoundingClientRect?.();
+    await game.settings.set(MODULE_ID, "minimized", minimized);
+
+    // The setting change schedules a regular render. Replace it with this immediate
+    // render so it cannot swap out the shell while its transition is still running.
+    clearTimeout(runtime.renderTimer);
+    runtime.renderTimer = null;
+    await runtime.hud?.render?.();
+
+    const nextShell = runtime.hud?.element?.querySelector?.(".sf-shell");
+    if (!previousBounds || !nextShell?.animate || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+
+    const nextBounds = nextShell.getBoundingClientRect();
+    if (!previousBounds.width || !previousBounds.height || !nextBounds.width || !nextBounds.height) return;
+
+    const previousCenter = previousBounds.left + previousBounds.width / 2;
+    const nextCenter = nextBounds.left + nextBounds.width / 2;
+    const offsetX = previousCenter - nextCenter;
+    const offsetY = previousBounds.bottom - nextBounds.bottom;
+    const scaleX = previousBounds.width / nextBounds.width;
+    const scaleY = previousBounds.height / nextBounds.height;
+    const animation = nextShell.animate([
+        {
+            opacity: 0.72,
+            transformOrigin: "bottom center",
+            transform: `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scaleX}, ${scaleY})`,
+        },
+        {
+            opacity: 1,
+            transformOrigin: "bottom center",
+            transform: "translate3d(0, 0, 0) scale(1, 1)",
+        },
+    ], { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)", fill: "both" });
+    void animation.finished.catch(() => null).finally(() => animation.cancel());
 }
 
 function toggleHudVisibilityFromKeybinding() {
@@ -3124,6 +3915,27 @@ async function getAttackSpeed(attack) {
         console.debug(`${MODULE_ID} | Could not calculate weapon speed for ${attack?.name ?? attack?.id}`, error);
     }
     return numericValue(attack?.weaponSpeed);
+}
+
+function isRangedAttack(attack) {
+    const item = attack?.item ?? attack;
+    const fields = [
+        attack?.name,
+        attack?.type,
+        attack?.skill?.id,
+        displayLabel(attack?.skill?.label),
+        item?.type,
+        item?.system?.category,
+        item?.system?.weaponType,
+        item?.system?.skill,
+        item?.system?.range,
+    ];
+    return fields.some((value) => /fern|range|marksman|shoot|missile|schuss|wurf|throw|bow|bogen|crossbow|armbrust/iu.test(String(value ?? "")));
+}
+
+function isRangedAttackMessage(message) {
+    const report = message?.system?.checkReport;
+    return isRangedAttack(report?.itemData ?? report?.attack ?? message?.system?.itemData);
 }
 
 function numericValue(value, fallback = 0) {

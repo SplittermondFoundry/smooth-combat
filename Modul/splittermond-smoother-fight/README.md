@@ -6,9 +6,9 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 
 - aktiver Combatant mit Tokenbild, VTD/KW/GW sowie Lebens- und Fokusleiste
 - persönlich hervorgehobenes HUD mit gut sichtbarem „Du bist dran“-Hinweis für den zugeordneten aktiven Spieler
-- Ziel des dem aktiven Token zugeordneten Spielers; verständlicher Hinweis, wenn kein Ziel gewählt wurde
+- alle Ziele des dem aktiven Token zugeordneten Spielers; Mehrfachziele lassen sich im Zielmenü einzeln ergänzen und entfernen
 - persönliche Warnmarkierung, wenn der eigene Charakter das aktuelle Ziel ist
-- Lebens- und Fokuswerte nur für Benutzer mit mindestens Observer-Rechten am jeweiligen Akteur
+- Lebens- und Fokuswerte nur für Benutzer mit mindestens Observer-Rechten am jeweiligen Akteur; VTD, KW und GW fremder Ziele sind standardmäßig ebenso verborgen und können per Weltoption freigegeben werden
 - dauerhafte Zuordnung von Charakter- und NSC-Bögen zu Benutzern, die auch für neu erstellte und nicht verknüpfte Tokens gilt
 - durchsuchbare, getrennt einklappbare Listen für Spielercharakter- und NSC-Bögen
 - eindeutige Token-Ausnahmen sowie Schnellzuweisung über einen zusätzlichen Button im Token-HUD
@@ -28,9 +28,10 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 - erfolgreiche Aktive Abwehr erzeugt eine neue Angriffskarte mit neu berechneten EG; die kompakte Abwehrprobe steht davor und zeigt neue VTD/KW/GW direkt im EG-Feld
 - regelgerechte Unterstützung durch die Meisterschaft **Verteidiger**: nur Besitzer der Meisterschaft erhalten innerhalb von 2 m eine Zusatzaktion, ausschließlich passende Nahkampf-Abwehren werden angeboten und der systemeigene −3-Modifikator wird vorausgewählt; verteidigt das Ziel ebenfalls, zählt die höhere neue VTD
 - Ziel-Quickmenü für den GM und den Owner des aktiven Tokens mit allen sichtbaren Szenen-Tokens; Kampfteilnehmer stehen zuerst, gleichnamige Tokens werden nummeriert und beim Überfahren auf der Karte hervorgehoben
-- direkte Tickbuttons für 1, 2, 3, 5, 7 und 10 Ticks, freie Tickeingabe sowie Abwartend/Bereithalten/Reaktivieren
+- direkte Tickbuttons für 1, 2, 3, 5, 7 und 10 Ticks, freie Tickeingabe sowie Abwartend/Bereithalten/Reaktivieren; Tickaktionen aus Abwehr- und Schadenskarten werden im HUD gespiegelt und für den zuständigen Benutzer hervorgehoben
 - beschriftete Combat-Reiter-Aktionen für Tokenfokus, Sichtbarkeit, Besiegt-Status und Entfernen aus dem Kampf; auf schmalen Ansichten bleiben die platzsparenden Symbole
-- vorbereitete Zauber als hervorgehobene Direktaktion mit Auslösen- und Abbrechen-Button
+- vorbereitete Zauber und Fernkampfangriffe als hervorgehobene Direktaktion mit Auslösen- und Abbrechen-Button; die Zauberaktion zeigt die mit aktuellem Fokus verfügbaren Zauber
+- Dark-/Lightmode-Schalter, kurze Audiohinweise und Portraitanimationen für Zugbeginn, Aktive Abwehr, Schaden, Zauber und Fernkampf
 - Socket-Synchronisierung, damit das Ziel des zugeordneten Spielers auf allen Clients sichtbar ist
 - standardmäßiges Ausblenden der normalen Splittermond-Aktionsleiste während eines Kampfes; pro Client deaktivierbar
 - minimiertes HUD horizontal zentriert und mit kleinem Abstand direkt oberhalb der sichtbaren Action-Bar

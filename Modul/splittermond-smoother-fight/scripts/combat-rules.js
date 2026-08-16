@@ -16,6 +16,37 @@ export function calculateActiveDefenseValue(checkData, defensiveFeature = 0) {
     return baseDefense + 1 + totalDegreesOfSuccess(checkData) + numberOr(defensiveFeature);
 }
 
+export function mergeActiveDefenseCheck(checkData, checkReport) {
+    if (!checkData && !checkReport) return null;
+    const merged = { ...(checkReport ?? {}), ...(checkData ?? {}) };
+    for (const key of ["succeeded", "isCrit", "isFumble", "degreeOfSuccess", "roll"]) {
+        merged[key] = checkReport?.[key] ?? checkData?.[key] ?? merged[key];
+    }
+    return merged;
+}
+
+export function parseActiveDefenseDescription(value) {
+    const text = String(value ?? "");
+    const defenseMatch = text.match(/^\s*([^:\r\n]+?)\s*:\s*(-?\d+)\b/u);
+    const numbingMatch = text.match(/(\d+)\s*(?:Punkte?|points?)?\s*(?:Betäubungsschaden|stun damage|numbing damage)\b/iu);
+    return {
+        defenseLabel: defenseMatch?.[1]?.trim() ?? "",
+        defenseValue: defenseMatch ? Number.parseInt(defenseMatch[2], 10) : null,
+        defensePrefixLength: defenseMatch?.[0]?.length ?? 0,
+        numbingDamage: Math.max(0, Number.parseInt(numbingMatch?.[1] ?? "0", 10) || 0),
+    };
+}
+
+export function activeDefenseChangesDifficulty(checkData, displayedDefenseValue) {
+    if (checkData?.succeeded) return true;
+    const baseDefense = Number(checkData?.baseDefense);
+    const displayedDefense = Number(displayedDefenseValue);
+    return displayedDefenseValue !== null
+        && Number.isFinite(baseDefense)
+        && Number.isFinite(displayedDefense)
+        && displayedDefense > baseDefense;
+}
+
 export function bestActiveDefenseValue(currentValue, candidateValue) {
     const current = Number(currentValue);
     const candidate = Number(candidateValue);
@@ -167,6 +198,25 @@ export function mayViewActorResources(isGm, hasObserverPermission) {
     return Boolean(isGm || hasObserverPermission);
 }
 
+export function mayViewTargetDefenses(revealToEveryone, isGm, hasObserverPermission) {
+    return Boolean(revealToEveryone || isGm || hasObserverPermission);
+}
+
+export function isCombatantVisibleToUser(isGm, combatantHidden) {
+    return Boolean(isGm || !combatantHidden);
+}
+
+export function normalizeTargetReferences(values) {
+    const references = new Set();
+    for (const value of values ?? []) {
+        const reference = typeof value === "string"
+            ? value
+            : value?.document?.uuid ?? value?.uuid ?? value?.id ?? null;
+        if (reference) references.add(reference);
+    }
+    return Array.from(references);
+}
+
 export function mayViewTargetDifficulty(isTargetDependent, isGm, hasObserverPermission) {
     return !isTargetDependent || mayViewActorResources(isGm, hasObserverPermission);
 }
@@ -182,9 +232,15 @@ export function isPlayersTurn({ isGm = false, userId = null, linkedUserId = null
 
 export function requiresRollManagementPermission(action, isDegreeOption = false) {
     if (isDegreeOption) return true;
-    return ["consumecosts", "advancetoken", "usesplinterpoint"].includes(
+    return ["consumecosts", "advancetoken", "addtick", "usesplinterpoint"].includes(
         String(action ?? "").trim().toLocaleLowerCase()
     );
+}
+
+export function isDamageSelectionAction(action) {
+    const normalized = String(action ?? "").trim().toLocaleLowerCase();
+    if (!normalized || normalized.startsWith("applydamageto")) return false;
+    return normalized.includes("damage");
 }
 
 export function hasSplittermondCheckUpdate(changes) {
@@ -204,27 +260,27 @@ export function resolveCombatEventOpenIds(previousEventIds, previousOpenEventIds
     const previous = new Set(previousEventIds ?? []);
     const previouslyOpen = new Set(previousOpenEventIds ?? []);
     const current = Array.from(currentEventIds ?? []);
+    const currentSet = new Set(current);
     const newEventIds = current.filter((eventId) => !previous.has(eventId));
-    const open = newEventIds.length
-        ? new Set([newEventIds.at(-1)])
+    const removedEventIds = Array.from(previous).filter((eventId) => !currentSet.has(eventId));
+    const structureChanged = newEventIds.length > 0
+        || removedEventIds.length > 0
+        || Boolean(turn.forceLatestEvent);
+    const latestEventId = current.at(-1);
+    const open = structureChanged
+        ? new Set(latestEventId ? [latestEventId] : [])
         : new Set(current.filter((eventId) => previouslyOpen.has(eventId)));
 
-    const previousCombatantId = turn.previousCombatantId ?? null;
     const currentCombatantId = turn.currentCombatantId ?? null;
-    if (!previousCombatantId || !currentCombatantId || previousCombatantId === currentCombatantId) return open;
-
-    const latestEventId = current.at(-1);
     if (!latestEventId) return open;
     const eventCombatantId = mapValue(turn.eventCombatantIds, latestEventId);
     const eventActorId = mapValue(turn.eventActorIds, latestEventId);
-    const belongsToPrevious = eventCombatantId
-        ? eventCombatantId === previousCombatantId
-        : Boolean(eventActorId && eventActorId === turn.previousActorId);
-    const belongsToCurrent = eventCombatantId
-        ? eventCombatantId === currentCombatantId
-        : Boolean(eventActorId && eventActorId === turn.currentActorId);
-    if (belongsToPrevious && !belongsToCurrent) open.delete(latestEventId);
-    return open;
+    const currentActorId = turn.currentActorId ?? null;
+    if (!currentCombatantId && !currentActorId) return open;
+
+    const belongsToCurrent = eventCombatantId === currentCombatantId
+        || Boolean(eventActorId && eventActorId === currentActorId);
+    return belongsToCurrent ? open : new Set();
 }
 
 function mapValue(values, key) {
