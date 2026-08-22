@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "e6e186546597279be161461f08104e0e3284a4fb361690454403e5afd9c30c6a",
+        "31c72c71ddcf76744ab35df2d1bbc3dfc786e3b19f5e57e64fda200b464bbca7",
     );
 });
 
@@ -41,6 +41,11 @@ test("published DOM integration attributes remain available", () => {
     const assignmentTemplate = fs.readFileSync(path.join(moduleRoot, "templates", "user-token-links.hbs"), "utf8");
     assert.match(assignmentTemplate, /data-overview-actor-select/u);
     assert.match(assignmentTemplate, /data-overview-token-select/u);
+    assert.match(assignmentTemplate, /data-role="player-assignment-status"/u);
+    assert.match(assignmentTemplate, /<details class="sf-assignment-help">/u);
+    assert.match(assignmentTemplate, /is-direct[\s\S]*is-sheet[\s\S]*is-primary-gm[\s\S]*is-owner/u);
+    assert.match(assignmentTemplate, /data-role="assignment-warnings" open/u);
+    assert.match(assignmentTemplate, /\{\{#if showSetupHint\}\}/u);
 
     const hudView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "view.js"), "utf8");
     const hudController = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "controller.js"), "utf8");
@@ -110,7 +115,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.doesNotMatch(flattenedCss, /font-size:\s*[78]px/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "15b57ed58492d8bc4804a67264bf24c6809cc7b0b50ffd7baf63f486a6c69e08",
+        "f3ac631edfb8fa1c136c2d42688da06c3095635f591158d5ff7611eb45a4cf0f",
     );
 });
 

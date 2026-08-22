@@ -1,37 +1,58 @@
 <form class="sf-settings-form">
     <header class="sf-assignment-intro">
-        <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.LinksHint"}}</p>
-        <div class="sf-assignment-priority" aria-label="{{localize "SMOOTHER_FIGHT.Settings.PriorityLabel"}}">
-            <strong>{{localize "SMOOTHER_FIGHT.Settings.PriorityLabel"}}</strong>
-            <span class="is-direct"><i class="fa-solid fa-chess-pawn"></i> {{localize "SMOOTHER_FIGHT.Settings.DirectTokenAssignment"}}</span>
-            <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
-            <span class="is-sheet"><i class="fa-solid fa-address-card"></i> {{localize "SMOOTHER_FIGHT.Settings.SheetAssignment"}}</span>
-            <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
-            <span class="is-owner"><i class="fa-solid fa-key"></i> {{localize "SMOOTHER_FIGHT.Settings.OwnerAssignment"}}</span>
-        </div>
+        <section class="sf-assignment-status" aria-label="{{localize "SMOOTHER_FIGHT.Settings.Overview"}}" aria-live="polite">
+            <span class="sf-status-item {{#if hasUnassignedPlayers}}is-incomplete{{/if}}" data-role="player-assignment-status-item">
+                <i class="fa-solid fa-users" aria-hidden="true"></i>
+                <strong data-role="player-assignment-status">{{summary.playerAssignmentLabel}}</strong>
+            </span>
+            <span class="sf-status-separator" aria-hidden="true">·</span>
+            <span class="sf-status-item {{#if hasWarnings}}has-warning{{/if}}" data-role="warning-status-item">
+                <i class="fa-solid {{#if hasWarnings}}fa-triangle-exclamation{{else}}fa-circle-check{{/if}}" data-role="warning-status-icon" aria-hidden="true"></i>
+                <span data-role="warning-status">{{summary.warningStatusLabel}}</span>
+            </span>
+        </section>
+
+        <section class="sf-primary-gm-setting {{#if hasPrimaryGm}}has-primary{{else}}is-unset{{/if}}" data-role="primary-gm-setting">
+            <span class="sf-primary-gm-copy">
+                <i class="fa-solid {{#if hasPrimaryGm}}fa-circle-check{{else}}fa-circle-question{{/if}}" data-role="primary-gm-icon" aria-hidden="true"></i>
+                <label for="smoother-fight-primary-gm">{{localize "SMOOTHER_FIGHT.Settings.PrimaryGm"}}</label>
+            </span>
+            <select id="smoother-fight-primary-gm" data-role="primary-gm">
+                <option value="">{{localize "SMOOTHER_FIGHT.Settings.NoPrimaryGm"}}</option>
+                {{#each gms}}
+                    <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#unless this.active}} – {{localize "SMOOTHER_FIGHT.Settings.Offline"}}{{/unless}}</option>
+                {{/each}}
+            </select>
+        </section>
+
+        <details class="sf-assignment-help">
+            <summary>
+                <span><i class="fa-solid fa-circle-question" aria-hidden="true"></i> {{localize "SMOOTHER_FIGHT.Settings.AssignmentHelpTitle"}}</span>
+                <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+            </summary>
+            <div class="sf-assignment-help-content">
+                <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.LinksHint"}}</p>
+                <div class="sf-assignment-priority" aria-label="{{localize "SMOOTHER_FIGHT.Settings.PriorityLabel"}}">
+                    <strong>{{localize "SMOOTHER_FIGHT.Settings.PriorityLabel"}}</strong>
+                    <span class="is-direct"><i class="fa-solid fa-chess-pawn"></i> {{localize "SMOOTHER_FIGHT.Settings.DirectTokenAssignment"}}</span>
+                    <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
+                    <span class="is-sheet"><i class="fa-solid fa-address-card"></i> {{localize "SMOOTHER_FIGHT.Settings.SheetAssignment"}}</span>
+                    <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
+                    <span class="is-primary-gm"><i class="fa-solid fa-user-tie"></i> {{localize "SMOOTHER_FIGHT.Settings.PrimaryGmAssignment"}}</span>
+                    <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
+                    <span class="is-owner"><i class="fa-solid fa-key"></i> {{localize "SMOOTHER_FIGHT.Settings.OwnerAssignment"}}</span>
+                </div>
+                <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.PrimaryGmHint"}}</p>
+                <section class="sf-assignment-summary" aria-label="{{localize "SMOOTHER_FIGHT.Settings.Overview"}}">
+                    <span><i class="fa-solid fa-address-book"></i><strong>{{summary.sheetCount}}</strong><small>{{localize "SMOOTHER_FIGHT.Settings.SheetsTotal"}}</small></span>
+                    <span><i class="fa-solid fa-link"></i><strong data-role="assigned-sheet-count">{{summary.assignedSheetCount}}</strong><small>{{localize "SMOOTHER_FIGHT.Settings.SheetsAssigned"}}</small></span>
+                    <span><i class="fa-solid fa-chess-pawn"></i><strong>{{summary.tokenCount}}</strong><small>{{localize "SMOOTHER_FIGHT.Settings.TokensTotal"}}</small></span>
+                    <span><i class="fa-solid fa-user-pen"></i><strong data-role="direct-token-count">{{summary.directTokenCount}}</strong><small>{{localize "SMOOTHER_FIGHT.Settings.DirectExceptions"}}</small></span>
+                    <span class="{{#if hasWarnings}}has-warning{{/if}}" data-role="warning-summary-tile"><i class="fa-solid fa-triangle-exclamation"></i><strong data-role="warning-count">{{summary.warningCount}}</strong><small>{{localize "SMOOTHER_FIGHT.Settings.Warnings"}}</small></span>
+                </section>
+            </div>
+        </details>
     </header>
-
-    <section class="sf-primary-gm-setting">
-        <span class="sf-primary-gm-copy">
-            <label for="smoother-fight-primary-gm">{{localize "SMOOTHER_FIGHT.Settings.PrimaryGm"}}</label>
-            <small>{{localize "SMOOTHER_FIGHT.Settings.FallbackLabel"}}</small>
-            <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.PrimaryGmHint"}}</p>
-        </span>
-        <select id="smoother-fight-primary-gm" data-role="primary-gm">
-            <option value="">{{localize "SMOOTHER_FIGHT.Settings.NoPrimaryGm"}}</option>
-            {{#each gms}}
-                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#unless this.active}} – {{localize "SMOOTHER_FIGHT.Settings.Offline"}}{{/unless}}</option>
-            {{/each}}
-        </select>
-    </section>
-
-    <section class="sf-assignment-summary" aria-label="{{localize "SMOOTHER_FIGHT.Settings.Overview"}}">
-        <span><i class="fa-solid fa-address-book"></i><strong>{{summary.sheetCount}}</strong><small>{{localize "SMOOTHER_FIGHT.Settings.SheetsTotal"}}</small></span>
-        <span><i class="fa-solid fa-link"></i><strong data-role="assigned-sheet-count">{{summary.assignedSheetCount}}</strong><small>{{localize "SMOOTHER_FIGHT.Settings.SheetsAssigned"}}</small></span>
-        <span><i class="fa-solid fa-chess-pawn"></i><strong>{{summary.tokenCount}}</strong><small>{{localize "SMOOTHER_FIGHT.Settings.TokensTotal"}}</small></span>
-        <span><i class="fa-solid fa-user-pen"></i><strong data-role="direct-token-count">{{summary.directTokenCount}}</strong><small>{{localize "SMOOTHER_FIGHT.Settings.DirectExceptions"}}</small></span>
-        <span class="{{#if hasWarnings}}has-warning{{/if}}" data-role="warning-summary-tile"><i class="fa-solid fa-triangle-exclamation"></i><strong data-role="warning-count">{{summary.warningCount}}</strong><small>{{localize "SMOOTHER_FIGHT.Settings.Warnings"}}</small></span>
-    </section>
 
     <nav class="sf-assignment-tabs" role="tablist" aria-label="{{localize "SMOOTHER_FIGHT.Settings.AssignmentViews"}}">
         <button type="button" data-action="assignment-tab" data-tab="overview" role="tab">
@@ -47,14 +68,8 @@
 
     <div class="sf-settings-list">
         <section class="sf-assignment-panel sf-overview-panel" data-tab-panel="overview">
-            <div class="sf-panel-heading">
-                <span>
-                    <h3>{{localize "SMOOTHER_FIGHT.Settings.UserOverview"}}</h3>
-                    <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.UserOverviewHint"}}</p>
-                </span>
-            </div>
             {{#if hasWarnings}}
-                <details class="sf-assignment-warnings" data-role="assignment-warnings">
+                <details class="sf-assignment-warnings" data-role="assignment-warnings" open>
                     <summary>
                         <span><i class="fa-solid fa-triangle-exclamation"></i> <strong data-role="warning-summary-label">{{localize "SMOOTHER_FIGHT.Settings.AssignmentsToCheck" count=summary.warningCount}}</strong></span>
                         <span class="sf-warning-toggle">{{localize "SMOOTHER_FIGHT.Settings.WarningDetails"}} <i class="fa-solid fa-chevron-down" aria-hidden="true"></i></span>
@@ -91,6 +106,15 @@
                     </ol>
                 </details>
             {{/if}}
+            {{#if showSetupHint}}
+                <aside class="sf-assignment-setup-hint">
+                    <i class="fa-solid fa-compass" aria-hidden="true"></i>
+                    <span>
+                        <strong>{{localize "SMOOTHER_FIGHT.Settings.InitialSetupTitle"}}</strong>
+                        <small>{{localize "SMOOTHER_FIGHT.Settings.InitialSetupHint"}}</small>
+                    </span>
+                </aside>
+            {{/if}}
             {{#if hasCleanupTokens}}
                 <div class="sf-assignment-cleanup">
                     <i class="fa-solid fa-broom" aria-hidden="true"></i>
@@ -100,6 +124,9 @@
                     </span>
                 </div>
             {{/if}}
+            <div class="sf-panel-heading">
+                <h3>{{localize "SMOOTHER_FIGHT.Settings.UserOverview"}}</h3>
+            </div>
             <div class="sf-user-summary-grid">
                 {{#each users}}
                     <details class="sf-user-summary-card" data-user-summary="{{this.id}}">

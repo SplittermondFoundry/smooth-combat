@@ -146,4 +146,10 @@ export function registerSettings() {
         default: "",
         onChange: rerender,
     });
+    game.settings.register(MODULE_ID, "assignmentSetupHintSeen", {
+        scope: "world",
+        config: false,
+        type: Boolean,
+        default: false,
+    });
 }

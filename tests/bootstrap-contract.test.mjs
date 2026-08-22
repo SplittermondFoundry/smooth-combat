@@ -68,6 +68,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
         "userTokenLinks",
         "actorUserLinks",
         "primaryGmId",
+        "assignmentSetupHintSeen",
     ]);
 
     const settingByKey = Object.fromEntries(settings.map(({ key, options }) => [key, options]));
@@ -111,6 +112,15 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     assert.deepEqual(
         [settingByKey.primaryGmId.scope, settingByKey.primaryGmId.config, settingByKey.primaryGmId.type, settingByKey.primaryGmId.default],
         ["world", false, String, ""],
+    );
+    assert.deepEqual(
+        [
+            settingByKey.assignmentSetupHintSeen.scope,
+            settingByKey.assignmentSetupHintSeen.config,
+            settingByKey.assignmentSetupHintSeen.type,
+            settingByKey.assignmentSetupHintSeen.default,
+        ],
+        ["world", false, Boolean, false],
     );
 
     const audioDefaults = {

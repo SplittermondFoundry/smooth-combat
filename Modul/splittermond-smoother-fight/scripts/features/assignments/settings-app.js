@@ -232,6 +232,10 @@ export function registerSettingsMenu() {
                     return token.ownerUserId === user.id;
                 }).length,
             }));
+            const playerUsers = users.filter((user) => !user.isGM);
+            const assignedPlayerCount = playerUsers.filter((user) =>
+                user.sheetCount > 0 || user.directTokenCount > 0 || user.effectiveTokenCount > 0
+            ).length;
             const knownTokenUuids = new Set(tokens.map((token) => token.uuid));
             const unresolvedLinks = Object.entries(links).flatMap(([userId, userLinks]) => userLinks
                 .filter((link) => link.tokenUuid && !knownTokenUuids.has(link.tokenUuid))
@@ -267,6 +271,12 @@ export function registerSettingsMenu() {
             }
             warningItems.sort((left, right) => left.title.localeCompare(right.title, undefined, { sensitivity: "base" }));
             const warningCount = ambiguousOwnerCount + missingUserCount + unresolvedTokenCount;
+            const hasMeaningfulConfiguration = Boolean(
+                primaryGmId
+                || Object.keys(actorLinks).length > 0
+                || Object.values(links).some((userLinks) => userLinks.length > 0)
+                || assignedPlayerCount > 0
+            );
             const scenes = Array.from(game.scenes ?? []).map((scene) => ({
                 id: scene.id,
                 name: scene.name,
@@ -286,19 +296,34 @@ export function registerSettingsMenu() {
                     tokenCount: tokens.length,
                     directTokenCount: tokens.filter((token) => token.isDirect).length,
                     warningCount,
+                    playerCount: playerUsers.length,
+                    assignedPlayerCount,
+                    playerAssignmentLabel: playerUsers.length > 0
+                        ? t("SMOOTHER_FIGHT.Settings.PlayersAssignedStatus", {
+                            assigned: assignedPlayerCount,
+                            total: playerUsers.length,
+                        })
+                        : t("SMOOTHER_FIGHT.Settings.NoPlayersStatus"),
+                    warningStatusLabel: warningCount > 0
+                        ? t("SMOOTHER_FIGHT.Settings.AttentionRequired", { count: warningCount })
+                        : t("SMOOTHER_FIGHT.Settings.NoWarnings"),
                 },
                 warningItems,
                 cleanupTokenUuids,
                 cleanupTokenCount: cleanupTokenUuids.length,
                 hasCleanupTokens: cleanupTokenUuids.length > 0,
                 hasWarnings: warningCount > 0,
+                hasPrimaryGm: gms.some((gm) => gm.selected),
+                hasUnassignedPlayers: playerUsers.length > 0 && assignedPlayerCount < playerUsers.length,
                 hasActors: actors.length > 0,
                 hasTokens: tokens.length > 0,
+                showSetupHint: !hasMeaningfulConfiguration && !getSetting("assignmentSetupHintSeen", false),
             };
         }
 
         async _onRender(context, options) {
             await super._onRender(context, options);
+            if (context.showSetupHint) await game.settings.set(MODULE_ID, "assignmentSetupHintSeen", true);
             const primaryGmSelect = this.element.querySelector('[data-role="primary-gm"]');
             const actorAssignmentSelects = () => Array.from(this.element.querySelectorAll('select[data-actor-uuid]'));
             const tokenAssignmentSelects = () => Array.from(this.element.querySelectorAll('select[data-token-uuid]'));
@@ -344,10 +369,37 @@ export function registerSettingsMenu() {
                 const summaryLabel = this.element.querySelector('[data-role="warning-summary-label"]');
                 const summaryTile = this.element.querySelector('[data-role="warning-summary-tile"]');
                 const warningPanel = this.element.querySelector('[data-role="assignment-warnings"]');
+                const warningStatus = this.element.querySelector('[data-role="warning-status"]');
+                const warningStatusItem = this.element.querySelector('[data-role="warning-status-item"]');
+                const warningStatusIcon = this.element.querySelector('[data-role="warning-status-icon"]');
                 if (countOutput) countOutput.textContent = String(warningCount);
                 if (summaryLabel) summaryLabel.textContent = t("SMOOTHER_FIGHT.Settings.AssignmentsToCheck", { count: warningCount });
                 summaryTile?.classList.toggle("has-warning", warningCount > 0);
-                warningPanel?.classList.toggle("is-resolved", warningCount === 0);
+                if (warningStatus) {
+                    warningStatus.textContent = warningCount > 0
+                        ? t("SMOOTHER_FIGHT.Settings.AttentionRequired", { count: warningCount })
+                        : t("SMOOTHER_FIGHT.Settings.NoWarnings");
+                }
+                warningStatusItem?.classList.toggle("has-warning", warningCount > 0);
+                if (warningStatusIcon) {
+                    warningStatusIcon.className = warningCount > 0
+                        ? "fa-solid fa-triangle-exclamation"
+                        : "fa-solid fa-circle-check";
+                }
+                if (warningPanel) warningPanel.hidden = warningCount === 0;
+            };
+            const refreshPrimaryGmState = () => {
+                const primaryGm = userById.get(primaryGmSelect?.value ?? "");
+                const hasPrimaryGm = Boolean(primaryGm?.isGM);
+                const setting = this.element.querySelector('[data-role="primary-gm-setting"]');
+                const icon = this.element.querySelector('[data-role="primary-gm-icon"]');
+                setting?.classList.toggle("has-primary", hasPrimaryGm);
+                setting?.classList.toggle("is-unset", !hasPrimaryGm);
+                if (icon) {
+                    icon.className = hasPrimaryGm
+                        ? "fa-solid fa-circle-check"
+                        : "fa-solid fa-circle-question";
+                }
             };
             const activateTab = (tabId) => {
                 for (const button of this.element.querySelectorAll('[data-action="assignment-tab"]')) {
@@ -544,6 +596,27 @@ export function registerSettingsMenu() {
                     if (tokenOutput) tokenOutput.textContent = String(tokenCount);
                     if (effectiveOutput) effectiveOutput.textContent = String(effectiveTokenCounts.get(userId) ?? 0);
                 }
+                const playerUserIds = Array.from(userById.values())
+                    .filter((user) => !user.isGM)
+                    .map((user) => user.id);
+                const assignedPlayerCount = playerUserIds.filter((userId) =>
+                    actorAssignmentSelects().some((select) => select.value === userId)
+                    || (effectiveTokenCounts.get(userId) ?? 0) > 0
+                ).length;
+                const playerStatus = this.element.querySelector('[data-role="player-assignment-status"]');
+                const playerStatusItem = this.element.querySelector('[data-role="player-assignment-status-item"]');
+                if (playerStatus) {
+                    playerStatus.textContent = playerUserIds.length > 0
+                        ? t("SMOOTHER_FIGHT.Settings.PlayersAssignedStatus", {
+                            assigned: assignedPlayerCount,
+                            total: playerUserIds.length,
+                        })
+                        : t("SMOOTHER_FIGHT.Settings.NoPlayersStatus");
+                }
+                playerStatusItem?.classList.toggle(
+                    "is-incomplete",
+                    playerUserIds.length > 0 && assignedPlayerCount < playerUserIds.length
+                );
             };
             tokenSearchInput?.addEventListener("input", refreshTokenFilter);
             tokenSceneSelect?.addEventListener("change", refreshTokenFilter);
@@ -574,6 +647,7 @@ export function registerSettingsMenu() {
             });
             primaryGmSelect?.addEventListener("change", () => {
                 markDirty();
+                refreshPrimaryGmState();
                 refreshTokenRows();
             });
             for (const button of this.element.querySelectorAll('[data-action="open-warning-actor"], [data-action="open-overview-actor"]')) {
@@ -615,6 +689,7 @@ export function registerSettingsMenu() {
                 });
             }
             refreshTokenRows();
+            refreshPrimaryGmState();
             if (cleanupTokenUuids.size > 0) markDirty();
             this.element.querySelector('[data-action="save-links"]')?.addEventListener("click", async () => {
                 const primaryGmId = primaryGmSelect?.value ?? "";

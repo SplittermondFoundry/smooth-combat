@@ -978,6 +978,99 @@
     line-height: 1.3;
 }
 
+.smoother-fight.sf-settings .sf-assignment-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 6px 10px;
+    border: 1px solid rgba(42, 113, 108, 0.42);
+    border-radius: 8px;
+    color: #285f5b;
+    background: rgba(92, 148, 139, 0.13);
+    box-shadow: var(--sf-panel-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+    font-size: 12px;
+}
+
+.smoother-fight.sf-settings .sf-status-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.smoother-fight.sf-settings .sf-status-item.is-incomplete {
+    color: #744918;
+}
+
+.smoother-fight.sf-settings .sf-status-item.has-warning {
+    color: #7b431d;
+    font-weight: 700;
+}
+
+.smoother-fight.sf-settings .sf-status-separator {
+    color: rgba(55, 67, 62, 0.48);
+}
+
+.smoother-fight.sf-settings .sf-assignment-help {
+    border: 1px solid rgba(44, 51, 48, 0.28);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.18);
+    overflow: hidden;
+}
+
+.smoother-fight.sf-settings .sf-assignment-help > summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    min-height: 30px;
+    padding: 4px 9px;
+    color: #3d5753;
+    cursor: pointer;
+    list-style: none;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.smoother-fight.sf-settings .sf-assignment-help > summary::-webkit-details-marker {
+    display: none;
+}
+
+.smoother-fight.sf-settings .sf-assignment-help > summary > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.smoother-fight.sf-settings .sf-assignment-help > summary > .fa-chevron-down {
+    font-size: 9px;
+    transition: transform 120ms ease;
+}
+
+.smoother-fight.sf-settings .sf-assignment-help[open] > summary {
+    border-bottom: 1px solid rgba(44, 51, 48, 0.22);
+    background: rgba(65, 112, 107, 0.08);
+}
+
+.smoother-fight.sf-settings .sf-assignment-help[open] > summary > .fa-chevron-down {
+    transform: rotate(180deg);
+}
+
+.smoother-fight.sf-settings .sf-assignment-help-content {
+    display: grid;
+    gap: 6px;
+    padding: 7px;
+}
+
+.smoother-fight.sf-settings .sf-assignment-help-content > .notes {
+    margin: 0 2px;
+    color: var(--sf-muted);
+    font-size: 11px;
+    line-height: 1.3;
+}
+
 .smoother-fight.sf-settings .sf-assignment-priority {
     display: flex;
     flex-wrap: wrap;
@@ -1012,23 +1105,40 @@
 }
 
 .smoother-fight.sf-settings .sf-primary-gm-setting {
-    grid-template-columns: minmax(300px, 1.35fr) minmax(270px, 0.9fr);
-    gap: 12px;
-    padding: 9px 10px;
+    grid-template-columns: minmax(150px, 0.45fr) minmax(270px, 1fr);
+    gap: 10px;
+    padding: 6px 8px;
     border: 1px solid var(--sf-panel-border);
     border-radius: 8px;
     background: var(--sf-panel-bg);
     box-shadow: var(--sf-panel-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.36);
 }
 
+.smoother-fight.sf-settings .sf-primary-gm-setting.has-primary {
+    border-color: rgba(42, 113, 108, 0.46);
+}
+
+.smoother-fight.sf-settings .sf-primary-gm-setting.is-unset {
+    border-color: rgba(139, 96, 43, 0.48);
+}
+
 .smoother-fight.sf-settings .sf-primary-gm-copy {
-    display: grid;
-    gap: 1px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
     min-width: 0;
 }
 
+.smoother-fight.sf-settings .sf-primary-gm-copy > i {
+    color: #33736f;
+}
+
+.smoother-fight.sf-settings .sf-primary-gm-setting.is-unset .sf-primary-gm-copy > i {
+    color: #81521d;
+}
+
 .smoother-fight.sf-settings .sf-primary-gm-copy label {
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.15;
 }
 
@@ -1356,6 +1466,39 @@
 
 .smoother-fight.sf-settings .sf-assignment-warnings.is-resolved > summary {
     color: #2c6662;
+}
+
+.smoother-fight.sf-settings .sf-assignment-setup-hint {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 7px;
+    align-items: center;
+    padding: 6px 9px;
+    border: 1px solid rgba(63, 101, 127, 0.34);
+    border-radius: 7px;
+    color: #354f61;
+    background: rgba(93, 133, 160, 0.1);
+    box-shadow: 0 1px 2px rgba(37, 54, 49, 0.06);
+}
+
+.smoother-fight.sf-settings .sf-assignment-setup-hint > i {
+    color: #41657f;
+    text-align: center;
+}
+
+.smoother-fight.sf-settings .sf-assignment-setup-hint > span {
+    display: grid;
+    min-width: 0;
+    line-height: 1.2;
+}
+
+.smoother-fight.sf-settings .sf-assignment-setup-hint strong {
+    font-size: 11px;
+}
+
+.smoother-fight.sf-settings .sf-assignment-setup-hint small {
+    color: rgba(54, 76, 90, 0.8);
+    font-size: 10px;
 }
 
 .smoother-fight.sf-settings .sf-assignment-cleanup {
