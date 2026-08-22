@@ -1,0 +1,81 @@
+
+@media (max-width: 1120px) {
+    #splittermond-smoother-fight-hud.sf-hud {
+        left: 76px;
+        right: 310px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-shell {
+        grid-template-columns: 126px minmax(280px, 1fr) 126px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-tracker-buttons .sf-control-label {
+        display: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-defense-check,
+    #splittermond-smoother-fight-hud .sf-offense-check,
+    #splittermond-smoother-fight-hud .sf-damage-check {
+        display: block;
+    }
+
+    #splittermond-smoother-fight-hud .sf-defense-check > .chat-message-header,
+    #splittermond-smoother-fight-hud .sf-offense-check > .sf-promoted-controls,
+    #splittermond-smoother-fight-hud .sf-offense-check > .sf-offense-target,
+    #splittermond-smoother-fight-hud .sf-damage-check > header,
+    #splittermond-smoother-fight-hud .sf-damage-check > .sf-promoted-controls {
+        margin-bottom: 7px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait {
+        min-height: 160px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait-image {
+        height: 90px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-action-menu > summary span,
+    #splittermond-smoother-fight-hud .sf-quick-targets > summary span,
+    #splittermond-smoother-fight-hud .sf-defense-pills {
+        display: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-prepared-spell-cast {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    #splittermond-smoother-fight-hud .sf-prepared-spell-cast img,
+    #splittermond-smoother-fight-hud .sf-prepared-spell-cast b span {
+        display: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-target-alert span {
+        display: none;
+    }
+}
+
+@media (max-width: 820px) {
+    #splittermond-smoother-fight-hud.sf-hud {
+        left: 6px;
+        right: 6px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-shell {
+        grid-template-columns: 96px minmax(230px, 1fr) 96px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait {
+        min-height: 128px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait-image {
+        height: 72px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-defense-row,
+    #splittermond-smoother-fight-hud .sf-resources,
+    #splittermond-smoother-fight-hud .sf-turn-target {
+        display: none;
+    }
+}

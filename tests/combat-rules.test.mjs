@@ -636,7 +636,6 @@ test("a new combat event closes older cards and opens only the newest event", ()
 
 test("all events close when the latest event does not belong to the active combatant", () => {
     const turn = {
-        previousCombatantId: "combatant-1",
         currentCombatantId: "combatant-2",
         currentActorId: "actor-2",
         eventCombatantIds: new Map([
@@ -723,9 +722,7 @@ test("a Defender subevent closes with the defender's completed turn", () => {
             ["attack"],
             ["attack"],
             {
-                previousCombatantId: "defender-combatant",
                 currentCombatantId: "next-combatant",
-                previousActorId: "defender-actor",
                 currentActorId: "next-actor",
                 eventCombatantIds: new Map([["attack", "attacker-combatant"]]),
                 eventActorIds: new Map([["attack", "defender-actor"]]),

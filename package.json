@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check Modul/splittermond-smoother-fight/scripts/smoother-fight.js && node --check Modul/splittermond-smoother-fight/scripts/combat-rules.js && node --test",
-    "test": "node --test"
+    "check": "npm run test && npm run test:rules",
+    "test": "node --test",
+    "test:rules": "node --experimental-test-coverage --test-coverage-lines=95 --test-coverage-branches=75 --test-coverage-functions=100 --test tests/combat-rules.test.mjs"
   }
 }

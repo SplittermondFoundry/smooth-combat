@@ -61,6 +61,8 @@ npm run check
 
 Der Befehl wird aus dem Projektstamm ausgeführt. Die Berechnungen sind in `scripts/combat-rules.js` bewusst unabhängig von Foundry gehalten und werden mit Node-Testfällen abgesichert.
 
+Die verbindlichen Modulgrenzen und Regeln für künftige Änderungen stehen in `ARCHITECTURE.md` im Projektstamm. `npm run check` kontrolliert diese Grenzen einschließlich Importzyklen, Dateigrößen und der Trennung von Domain- und Foundry-Code automatisch.
+
 ## Sinnvolle nächste Ausbaustufen
 
 - frei verschiebbare HUD-Position pro Client

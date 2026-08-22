@@ -1,0 +1,756 @@
+import { hudState } from "./state.js";
+
+import { services } from "../../core/services.js";
+
+import {
+    getPersonalHudCandidates,
+    getPersonalHudContext,
+} from "./context.js";
+
+import {
+    attackControlSelection,
+    attackControlState,
+    attackReadiness,
+    combatTickActionsFor,
+    isPlayersTurn,
+    mayViewActorResources,
+    mayViewTargetDefenses,
+    normalizeFavoriteSkillIds,
+} from "../../combat-rules.js";
+
+import {
+    COMBAT_PAUSE,
+    MAX_FAVORITE_SKILLS,
+    MODULE_ID,
+} from "../../core/constants.js";
+
+import {
+    displayLabel,
+    displayValue,
+    escapeAttr,
+    escapeCssUrl,
+    escapeHtml,
+    getDerivedValue,
+    getSetting,
+    numericValue,
+    sortByName,
+    t,
+} from "../../shared/values.js";
+
+export async function buildHud(context) {
+    if (context.concealed) return buildConcealedHud(context);
+    const { combat, combatant, actor, token, linkedUser, targets } = context;
+    const canAct = Boolean(game.user.isGM || actor.isOwner);
+    const tick = combat.currentTick ?? Math.round(Number(combatant.initiative) || 0);
+    const userName = linkedUser?.name ?? t("SMOOTHER_FIGHT.HUD.AutomaticOwner");
+    const targetNames = targets.map((candidate) => candidate.name ?? candidate.actor?.name).filter(Boolean).join(", ");
+    const targetLine = targets.length
+        ? t("SMOOTHER_FIGHT.HUD.PlayerTargetName", { user: userName, target: targetNames })
+        : t("SMOOTHER_FIGHT.HUD.NoTargetDetail");
+    const minimized = getSetting("minimized", false);
+    const hudToggle = buildHudToggle(minimized);
+    const personalTarget = targets.some((candidate) => services.isCurrentUserTarget(candidate));
+    const currentPlayersTurn = isPlayersTurn({
+        isGm: game.user?.isGM,
+        userId: game.user?.id,
+        linkedUserId: linkedUser?.id,
+        ownsActor: actor.isOwner,
+    });
+    const turnNotice = currentPlayersTurn
+        ? `<span class="sf-your-turn"><i class="fa-solid fa-bolt"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YourTurn"))}</span>`
+        : "";
+    const shellClass = currentPlayersTurn ? "sf-shell is-current-user-turn" : "sf-shell";
+
+    if (minimized) {
+        return `
+            <div class="${shellClass} is-minimized">
+                <main class="sf-center">
+                    <header class="sf-turnline">
+                        <span class="sf-live-dot"></span>
+                        <strong>${escapeHtml(actor.name)}</strong>
+                        <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
+                        ${turnNotice}
+                        <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
+                        ${buildThemeToggle()}
+                        ${hudToggle}
+                    </header>
+                </main>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="${shellClass}">
+            ${portraitPanel({ side: "actor", token, actor, eyebrow: t("SMOOTHER_FIGHT.HUD.Active"), action: "open-sheet" })}
+            <main class="sf-center">
+                <header class="sf-turnline">
+                    <span class="sf-live-dot"></span>
+                    <strong>${escapeHtml(actor.name)}</strong>
+                    <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
+                    ${turnNotice}
+                    <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
+                    ${buildThemeToggle()}
+                    ${hudToggle}
+                </header>
+                ${canAct ? buildCombatControls(context) : buildPersonalControls(context)}
+                ${canAct ? await buildActionBar(context) : ""}
+                ${getSetting("showCards", true) ? services.buildCombatEvents(context) : ""}
+            </main>
+            <div class="sf-target-column">
+                ${services.canChooseTarget(context) ? buildQuickTargets(context) : ""}
+                ${targets.length ? `<div class="sf-target-list ${targets.length > 1 ? "is-multi" : ""}">${targets.map((candidate) => portraitPanel({
+                    side: "target",
+                    token: candidate,
+                    actor: candidate.actor,
+                    eyebrow: t("SMOOTHER_FIGHT.HUD.Target"),
+                    action: "open-token-sheet",
+                    highlighted: services.isCurrentUserTarget(candidate),
+                    showDefenses: canViewTargetDefenseValues(candidate.actor),
+                })).join("")}</div>` : noTargetPanel()}
+            </div>
+        </div>
+    `;
+}
+
+function buildConcealedHud(context) {
+    const minimized = getSetting("minimized", false);
+    const label = t("SMOOTHER_FIGHT.HUD.UnknownActive");
+    const hudToggle = buildHudToggle(minimized);
+    const header = `
+        <header class="sf-turnline">
+            <span class="sf-live-dot"></span>
+            <strong class="sf-concealed-name" title="${escapeAttr(label)}"><i class="fa-solid fa-circle-question"></i><span aria-hidden="true">?</span></strong>
+            ${buildThemeToggle()}
+            ${hudToggle}
+        </header>`;
+
+    if (minimized) {
+        return `<div class="sf-shell is-minimized is-concealed-turn"><main class="sf-center">${header}</main></div>`;
+    }
+
+    const personalControls = buildPersonalControls(context);
+    const events = getSetting("showCards", true) ? services.buildCombatEvents(context) : "";
+    return `
+        <div class="sf-shell is-concealed-turn">
+            ${concealedActorPanel(label)}
+            <main class="sf-center">${header}${personalControls}${events}</main>
+            <div class="sf-target-column sf-concealed-target-column" aria-hidden="true"></div>
+        </div>`;
+}
+
+function concealedActorPanel(label) {
+    return `
+        <aside class="sf-portrait sf-actor sf-concealed-actor" aria-label="${escapeAttr(label)}">
+            <div class="sf-portrait-image">
+                <span class="sf-eyebrow">${escapeHtml(t("SMOOTHER_FIGHT.HUD.Active"))}</span>
+                <span class="sf-concealed-symbol" aria-hidden="true"><i class="fa-solid fa-circle-question"></i></span>
+            </div>
+            <div class="sf-portrait-name" aria-hidden="true">?</div>
+        </aside>`;
+}
+
+function buildHudToggle(minimized) {
+    const label = t(minimized ? "SMOOTHER_FIGHT.HUD.ExpandHud" : "SMOOTHER_FIGHT.HUD.MinimizeHud");
+    const icon = minimized ? "fa-window-maximize" : "fa-window-minimize";
+    return `<button type="button" class="sf-hud-toggle" data-sf-action="toggle-hud" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid ${icon}"></i></button>`;
+}
+
+function buildThemeToggle() {
+    const light = getSetting("theme", "dark") === "light";
+    const label = t(light ? "SMOOTHER_FIGHT.HUD.UseDarkMode" : "SMOOTHER_FIGHT.HUD.UseLightMode");
+    return `<button type="button" class="sf-hud-toggle sf-theme-toggle" data-sf-action="toggle-theme" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid ${light ? "fa-moon" : "fa-sun"}"></i></button>`;
+}
+
+function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false, showDefenses = true }) {
+    const image = token?.texture?.src ?? actor?.img ?? "icons/svg/mystery-man.svg";
+    const clickable = action ? `data-sf-action="${action}" role="button" tabindex="0"` : "";
+    const tokenReference = token?.uuid ? `data-sf-token-uuid="${escapeAttr(token.uuid)}"` : "";
+    const defense = getDerivedValue(actor, "defense");
+    const body = getDerivedValue(actor, "bodyresist");
+    const mind = getDerivedValue(actor, "mindresist");
+    return `
+        <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""}" ${clickable} ${tokenReference}>
+            <div class="sf-portrait-image" style="--sf-token-image:url('${escapeCssUrl(image)}')">
+                <span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>
+                ${highlighted ? `<span class="sf-target-alert"><i class="fa-solid fa-bullseye"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YouAreTarget"))}</span></span>` : ""}
+                ${services.feedbackMarkup(token, actor)}
+            </div>
+            <div class="sf-portrait-name">${escapeHtml(token?.name ?? actor?.name ?? "–")}</div>
+            ${showDefenses ? `<div class="sf-defense-row" aria-label="VTD, KW, GW">
+                <span><small>VTD</small>${escapeHtml(defense)}</span>
+                <span><small>KW</small>${escapeHtml(body)}</span>
+                <span><small>GW</small>${escapeHtml(mind)}</span>
+            </div>` : `<div class="sf-defense-row is-concealed"><i class="fa-solid fa-eye-slash"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefensesHidden"))}</span></div>`}
+            ${canViewResources(actor) ? resourceBars(actor) : ""}
+        </aside>
+    `;
+}
+
+function canViewTargetDefenseValues(actor) {
+    const observer = Boolean(actor?.testUserPermission?.(game.user, "OBSERVER"));
+    return mayViewTargetDefenses(getSetting("revealTargetDefenses", false), game.user?.isGM, observer);
+}
+
+function noTargetPanel() {
+    return `
+        <aside class="sf-portrait sf-target sf-no-target">
+            <div class="sf-target-rings"><i class="fa-solid fa-crosshairs"></i></div>
+            <strong>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoTarget"))}</strong>
+            <small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoTargetDetail"))}</small>
+        </aside>
+    `;
+}
+
+function resourceBars(actor) {
+    const health = actor?.system?.healthBar;
+    const focus = actor?.system?.focusBar;
+    if (!health && !focus) return "";
+    return `<div class="sf-resources">
+        ${resourceBar("health", t("SMOOTHER_FIGHT.HUD.Health"), health)}
+        ${resourceBar("focus", t("SMOOTHER_FIGHT.HUD.Focus"), focus)}
+    </div>`;
+}
+
+function canViewResources(actor) {
+    const observer = Boolean(actor?.testUserPermission?.(game.user, "OBSERVER"));
+    return mayViewActorResources(game.user?.isGM, observer);
+}
+
+function resourceBar(type, label, resource) {
+    if (!resource) return "";
+    const value = numericValue(resource.value);
+    const max = Math.max(0, numericValue(resource.max));
+    const percent = max ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+    return `<div class="sf-resource sf-resource-${type}" title="${escapeAttr(`${label}: ${value}/${max}`)}">
+        <span style="width:${percent}%"></span><small><span>${escapeHtml(label)}</span><b>${value}/${max}</b></small>
+    </div>`;
+}
+
+function buildCombatControls(context) {
+    const initiative = Number(context.combatant.initiative);
+    const paused = Number.isFinite(initiative) && initiative >= COMBAT_PAUSE.wait;
+    const pauseButtons = paused
+        ? `<button type="button" data-sf-action="resume-combatant" class="is-resume" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Resume"))}"><i class="fa-solid fa-play-circle"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Resume"))}</span></button>`
+        : `<button type="button" data-sf-action="pause-combatant" data-pause-type="wait" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Wait"))}"><i class="fa-solid fa-hourglass-half"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Wait"))}</span></button>
+           <button type="button" data-sf-action="pause-combatant" data-pause-type="keepReady" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.KeepReady"))}"><i class="fa-solid fa-hand"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.KeepReady"))}</span></button>`;
+    const focusLabel = t("SMOOTHER_FIGHT.HUD.FocusCombatant");
+    const tokenHidden = Boolean(context.token?.hidden);
+    const combatantHidden = Boolean(context.combatant.hidden);
+    const visibilityHidden = tokenHidden || combatantHidden;
+    const tokenVisibilityLabel = t(tokenHidden ? "SMOOTHER_FIGHT.HUD.ShowToken" : "SMOOTHER_FIGHT.HUD.HideToken");
+    const combatantVisibilityLabel = t(combatantHidden ? "SMOOTHER_FIGHT.HUD.ShowCombatant" : "SMOOTHER_FIGHT.HUD.HideCombatant");
+    const combinedVisibilityLabel = t(visibilityHidden ? "SMOOTHER_FIGHT.HUD.ShowTokenAndCombatant" : "SMOOTHER_FIGHT.HUD.HideTokenAndCombatant");
+    const defeatedLabel = t(context.combatant.isDefeated ? "SMOOTHER_FIGHT.HUD.RestoreCombatant" : "SMOOTHER_FIGHT.HUD.MarkDefeated");
+    const removeLabel = t("SMOOTHER_FIGHT.HUD.RemoveCombatant");
+    const gmControls = game.user.isGM ? `
+        <button type="button" data-sf-action="toggle-token-hidden" class="sf-icon-button ${tokenHidden ? "is-active" : ""}" title="${escapeAttr(tokenVisibilityLabel)}"><i class="fa-solid ${tokenHidden ? "fa-eye" : "fa-eye-slash"}"></i><span class="sf-control-label">${escapeHtml(tokenVisibilityLabel)}</span></button>
+        <button type="button" data-sf-action="toggle-combatant-hidden" class="sf-icon-button ${combatantHidden ? "is-active" : ""}" title="${escapeAttr(combatantVisibilityLabel)}"><i class="fa-solid ${combatantHidden ? "fa-list" : "fa-list-check"}"></i><span class="sf-control-label">${escapeHtml(combatantVisibilityLabel)}</span></button>
+        <button type="button" data-sf-action="toggle-combatant-visibility" class="sf-icon-button ${visibilityHidden ? "is-active" : ""}" title="${escapeAttr(combinedVisibilityLabel)}"><i class="fa-solid ${visibilityHidden ? "fa-eye" : "fa-eye-slash"}"></i><span class="sf-control-label">${escapeHtml(combinedVisibilityLabel)}</span></button>
+        <button type="button" data-sf-action="toggle-combatant-defeated" class="sf-icon-button ${context.combatant.isDefeated ? "is-active" : ""}" title="${escapeAttr(defeatedLabel)}"><i class="fa-solid fa-skull"></i><span class="sf-control-label">${escapeHtml(defeatedLabel)}</span></button>
+        <button type="button" data-sf-action="remove-combatant" class="sf-icon-button is-danger" title="${escapeAttr(removeLabel)}"><i class="fa-solid fa-circle-minus"></i><span class="sf-control-label">${escapeHtml(removeLabel)}</span></button>
+    ` : "";
+
+    return `<section class="sf-combat-controls" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CombatControls"))}">
+        ${buildAdvanceButtons(context)}
+        <div class="sf-pause-buttons">${pauseButtons}</div>
+        <div class="sf-tracker-buttons">
+            <button type="button" data-sf-action="focus-combatant" class="sf-icon-button" title="${escapeAttr(focusLabel)}"><i class="fa-solid fa-bullseye"></i><span class="sf-control-label">${escapeHtml(focusLabel)}</span></button>
+            ${gmControls}
+        </div>
+    </section>`;
+}
+
+function buildAdvanceButtons(context, includeActorName = false) {
+    const tickButtons = [1, 2, 3, 4, 5, 6, 7, 8, 10].map((ticks) => buildAdvanceButton(ticks)).join("");
+    const label = includeActorName
+        ? `${t("SMOOTHER_FIGHT.HUD.Advance")} · ${context.actor.name}`
+        : t("SMOOTHER_FIGHT.HUD.Advance");
+    return `<div class="sf-tick-buttons"><span class="sf-tick-label">${escapeHtml(label)}</span>${tickButtons}${buildAdvanceButton("custom")}</div>`;
+}
+
+function buildAdvanceButton(ticks) {
+    const custom = ticks === "custom";
+    const label = custom
+        ? t("SMOOTHER_FIGHT.HUD.CustomTicks")
+        : t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks });
+    return `<span class="sf-tick-action-control${custom ? " is-complete" : ""}">
+        <button type="button" data-sf-action="add-ticks" data-ticks="${escapeAttr(ticks)}" aria-label="${escapeAttr(label)}">${custom ? "+X" : `+${escapeHtml(ticks)} T`}</button>
+        ${buildTickActionReference(ticks)}
+    </span>`;
+}
+
+function buildTickActionReference(ticks) {
+    const complete = ticks === "custom";
+    const actions = combatTickActionsFor(ticks);
+    const columnCount = complete ? 4 : 3;
+    const heading = complete
+        ? t("SMOOTHER_FIGHT.HUD.TickActionReferenceAll")
+        : t("SMOOTHER_FIGHT.HUD.TickActionReference", { ticks });
+    let currentCategory = null;
+    const rows = actions.map((action) => {
+        const category = action.category === currentCategory ? "" : `
+            <tr class="sf-tick-action-category"><th colspan="${columnCount}">${escapeHtml(t(`SMOOTHER_FIGHT.HUD.TickActionCategories.${action.category}`))}</th></tr>`;
+        currentCategory = action.category;
+        const duration = complete ? `<td>${escapeHtml(tickActionDuration(action))}</td>` : "";
+        const special = action.special
+            ? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Special`)
+            : t("SMOOTHER_FIGHT.HUD.TickActionDash");
+        const actionName = t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Name`);
+        const shareLabel = t("SMOOTHER_FIGHT.HUD.TickActionShare", { action: actionName });
+        const advanceTicks = tickActionAdvanceValue(action, ticks);
+        return `${category}<tr>
+            <td><button type="button" class="sf-tick-action-link" data-sf-action="share-tick-action" data-tick-action-id="${escapeAttr(action.id)}" data-tick-action-ticks="${escapeAttr(ticks)}" data-tick-action-advance="${escapeAttr(advanceTicks)}" title="${escapeAttr(shareLabel)}" aria-label="${escapeAttr(shareLabel)}">${escapeHtml(actionName)}</button></td>
+            <td>${escapeHtml(t(`SMOOTHER_FIGHT.HUD.TickActionKinds.${action.kind}`))}</td>
+            ${duration}
+            <td>${escapeHtml(special)}</td>
+        </tr>`;
+    }).join("");
+    const body = rows || `<tr><td colspan="${columnCount}" class="sf-tick-action-empty">${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionEmpty", { ticks }))}</td></tr>`;
+    return `<div class="sf-tick-action-tooltip" role="tooltip">
+        <strong>${escapeHtml(heading)}</strong>
+        <table>
+            <thead><tr>
+                <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionName"))}</th>
+                <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionType"))}</th>
+                ${complete ? `<th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionDurationHeading"))}</th>` : ""}
+                <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSpecial"))}</th>
+            </tr></thead>
+            <tbody>${body}</tbody>
+        </table>
+    </div>`;
+}
+
+function tickActionAdvanceValue(action, selectedTicks) {
+    if (selectedTicks !== "custom") return selectedTicks;
+    if (Number.isFinite(Number(action.ticks))) return action.ticks;
+    return action.ticks === "unavailable" ? "none" : "custom";
+}
+
+function tickActionDuration(action) {
+    if (Array.isArray(action.ticks)) {
+        return t("SMOOTHER_FIGHT.HUD.TickActionDurationRange", {
+            first: action.ticks[0],
+            last: action.ticks.at(-1),
+        });
+    }
+    if (Number.isFinite(Number(action.ticks))) {
+        return t("SMOOTHER_FIGHT.HUD.TickActionDuration", { ticks: action.ticks });
+    }
+    const suffix = action.ticks === "wgs"
+        ? "Wgs"
+        : action.ticks === "spell"
+            ? "Spell"
+            : "Unavailable";
+    return t(`SMOOTHER_FIGHT.HUD.TickActionDuration${suffix}`);
+}
+
+function buildPersonalControls(activeContext) {
+    const candidates = getPersonalHudCandidates(activeContext);
+    const context = getPersonalHudContext(activeContext);
+    const picker = candidates.length > 1 ? buildPersonalCombatantPicker(candidates, context) : "";
+    if (!context) {
+        return `<div class="sf-personal-controls sf-personal-selection-required">
+            ${picker ? `<nav class="sf-actions sf-personal-skill-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.ChooseOwnCombatant"))}">${picker}</nav>` : ""}
+            <p class="sf-owner-note"><i class="fa-solid fa-arrow-pointer"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SelectOwnedToken"))}</p>
+        </div>`;
+    }
+    const attributes = `data-sf-context-combatant-id="${escapeAttr(context.combatant.id)}" data-sf-context-actor-id="${escapeAttr(context.actor.id)}"`;
+    return `<div class="sf-personal-controls" ${attributes}>
+        <section class="sf-combat-controls sf-personal-combat-controls" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CombatControls"))}">
+            ${buildAdvanceButtons(context, true)}
+        </section>
+        ${buildSkillActionBar(context.actor, picker)}
+    </div>`;
+}
+
+function buildPersonalCombatantPicker(candidates, context) {
+    const selectedId = context?.combatant?.id ?? null;
+    const current = candidates.find((candidate) => candidate.combatant.id === selectedId) ?? null;
+    const label = current?.token?.name ?? current?.actor?.name ?? t("SMOOTHER_FIGHT.HUD.ChooseOwnCombatant");
+    const body = [...candidates]
+        .sort((left, right) => String(left.token?.name ?? left.actor?.name ?? "").localeCompare(
+            String(right.token?.name ?? right.actor?.name ?? ""),
+            game.i18n.lang
+        ))
+        .map((candidate) => {
+            const name = candidate.token?.name ?? candidate.actor.name;
+            const actorName = candidate.token?.name && candidate.token.name !== candidate.actor.name ? candidate.actor.name : "";
+            const tokenReference = candidate.tokenUuid ? ` data-token-uuid="${escapeAttr(candidate.tokenUuid)}"` : "";
+            const selected = candidate.combatant.id === selectedId;
+            const tick = Math.round(Number(candidate.combatant.initiative) || 0);
+            return `<button type="button" data-sf-action="select-personal-combatant" data-combatant-id="${escapeAttr(candidate.combatant.id)}"${tokenReference} class="${selected ? "is-current" : ""}" aria-pressed="${selected}">
+                <img src="${escapeAttr(candidate.token?.texture?.src ?? candidate.actor.img ?? "icons/svg/mystery-man.svg")}" alt="">
+                <span>${escapeHtml(name)}${actorName ? `<small>${escapeHtml(actorName)}</small>` : ""}</span>
+                <b>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</b>
+            </button>`;
+        }).join("");
+    const title = t("SMOOTHER_FIGHT.HUD.ChooseOwnCombatant");
+    return `<details class="sf-action-menu sf-personal-combatant-picker">
+        <summary title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}"><i class="fa-solid fa-users"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
+        <div class="sf-action-popover">${body}</div>
+    </details>`;
+}
+
+function getSkillActionData(actor) {
+    const skills = Object.values(actor.skills ?? {})
+        .filter((skill) => numericValue(skill.points) > 0 || ["acrobatics", "athletics", "determination", "stealth", "perception", "endurance"].includes(skill.id))
+        .sort((a, b) => displayLabel(a.label).localeCompare(displayLabel(b.label), game.i18n.lang));
+    const favoriteSkillIds = normalizeFavoriteSkillIds(
+        actor.getFlag?.(MODULE_ID, "favoriteSkillIds"),
+        skills.map((skill) => skill.id),
+        MAX_FAVORITE_SKILLS
+    );
+    const favoriteSkillIdSet = new Set(favoriteSkillIds);
+    const favoriteSkills = favoriteSkillIds
+        .map((id) => skills.find((skill) => skill.id === id))
+        .filter(Boolean);
+    const skillMenuBody = buildSkillMenuBody(skills, favoriteSkillIdSet);
+    const skillControlMarkup = favoriteSkills.length === 1
+        ? directSkillControl(favoriteSkills[0], skillMenuBody)
+        : actionMenu("fa-solid fa-dice-d20", t("SMOOTHER_FIGHT.HUD.Skills"), skillMenuBody, "", "skills");
+    return { favoriteSkills, skillControlMarkup };
+}
+
+function buildSkillActionBar(actor, leadingControl = "") {
+    const { favoriteSkills, skillControlMarkup } = getSkillActionData(actor);
+    return `<nav class="sf-actions sf-personal-skill-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Skills"))}">
+        ${leadingControl}
+        ${skillControlMarkup}
+        ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
+    </nav>`;
+}
+
+async function buildActionBar(context) {
+    const actor = context.actor;
+    const defenseAlert = services.hasPendingActiveDefense(context);
+    const preparedSpellId = actor.getFlag?.("splittermond", "preparedSpell");
+    const preparedAttackId = actor.getFlag?.("splittermond", "preparedAttack");
+    const storedDefaultAttackId = actor.getFlag?.(MODULE_ID, "defaultAttackId");
+    const { favoriteSkills, skillControlMarkup } = getSkillActionData(actor);
+    const spells = [...(actor.spells ?? [])].sort((a, b) =>
+        Number(b.id === preparedSpellId) - Number(a.id === preparedSpellId) || sortByName(a, b)
+    );
+    const preparedSpell = spells.find((spell) => spell.id === preparedSpellId) ?? null;
+    const availableSpells = spells.filter((spell) => spell.enoughFocus !== false).length;
+    const spellLabel = `${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells})`;
+    const availableAttacks = [...(actor.attacks ?? [])];
+    const equipment = Array.from(actor.items ?? []).filter((item) => ["weapon", "shield"].includes(item.type)).sort(sortByName);
+    const attackControl = attackControlState(availableAttacks.map((attack) => attack.id), storedDefaultAttackId, equipment.length);
+    const attackStates = new Map(availableAttacks.map((attack) => [
+        attack.id,
+        attackReadiness(services.isRangedAttack(attack), attack.id, preparedAttackId),
+    ]));
+    const attacks = availableAttacks.sort((a, b) =>
+        Number(attackStates.get(b.id)?.prepared) - Number(attackStates.get(a.id)?.prepared) || sortByName(a, b)
+    );
+    const preparedAttack = attacks.find((attack) => attackStates.get(attack.id)?.prepared) ?? null;
+    const directAttack = attacks.find((attack) => attack.id === attackControl.directAttackId) ?? null;
+    const attackSpeeds = new Map(await Promise.all(attacks.map(async (attack) => [attack.id, await services.getAttackSpeed(attack)])));
+    const attackMenuBody = buildAttackMenuBody(
+        attacks,
+        equipment,
+        attackStates,
+        attackSpeeds,
+        attackControl.defaultAttackId,
+        attackControl.automaticDefaultAttackId
+    );
+    const attackSelection = attackControlSelection(preparedAttack?.id, directAttack?.id);
+    const attackControlMarkup = attackSelection.mode === "prepared"
+        ? preparedAttackMenu(preparedAttack)
+        : attackSelection.mode === "default"
+            ? directAttackControl(directAttack, {
+                menuBody: attackMenuBody,
+                showMenu: attackControl.showMenu,
+                isDefault: directAttack.id === attackControl.defaultAttackId,
+                readiness: attackStates.get(directAttack.id),
+                speed: attackSpeeds.get(directAttack.id),
+            })
+            : actionMenu("fa-solid fa-hand-fist", t("SMOOTHER_FIGHT.HUD.Attacks"), attackMenuBody, "", "attacks");
+    return `<nav class="sf-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
+        ${skillControlMarkup}
+        ${attackControlMarkup}
+        ${preparedSpell ? preparedSpellMenu(preparedSpell, availableSpells) : actionMenu("fa-solid fa-wand-sparkles", spellLabel, spells.map((spell) => {
+            const preparing = services.isPreparingSpell(spell.id);
+            const skillLabel = displayLabel(spell.skill?.label);
+            const skillValue = displayValue(spell.skill?.value, "");
+            const skill = [skillLabel, skillValue].filter((value) => value !== "").join(" ");
+            const focus = t("SMOOTHER_FIGHT.HUD.FocusCosts", { costs: spellFocusCosts(spell) });
+            const status = preparing
+                ? t("SMOOTHER_FIGHT.HUD.Preparing")
+                : displayValue(spell.castDuration, "–");
+            return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="sf-spell-action ${preparing ? "is-preparing" : ""}" ${spell.enoughFocus === false || preparing ? 'aria-disabled="true"' : ""}>
+                <img src="${escapeAttr(spell.img)}" alt=""><span>${escapeHtml(spell.name)}<small>${escapeHtml([skill, focus].filter(Boolean).join(" · "))}</small></span>
+                <b>${escapeHtml(status)}</b>
+            </button>`;
+        }).join("") || emptyMenuText())}
+        ${actionMenu("fa-solid fa-shield-halved", t("SMOOTHER_FIGHT.HUD.Defense"), [
+            defenseButton(actor, "defense", "VTD"),
+            defenseButton(actor, "bodyresist", "KW"),
+            defenseButton(actor, "mindresist", "GW"),
+        ].join(""), defenseAlert ? "is-defense-alert" : "")}
+        <div class="sf-defense-pills" aria-hidden="true">
+            <span>VTD <b>${escapeHtml(getDerivedValue(actor, "defense"))}</b></span>
+            <span>KW <b>${escapeHtml(getDerivedValue(actor, "bodyresist"))}</b></span>
+            <span>GW <b>${escapeHtml(getDerivedValue(actor, "mindresist"))}</b></span>
+        </div>
+        ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
+    </nav>`;
+}
+
+function buildSkillMenuBody(skills, favoriteSkillIds) {
+    return skills.map((skill) => {
+        const label = displayLabel(skill.label, skill.id);
+        const isFavorite = favoriteSkillIds.has(skill.id);
+        const toggleLabel = t(isFavorite ? "SMOOTHER_FIGHT.HUD.ClearFavoriteSkill" : "SMOOTHER_FIGHT.HUD.SetFavoriteSkill");
+        return `<div class="sf-skill-option ${isFavorite ? "is-favorite" : ""}">
+            <button type="button" class="sf-skill-option-roll" data-sf-action="skill" data-skill-id="${escapeAttr(skill.id)}">
+                <span>${escapeHtml(label)}</span><b>${escapeHtml(displayValue(skill.value))}</b>
+            </button>
+            <button type="button" class="sf-favorite-skill-toggle ${isFavorite ? "is-favorite" : ""}" data-sf-action="toggle-favorite-skill" data-skill-id="${escapeAttr(skill.id)}" title="${escapeAttr(toggleLabel)}" aria-label="${escapeAttr(toggleLabel)}" aria-pressed="${isFavorite}"><i class="${isFavorite ? "fa-solid" : "fa-regular"} fa-star"></i></button>
+        </div>`;
+    }).join("") || emptyMenuText();
+}
+
+function buildFavoriteSkillBar(skills) {
+    return `<div class="sf-skill-favorites" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.FavoriteSkills"))}">
+        ${skills.map((skill) => {
+            const label = displayLabel(skill.label, skill.id);
+            const dragLabel = t("SMOOTHER_FIGHT.HUD.ReorderFavoriteSkill", { skill: label });
+            return `<button type="button" draggable="true" aria-grabbed="false" data-sf-action="skill" data-skill-id="${escapeAttr(skill.id)}" data-favorite-skill-id="${escapeAttr(skill.id)}" title="${escapeAttr(dragLabel)}"><i class="fa-solid fa-grip-vertical"></i><span>${escapeHtml(label)}</span><b>${escapeHtml(displayValue(skill.value))}</b></button>`;
+        }).join("")}
+    </div>`;
+}
+
+function directSkillControl(skill, menuBody) {
+    const label = displayLabel(skill.label, skill.id);
+    const menuLabel = t("SMOOTHER_FIGHT.HUD.OpenSkillMenu");
+    return `<div class="sf-action-menu sf-direct-attack-control sf-direct-skill-control has-menu">
+        <button type="button" class="sf-direct-attack sf-direct-skill" data-sf-action="skill" data-skill-id="${escapeAttr(skill.id)}" aria-label="${escapeAttr(label)}">
+            <i class="fa-solid fa-star"></i>
+            <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.FavoriteSkill"))}</small><strong>${escapeHtml(label)}</strong></span>
+            <b>${escapeHtml(displayValue(skill.value))}</b>
+        </button>
+        <details class="sf-direct-attack-picker sf-direct-skill-picker" data-sf-menu="skills"><summary title="${escapeAttr(menuLabel)}" aria-label="${escapeAttr(menuLabel)}"><i class="fa-solid fa-chevron-down sf-chevron"></i></summary><div class="sf-action-popover">${menuBody}</div></details>
+    </div>`;
+}
+
+function buildAttackMenuBody(attacks, equipment, attackStates, attackSpeeds, defaultAttackId, automaticDefaultAttackId) {
+    const attackOptions = attacks.map((attack) => {
+        const isDefault = attack.id === defaultAttackId;
+        const isAutomatic = attack.id === automaticDefaultAttackId;
+        const toggleLabel = t(isAutomatic
+            ? "SMOOTHER_FIGHT.HUD.AutomaticDefaultAttack"
+            : isDefault
+                ? "SMOOTHER_FIGHT.HUD.ClearDefaultAttack"
+                : "SMOOTHER_FIGHT.HUD.SetDefaultAttack");
+        return `<div class="sf-attack-option ${isDefault ? "is-default" : ""}">
+            <button type="button" class="sf-attack-option-roll ${attackStates.get(attack.id)?.prepared ? "is-prepared" : ""}" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
+                <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small></span>
+                <b>${escapeHtml(attackStates.get(attack.id)?.prepared ? displayValue(attack.damage, "–") : `${attackSpeeds.get(attack.id) ?? "–"} T`)}</b>
+            </button>
+            <button type="button" class="sf-default-attack-toggle ${isDefault ? "is-default" : ""} ${isAutomatic ? "is-automatic" : ""}" ${isAutomatic ? "disabled" : 'data-sf-action="toggle-default-attack"'} data-attack-id="${escapeAttr(attack.id)}" title="${escapeAttr(toggleLabel)}" aria-label="${escapeAttr(toggleLabel)}" aria-pressed="${isDefault}"><i class="${isDefault ? "fa-solid" : "fa-regular"} fa-star"></i></button>
+        </div>`;
+    }).join("") || emptyMenuText();
+    const equipmentOptions = equipment.length
+        ? `<h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Equip"))}</h4>${equipment.map((item) => `<button type="button" data-sf-action="toggle-equipped" data-item-id="${escapeAttr(item.id)}" class="${item.system?.equipped ? "is-equipped" : "is-unequipped"}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
+            <img src="${escapeAttr(item.img)}" alt=""><span>${escapeHtml(item.name)}</span><i class="fa-solid ${item.system?.equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i>
+        </button>`).join("")}`
+        : "";
+    return attackOptions + equipmentOptions;
+}
+
+function directAttackControl(attack, { menuBody, showMenu, isDefault, readiness, speed }) {
+    const label = t(isDefault ? "SMOOTHER_FIGHT.HUD.DefaultAttack" : "SMOOTHER_FIGHT.HUD.Attacks");
+    const status = readiness?.ready ? displayValue(attack.damage, "–") : `${speed ?? "–"} T`;
+    const menuLabel = t("SMOOTHER_FIGHT.HUD.OpenAttackMenu");
+    return `<div class="sf-action-menu sf-direct-attack-control ${showMenu ? "has-menu" : ""}">
+        <button type="button" class="sf-direct-attack" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" aria-label="${escapeAttr(attack.name)}">
+            <img src="${escapeAttr(attack.img ?? "icons/svg/sword.svg")}" alt="">
+            <span><small>${escapeHtml(label)}</small><strong>${escapeHtml(attack.name)}</strong></span>
+            <b>${escapeHtml(status)}</b>
+        </button>
+        ${showMenu ? `<details class="sf-direct-attack-picker" data-sf-menu="attacks"><summary title="${escapeAttr(menuLabel)}" aria-label="${escapeAttr(menuLabel)}"><i class="fa-solid fa-chevron-down sf-chevron"></i></summary><div class="sf-action-popover">${menuBody}</div></details>` : ""}
+    </div>`;
+}
+
+function actionMenu(icon, label, body, className = "", menuId = "") {
+    const menuAttribute = menuId ? ` data-sf-menu="${escapeAttr(menuId)}"` : "";
+    return `<details class="sf-action-menu ${escapeAttr(className)}"${menuAttribute}>
+        <summary><i class="${icon}"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
+        <div class="sf-action-popover">${body}</div>
+    </details>`;
+}
+
+function preparedSpellMenu(spell, availableSpells) {
+    const cast = t("SMOOTHER_FIGHT.HUD.Cast");
+    const cancel = t("SMOOTHER_FIGHT.HUD.CancelSpell");
+    return `<div class="sf-action-menu sf-prepared-spell-menu">
+        <button type="button" class="sf-prepared-spell-cast sf-spell-action" data-sf-action="cast-prepared-spell" data-spell-id="${escapeAttr(spell.id)}" aria-label="${escapeAttr(`${spell.name}: ${cast}`)}">
+            <img src="${escapeAttr(spell.img ?? "icons/svg/daze.svg")}" alt="">
+            <span><small>${escapeHtml(`${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells}) · ${t("SMOOTHER_FIGHT.HUD.PreparedSpell")}`)}</small><strong>${escapeHtml(spell.name)}</strong></span>
+            <b><i class="fa-solid fa-wand-sparkles"></i><span>${escapeHtml(cast)}</span></b>
+        </button>
+        <button type="button" class="sf-prepared-spell-cancel" data-sf-action="cancel-prepared-spell" title="${escapeAttr(cancel)}" aria-label="${escapeAttr(cancel)}"><i class="fa-solid fa-xmark"></i></button>
+    </div>`;
+}
+
+function preparedAttackMenu(attack) {
+    const release = t("SMOOTHER_FIGHT.HUD.ReleaseAttack");
+    const cancel = t("SMOOTHER_FIGHT.HUD.CancelAttack");
+    return `<div class="sf-action-menu sf-prepared-spell-menu sf-prepared-attack-menu">
+        <button type="button" class="sf-prepared-spell-cast sf-prepared-attack-release" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" aria-label="${escapeAttr(`${attack.name}: ${release}`)}">
+            <img src="${escapeAttr(attack.img ?? "icons/svg/sword.svg")}" alt="">
+            <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.PreparedAttack"))}</small><strong>${escapeHtml(attack.name)}</strong></span>
+            <b><i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(release)}</span></b>
+        </button>
+        <button type="button" class="sf-prepared-spell-cancel" data-sf-action="cancel-prepared-attack" title="${escapeAttr(cancel)}" aria-label="${escapeAttr(cancel)}"><i class="fa-solid fa-xmark"></i></button>
+    </div>`;
+}
+
+function spellFocusCosts(spell) {
+    return displayLabel(spell?.costs ?? spell?.system?.costs, "–");
+}
+
+export function resolveActionItem(actor, element) {
+    const spellId = element?.dataset?.spellId;
+    if (spellId) {
+        return actor?.spells?.find((spell) => spell.id === spellId)
+            ?? actor?.items?.get?.(spellId)
+            ?? null;
+    }
+
+    const attackId = element?.dataset?.attackId;
+    if (attackId) {
+        const attack = actor?.attacks?.find((candidate) => candidate.id === attackId);
+        return attack?.item ?? actor?.items?.get?.(attackId) ?? null;
+    }
+
+    const itemId = element?.dataset?.itemId;
+    return itemId ? actor?.items?.get?.(itemId) ?? null : null;
+}
+
+export function bindSpellTooltips(root, context) {
+    for (const button of root.querySelectorAll("[data-spell-id]")) {
+        const spell = resolveActionItem(context.actor, button);
+        if (!spell) continue;
+        button.addEventListener("mouseenter", () => showSpellTooltip(button, spell));
+        button.addEventListener("mouseleave", () => clearSpellTooltip(button));
+        button.addEventListener("focus", () => showSpellTooltip(button, spell));
+        button.addEventListener("blur", () => clearSpellTooltip(button));
+    }
+}
+
+function showSpellTooltip(anchor, spell) {
+    if (hudState.spellTooltip?.anchor === anchor) return;
+    clearSpellTooltip();
+
+    const description = itemPlainText(spell.description ?? spell.system?.description);
+    const enhancement = itemPlainText(spell.enhancementDescription ?? spell.system?.enhancementDescription);
+    const enhancementCosts = displayLabel(spell.enhancementCosts ?? spell.system?.enhancementCosts, "–");
+    const tooltip = document.createElement("aside");
+    tooltip.id = `${MODULE_ID}-spell-tooltip`;
+    tooltip.className = "sf-spell-tooltip";
+    tooltip.setAttribute("role", "tooltip");
+    tooltip.innerHTML = `
+        <header>
+            <img src="${escapeAttr(spell.img ?? "icons/svg/book.svg")}" alt="">
+            <span><strong>${escapeHtml(spell.name)}</strong><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.FocusCosts", { costs: spellFocusCosts(spell) }))}</small></span>
+        </header>
+        <section>
+            <h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SpellDescription"))}</h4>
+            <p>${escapeHtml(description || t("SMOOTHER_FIGHT.HUD.NoSpellDescription"))}</p>
+        </section>
+        <section>
+            <h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SpellEnhancement"))}<span>${escapeHtml(enhancementCosts)}</span></h4>
+            <p>${escapeHtml(enhancement || t("SMOOTHER_FIGHT.HUD.NoSpellEnhancement"))}</p>
+        </section>
+        <footer><i class="fa-solid fa-arrow-pointer"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}</footer>
+    `;
+    document.body.append(tooltip);
+    anchor.setAttribute("aria-describedby", tooltip.id);
+    hudState.spellTooltip = { anchor, element: tooltip };
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const gap = 10;
+    const viewportGap = 8;
+    let left = anchorRect.right + gap;
+    if (left + tooltipRect.width > window.innerWidth - viewportGap) {
+        left = anchorRect.left - tooltipRect.width - gap;
+    }
+    left = Math.max(viewportGap, Math.min(left, window.innerWidth - tooltipRect.width - viewportGap));
+    const top = Math.max(
+        viewportGap,
+        Math.min(anchorRect.top, window.innerHeight - tooltipRect.height - viewportGap),
+    );
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+    tooltip.classList.add("is-visible");
+}
+
+export function clearSpellTooltip(anchor = null) {
+    const state = hudState.spellTooltip;
+    if (!state || (anchor && state.anchor !== anchor)) return;
+    hudState.spellTooltip = null;
+    state.anchor?.removeAttribute?.("aria-describedby");
+    state.element?.remove?.();
+}
+
+function itemPlainText(value) {
+    const source = String(value ?? "").trim();
+    if (!source) return "";
+    const template = document.createElement("template");
+    template.innerHTML = source
+        .replace(/<br\s*\/?\s*>/giu, "\n")
+        .replace(/<\/(?:p|div|li|h[1-6])>/giu, "\n");
+    return String(template.content.textContent ?? "")
+        .replace(/\u00a0/gu, " ")
+        .replace(/[ \t]+\n/gu, "\n")
+        .replace(/\n[ \t]+/gu, "\n")
+        .replace(/\n{3,}/gu, "\n\n")
+        .replace(/[ \t]{2,}/gu, " ")
+        .trim();
+}
+
+function defenseButton(actor, type, abbreviation) {
+    const options = actor.activeDefense?.[type] ?? [];
+    const suffix = options.length > 1 ? `<small>${options.length} ${escapeHtml(t("SMOOTHER_FIGHT.HUD.Defense"))}</small>` : "";
+    return `<button type="button" data-sf-action="defense" data-defense-type="${type}">
+        <span>${abbreviation}${suffix}</span><b>${escapeHtml(getDerivedValue(actor, type))}</b>
+    </button>`;
+}
+
+function emptyMenuText() {
+    return `<p class="sf-menu-empty">–</p>`;
+}
+
+function buildQuickTargets(context) {
+    const candidates = services.getTargetSceneTokens(context.combat).filter((token) => token.uuid !== context.token?.uuid);
+    const labels = quickTargetLabels(candidates);
+    const selected = new Set(context.targets.map((token) => token.uuid));
+    const body = candidates.length
+        ? candidates.map((token) => `<button type="button" data-sf-action="set-target" data-token-uuid="${escapeAttr(token.uuid)}" class="${selected.has(token.uuid) ? "is-current" : ""}" aria-pressed="${selected.has(token.uuid)}">
+            <img src="${escapeAttr(token.texture?.src ?? token.actor?.img ?? "icons/svg/mystery-man.svg")}" alt=""><span>${escapeHtml(labels.get(token.uuid) ?? token.name)}</span>
+            ${selected.has(token.uuid) ? '<i class="fa-solid fa-crosshairs"></i>' : ""}
+        </button>`).join("")
+        : `<p>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoCombatants"))}</p>`;
+    const label = t("SMOOTHER_FIGHT.HUD.QuickTarget");
+    return `<details class="sf-quick-targets">
+        <summary title="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
+        <div>${body}</div>
+    </details>`;
+}
+
+function quickTargetLabels(tokens) {
+    const names = new Map(tokens.map((token) => [token.uuid, String(token.name ?? token.actor?.name ?? "–")]));
+    const totals = new Map();
+    for (const name of names.values()) totals.set(name, (totals.get(name) ?? 0) + 1);
+    const occurrences = new Map();
+    return new Map(tokens.map((token) => {
+        const name = names.get(token.uuid);
+        const total = totals.get(name) ?? 1;
+        const occurrence = (occurrences.get(name) ?? 0) + 1;
+        occurrences.set(name, occurrence);
+        return [token.uuid, total > 1 ? `${name} · ${occurrence}/${total}` : name];
+    }));
+}
