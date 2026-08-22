@@ -20,8 +20,8 @@ import {
 
 export async function onCreateChatMessage(message) {
     try {
-        await waitForDiceSoNice(message);
         if (isOffensiveCombatMessage(message)) await attachCombatContext(message);
+        await waitForDiceSoNice(message);
         if (services.isFumbleTableMessage(message)) await services.attachFumbleActions(message);
         if (services.isDefenseMessage(message)) await services.processDefenseMessage(message);
         services.announceMessageFeedback(message);
@@ -105,6 +105,7 @@ export function isDiceAnimationPending(message) {
 
 async function attachCombatContext(message) {
     if (services.getMessageContext(message) || !services.isOwnMessage(message)) return;
+    const createdAt = Date.now();
     const combat = game.combat;
     const speakerCombatant = Array.from(combat?.combatants ?? []).find((combatant) =>
         (message.speaker?.token && combatant.tokenId === message.speaker.token) ||
@@ -115,7 +116,7 @@ async function attachCombatContext(message) {
     const targets = services.getTargetsForUser(linkedUser);
     const target = targets.at(-1) ?? null;
     const pendingKind = services.getPendingOffenseKind(actor?.id);
-    if (pendingKind && pendingKind.expiresAt < Date.now()) services.clearPendingOffenseKind(actor.id);
+    if (pendingKind) services.clearPendingOffenseKind(actor?.id);
     const context = {
         combatId: combat?.id ?? null,
         combatantId: speakerCombatant?.id ?? null,
@@ -127,11 +128,10 @@ async function attachCombatContext(message) {
         targetTokenUuids: targets.map((candidate) => candidate.uuid),
         targetActorUuids: targets.map((candidate) => candidate.actor?.uuid).filter(Boolean),
         targetNames: targets.map((candidate) => candidate.name ?? candidate.actor?.name).filter(Boolean),
-        actionKind: pendingKind?.expiresAt >= Date.now() ? pendingKind.kind : null,
+        actionKind: pendingKind?.expiresAt >= createdAt ? pendingKind.kind : null,
         linkedUserId: linkedUser?.id ?? game.user.id,
-        createdAt: Date.now(),
+        createdAt,
     };
-    if (pendingKind) services.clearPendingOffenseKind(actor?.id);
     await services.safeSetFlag(message, "context", context);
 }
 
