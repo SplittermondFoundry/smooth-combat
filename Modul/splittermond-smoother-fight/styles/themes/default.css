@@ -25,15 +25,15 @@
 }
 
 #splittermond-smoother-fight-hud.sf-theme-light {
-    --sf-bg: rgba(238, 242, 237, 0.96);
-    --sf-bg-soft: rgba(222, 234, 228, 0.96);
-    --sf-line: rgba(42, 99, 94, 0.32);
-    --sf-gold: #9b6824;
-    --sf-gold-bright: #794a12;
-    --sf-teal: #1e746d;
-    --sf-text: #172321;
-    --sf-muted: #566763;
-    --sf-danger: #a43f38;
+    --sf-bg: rgba(215, 223, 216, 0.97);
+    --sf-bg-soft: rgba(197, 210, 202, 0.98);
+    --sf-line: rgba(35, 76, 70, 0.46);
+    --sf-gold: #875510;
+    --sf-gold-bright: #633a08;
+    --sf-teal: #155f58;
+    --sf-text: #10201d;
+    --sf-muted: #40554f;
+    --sf-danger: #922f29;
     --sf-hud-background-image: var(--sf-hud-background-light);
-    --sf-hud-background-tint: rgba(238, 242, 237, 0.74);
+    --sf-hud-background-tint: rgba(210, 220, 212, 0.86);
 }

@@ -678,15 +678,16 @@
 #splittermond-smoother-fight-hud.sf-theme-light .sf-center,
 #splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls,
 #splittermond-smoother-fight-hud.sf-theme-light .sf-events-heading {
-    background-color: rgba(245, 248, 244, 0.88);
+    background-color: rgba(198, 210, 201, 0.88);
 }
 
 #splittermond-smoother-fight-hud.sf-theme-light .sf-action-popover,
+#splittermond-smoother-fight-hud.sf-theme-light .sf-visibility-popover,
 #splittermond-smoother-fight-hud.sf-theme-light .sf-quick-targets > div,
 #splittermond-smoother-fight-hud.sf-theme-light .sf-chat-message .sf-promoted-controls {
     color: var(--sf-text);
-    background: rgba(241, 246, 241, 0.99);
-    box-shadow: 0 -10px 24px rgba(31, 61, 56, 0.2);
+    background: rgba(219, 227, 220, 0.99);
+    box-shadow: 0 -10px 26px rgba(23, 48, 44, 0.28);
 }
 
 #splittermond-smoother-fight-hud.sf-theme-light .sf-chat-message,
@@ -694,7 +695,73 @@
 #splittermond-smoother-fight-hud.sf-theme-light .sf-check-result-grid,
 #splittermond-smoother-fight-hud.sf-theme-light .sf-damage-check > .roll-summary {
     color: var(--sf-text);
-    background-color: rgba(255, 255, 255, 0.62);
+    background-color: rgba(231, 237, 231, 0.72);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-shell.is-current-user-turn .sf-turnline {
+    color: var(--sf-muted);
+    background: linear-gradient(90deg, rgba(147, 100, 28, 0.18), rgba(31, 106, 97, 0.13) 62%, transparent);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls button,
+#splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls .sf-visibility-menu > summary {
+    border-color: rgba(35, 76, 70, 0.42);
+    background: rgba(247, 250, 246, 0.32);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls button:hover:not(:disabled),
+#splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls button.is-active,
+#splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls .sf-visibility-menu > summary:hover,
+#splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls .sf-visibility-menu[open] > summary,
+#splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls .sf-visibility-menu.is-active > summary {
+    border-color: rgba(112, 70, 12, 0.68);
+    background: rgba(149, 100, 25, 0.14);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls .is-danger {
+    border-color: rgba(130, 35, 29, 0.74);
+    color: #721c17;
+    background: rgba(153, 43, 35, 0.13);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls .is-danger:hover:not(:disabled) {
+    border-color: #6e1d18;
+    color: #fff8f4;
+    background: #92332c;
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-actions {
+    background: rgba(236, 241, 235, 0.28);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-event-group > summary {
+    color: var(--sf-muted);
+    background: rgba(246, 249, 245, 0.16);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-event-group[open] > summary {
+    color: var(--sf-text);
+    background: rgba(26, 91, 84, 0.08);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-action-popover button + button,
+#splittermond-smoother-fight-hud.sf-theme-light .sf-combat-controls .sf-visibility-popover button + button,
+#splittermond-smoother-fight-hud.sf-theme-light .sf-quick-target-row + .sf-quick-target-row {
+    border-color: rgba(35, 76, 70, 0.2);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-action-popover .sf-defense-option-list > small {
+    border-color: rgba(35, 76, 70, 0.25);
+    background: rgba(21, 95, 88, 0.08);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-action-menu.is-defense-alert > summary,
+#splittermond-smoother-fight-hud.sf-theme-light .sf-event-group.is-defense-alert > summary {
+    color: var(--sf-gold-bright);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-action-menu.is-defense-alert > summary > i:first-child {
+    color: var(--sf-gold);
 }
 
 #splittermond-smoother-fight-hud.sf-theme-light .sf-portrait-name {

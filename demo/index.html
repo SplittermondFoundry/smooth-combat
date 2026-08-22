@@ -19,13 +19,13 @@
         #sidebar-mock { position: fixed; right: 0; top: 0; bottom: 0; width: 300px; background: rgba(8,12,14,.88); border-left: 1px solid #354a4b; }
         #sidebar-mock h2 { padding: 12px; margin: 0; font-family: serif; color: #d8a85d; border-bottom: 1px solid #354a4b; }
         #sidebar-mock p { margin: 8px; padding: 12px; background: rgba(255,255,255,.04); color: #aeb8b5; }
-        #splittermond-smoother-fight-hud .sf-chat-message .splittermond { color: #e8e8e8; }
-        #splittermond-smoother-fight-hud .chat-message-header { display:flex; gap:8px; align-items:center; border-bottom:1px solid rgba(255,255,255,.12); }
+        #splittermond-smoother-fight-hud .sf-chat-message .splittermond { color: var(--sf-text); }
+        #splittermond-smoother-fight-hud .chat-message-header { display:flex; gap:8px; align-items:center; border-bottom:1px solid var(--sf-line); }
         #splittermond-smoother-fight-hud .chat-message-header h2 { margin:0; font-size:15px; }
-        #splittermond-smoother-fight-hud .roll-summary { text-align:center; font-size:25px; color:#f2ce87; padding:5px; }
-        #splittermond-smoother-fight-hud .chat-card-segment { border-top:1px solid rgba(255,255,255,.1); padding-top:5px; }
+        #splittermond-smoother-fight-hud .roll-summary { text-align:center; font-size:25px; color:var(--sf-gold-bright); padding:5px; }
+        #splittermond-smoother-fight-hud .chat-card-segment { border-top:1px solid var(--sf-line); padding-top:5px; }
         #splittermond-smoother-fight-hud .chat-card-segment h3 { margin:2px 0; font-size:11px; }
-        #splittermond-smoother-fight-hud .chat-card-segment button { width:100%; padding:5px; margin-top:3px; color:#e9efeb; background:#183134; border:1px solid #446866; border-radius:3px; }
+        #splittermond-smoother-fight-hud .chat-card-segment button { width:100%; padding:5px; margin-top:3px; color:var(--sf-text); background:var(--sf-bg-soft); border:1px solid var(--sf-line); border-radius:3px; }
         #splittermond-smoother-fight-hud .sf-actor .sf-portrait-image { --sf-token-image: linear-gradient(145deg, #346477, #142630 60%, #9b6e3c); }
         #splittermond-smoother-fight-hud .sf-target .sf-portrait-image { --sf-token-image: linear-gradient(145deg, #723f38, #281d1b 60%, #8d6748); }
     </style>
@@ -85,5 +85,9 @@
         </div>
         <details class="sf-gm-targets"><summary>◎ GM: Ziel wechseln⌃</summary><div><button><span>Rattling-Plünderer</span><b>◎</b></button><button><span>Rattling-Späher</span></button></div></details>
     </section>
+    <script>
+        document.getElementById("splittermond-smoother-fight-hud")
+            ?.classList.toggle("sf-theme-light", new URLSearchParams(location.search).get("theme") === "light");
+    </script>
 </body>
 </html>

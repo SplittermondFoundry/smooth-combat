@@ -77,7 +77,7 @@ test("split styles flatten in the verified cascade order", () => {
     const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "1a2384281897fcf391b20c241decc057b8615e66786dd56eb86372df81d82e2a",
+        "423f7d1e696a4aed26e429296b368f75143a6135b8705c2b7d099f000ccec8c6",
     );
 });
 
