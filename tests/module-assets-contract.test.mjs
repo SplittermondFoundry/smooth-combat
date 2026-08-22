@@ -11,9 +11,9 @@ const moduleRoot = path.join(projectRoot, "Modul", "splittermond-smoother-fight"
 test("Foundry manifest entry points remain stable", () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(moduleRoot, "module.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.3.57");
+    assert.equal(manifest.version, "0.3.58");
     assert.deepEqual(manifest.esmodules, ["scripts/smoother-fight.js"]);
-    assert.deepEqual(manifest.styles, ["styles/smoother-fight-0.3.57.css"]);
+    assert.deepEqual(manifest.styles, ["styles/smoother-fight-0.3.58.css"]);
     assert.equal(manifest.socket, true);
     assert.deepEqual(manifest.languages.map(({ lang, path: languagePath }) => [lang, languagePath]), [
         ["de", "lang/de.json"],
@@ -66,6 +66,9 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /class="sf-tick-action-source"/u);
     assert.match(hudView, /<button type="button" class="sf-portrait-open"/u);
     assert.match(hudView, /<button type="button" class="sf-portrait-focus" data-sf-action="show-token"/u);
+    assert.match(hudView, /const image = actor\?\.img \|\| token\?\.texture\?\.src \|\| "icons\/svg\/mystery-man\.svg";/u);
+    assert.match(hudView, /<img class="sf-portrait-art" src="\$\{escapeAttr\(image\)\}" alt="" aria-hidden="true">/u);
+    assert.doesNotMatch(hudView, /--sf-token-image:url/u);
     assert.match(hudView, /data-token-uuid="\$\{escapeAttr\(token\.uuid\)\}"/u);
     assert.match(hudView, /class="sf-visually-hidden"/u);
     assert.match(hudView, /<summary title="\$\{escapeAttr\(label\)\}" aria-label="\$\{escapeAttr\(label\)\}"/u);
@@ -81,7 +84,7 @@ test("published DOM integration attributes remain available", () => {
 
 test("the local HUD demo loads the manifest stylesheet entry", () => {
     const demo = fs.readFileSync(path.join(projectRoot, "demo", "index.html"), "utf8");
-    assert.match(demo, /href="\.\.\/Modul\/splittermond-smoother-fight\/styles\/smoother-fight-0\.3\.57\.css"/u);
+    assert.match(demo, /href="\.\.\/Modul\/splittermond-smoother-fight\/styles\/smoother-fight-0\.3\.58\.css"/u);
 });
 
 test("the compact HUD retains mechanical status and summarizes secondary targets", () => {
@@ -95,13 +98,13 @@ test("the compact HUD retains mechanical status and summarizes secondary targets
 
 test("the legacy stylesheet URL remains a compatible entry point", () => {
     const compatibilityWrapper = fs.readFileSync(path.join(moduleRoot, "styles", "smoother-fight.css"), "utf8");
-    assert.equal(compatibilityWrapper, '@import url("./smoother-fight-0.3.57.css?module=0.3.57");\n');
+    assert.equal(compatibilityWrapper, '@import url("./smoother-fight-0.3.58.css?module=0.3.58");\n');
 });
 
 test("split styles flatten in the verified cascade order", () => {
-    const wrapperPath = path.join(moduleRoot, "styles", "smoother-fight-0.3.57.css");
+    const wrapperPath = path.join(moduleRoot, "styles", "smoother-fight-0.3.58.css");
     const wrapper = fs.readFileSync(wrapperPath, "utf8");
-    const imports = [...wrapper.matchAll(/@import\s+url\("\.\/([^"?]+)\?module=0\.3\.57"\);/gu)]
+    const imports = [...wrapper.matchAll(/@import\s+url\("\.\/([^"?]+)\?module=0\.3\.58"\);/gu)]
         .map((match) => match[1]);
     assert.deepEqual(imports, ["themes/default.css", "hud.css", "combat-events.css", "settings.css", "responsive.css"]);
     const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));
@@ -110,12 +113,14 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /--sf-font-control:\s*12px/u);
     assert.match(flattenedCss, /\.sf-portrait-open/u);
     assert.match(flattenedCss, /\.sf-portrait-focus/u);
+    assert.match(flattenedCss, /\.sf-portrait-art\s*\{[^}]*object-fit:\s*cover/su);
+    assert.match(flattenedCss, /\.sf-portrait-image::after\s*\{[^}]*linear-gradient/su);
     assert.match(flattenedCss, /--sf-side-panel-width:\s*172px/u);
     assert.match(flattenedCss, /--sf-portrait-height:\s*212px/u);
     assert.doesNotMatch(flattenedCss, /font-size:\s*[78]px/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "f3ac631edfb8fa1c136c2d42688da06c3095635f591158d5ff7611eb45a4cf0f",
+        "7fa74baeb4bda72d26b1c9378c9c26e5b077e67e9087803e104c6ee9b252dd61",
     );
 });
 

@@ -32,7 +32,6 @@ import {
     displayLabel,
     displayValue,
     escapeAttr,
-    escapeCssUrl,
     escapeHtml,
     getDerivedValue,
     getSetting,
@@ -176,7 +175,7 @@ function buildThemeToggle() {
 }
 
 function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false, primary = false, showDefenses = true }) {
-    const image = token?.texture?.src ?? actor?.img ?? "icons/svg/mystery-man.svg";
+    const image = actor?.img || token?.texture?.src || "icons/svg/mystery-man.svg";
     const tokenReference = token?.uuid ? `data-sf-token-uuid="${escapeAttr(token.uuid)}"` : "";
     const name = token?.name ?? actor?.name ?? "–";
     const focusLabel = `${t("SMOOTHER_FIGHT.HUD.FocusCombatant")}: ${name}`;
@@ -189,7 +188,8 @@ function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted =
     return `
         <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""} ${primary ? "sf-is-primary-target" : ""}" ${tokenReference} aria-label="${escapeAttr(`${eyebrow}: ${name}`)}">
             ${focusButton}
-            <div class="sf-portrait-image" style="--sf-token-image:url('${escapeCssUrl(image)}')">
+            <div class="sf-portrait-image">
+                <img class="sf-portrait-art" src="${escapeAttr(image)}" alt="" aria-hidden="true">
                 <span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>
                 ${highlighted ? `<span class="sf-target-alert"><i class="fa-solid fa-bullseye"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YouAreTarget"))}</span></span>` : ""}
                 ${services.feedbackMarkup(token, actor)}

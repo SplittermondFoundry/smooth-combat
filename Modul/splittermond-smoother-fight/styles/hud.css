@@ -752,11 +752,32 @@
 #splittermond-smoother-fight-hud .sf-portrait-image {
     position: relative;
     height: 112px;
-    background-image:
-        linear-gradient(to top, rgba(5, 15, 18, 0.84), transparent 48%),
-        var(--sf-token-image);
+    overflow: hidden;
+    background-image: var(--sf-token-image, linear-gradient(145deg, #18353e, #081518 62%, #4e3928));
     background-size: cover;
     background-position: center 26%;
+}
+
+#splittermond-smoother-fight-hud .sf-portrait-art {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    display: block;
+    border: 0;
+    border-radius: 0;
+    object-fit: cover;
+    object-position: center 26%;
+}
+
+#splittermond-smoother-fight-hud .sf-portrait-image::after {
+    content: "";
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    background: linear-gradient(to top, rgba(5, 15, 18, 0.84), transparent 48%);
+    pointer-events: none;
 }
 
 #splittermond-smoother-fight-hud .sf-portrait-focus {
@@ -847,6 +868,7 @@
 
 #splittermond-smoother-fight-hud .sf-eyebrow {
     position: absolute;
+    z-index: 2;
     top: 7px;
     left: 7px;
     padding: 2px 6px;
