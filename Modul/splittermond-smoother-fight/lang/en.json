@@ -316,6 +316,7 @@
       "Resume": "Reactivate",
       "ResumeFirst": "Reactivate the combatant first.",
       "FocusCombatant": "Show token on canvas",
+      "Visibility": "Visibility",
       "HideToken": "Hide on canvas",
       "ShowToken": "Show on canvas",
       "HideCombatant": "Hide in combat tracker",

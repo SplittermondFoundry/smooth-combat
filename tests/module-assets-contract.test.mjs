@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "642ac23833511928fd4bddafe8a6095670c6c108e40382eebb2e4ca4770801af",
+        "23a98cd71d87caf282f78db90b61818bdb6145df75915740aeda30047b641e62",
     );
 });
 
@@ -49,6 +49,12 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /data-sf-action="remove-target"/u);
     assert.match(hudView, /SMOOTHER_FIGHT\.HUD\.PrimaryTarget/u);
     assert.match(hudView, /\$\{buildSecondaryTargets\(context\)\}<div class="sf-primary-target-panel">/u);
+    assert.match(hudView, /<details class="sf-visibility-menu/u);
+    assert.match(hudView, /SMOOTHER_FIGHT\.HUD\.Visibility/u);
+    assert.equal((hudView.match(/data-sf-action="toggle-token-hidden"/gu) ?? []).length, 1);
+    assert.equal((hudView.match(/data-sf-action="toggle-combatant-hidden"/gu) ?? []).length, 1);
+    assert.equal((hudView.match(/data-sf-action="toggle-combatant-visibility"/gu) ?? []).length, 1);
+    assert.doesNotMatch(hudView, /sf-defense-pills" aria-hidden="true"/u);
     assert.match(combatEventView, /data-subevent-actor-id/u);
 });
 
@@ -71,7 +77,7 @@ test("split styles flatten in the verified cascade order", () => {
     const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "cce28065a6562b166e5bf9b79f785bd01b5ff64e908ef45c3a4e6e94ae90d6fe",
+        "1a2384281897fcf391b20c241decc057b8615e66786dd56eb86372df81d82e2a",
     );
 });
 

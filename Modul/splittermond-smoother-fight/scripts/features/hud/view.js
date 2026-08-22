@@ -1,5 +1,5 @@
 import { hudState } from "./state.js";
-
+import { activeDefenseOptionSummaries } from "./defense-options.js";
 import { services } from "../../core/services.js";
 
 import {
@@ -268,15 +268,15 @@ function buildCombatControls(context) {
     const tokenHidden = Boolean(context.token?.hidden);
     const combatantHidden = Boolean(context.combatant.hidden);
     const visibilityHidden = tokenHidden || combatantHidden;
+    const visibilityLabel = t("SMOOTHER_FIGHT.HUD.Visibility");
     const tokenVisibilityLabel = t(tokenHidden ? "SMOOTHER_FIGHT.HUD.ShowToken" : "SMOOTHER_FIGHT.HUD.HideToken");
     const combatantVisibilityLabel = t(combatantHidden ? "SMOOTHER_FIGHT.HUD.ShowCombatant" : "SMOOTHER_FIGHT.HUD.HideCombatant");
     const combinedVisibilityLabel = t(visibilityHidden ? "SMOOTHER_FIGHT.HUD.ShowTokenAndCombatant" : "SMOOTHER_FIGHT.HUD.HideTokenAndCombatant");
     const defeatedLabel = t(context.combatant.isDefeated ? "SMOOTHER_FIGHT.HUD.RestoreCombatant" : "SMOOTHER_FIGHT.HUD.MarkDefeated");
     const removeLabel = t("SMOOTHER_FIGHT.HUD.RemoveCombatant");
     const gmControls = game.user.isGM ? `
-        <button type="button" data-sf-action="toggle-token-hidden" class="sf-icon-button ${tokenHidden ? "is-active" : ""}" title="${escapeAttr(tokenVisibilityLabel)}"><i class="fa-solid ${tokenHidden ? "fa-eye" : "fa-eye-slash"}"></i><span class="sf-control-label">${escapeHtml(tokenVisibilityLabel)}</span></button>
-        <button type="button" data-sf-action="toggle-combatant-hidden" class="sf-icon-button ${combatantHidden ? "is-active" : ""}" title="${escapeAttr(combatantVisibilityLabel)}"><i class="fa-solid ${combatantHidden ? "fa-list" : "fa-list-check"}"></i><span class="sf-control-label">${escapeHtml(combatantVisibilityLabel)}</span></button>
-        <button type="button" data-sf-action="toggle-combatant-visibility" class="sf-icon-button ${visibilityHidden ? "is-active" : ""}" title="${escapeAttr(combinedVisibilityLabel)}"><i class="fa-solid ${visibilityHidden ? "fa-eye" : "fa-eye-slash"}"></i><span class="sf-control-label">${escapeHtml(combinedVisibilityLabel)}</span></button>
+        <details class="sf-visibility-menu ${visibilityHidden ? "is-active" : ""}"><summary class="sf-icon-button" title="${escapeAttr(visibilityLabel)}" aria-label="${escapeAttr(visibilityLabel)}"><i class="fa-solid ${visibilityHidden ? "fa-eye-slash" : "fa-eye"}"></i><span class="sf-control-label">${escapeHtml(visibilityLabel)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
+            <div class="sf-visibility-popover" aria-label="${escapeAttr(visibilityLabel)}"><button type="button" data-sf-action="toggle-token-hidden" class="${tokenHidden ? "is-active" : ""}" aria-pressed="${tokenHidden}" title="${escapeAttr(tokenVisibilityLabel)}"><i class="fa-solid ${tokenHidden ? "fa-eye" : "fa-eye-slash"}"></i><span>${escapeHtml(tokenVisibilityLabel)}</span></button><button type="button" data-sf-action="toggle-combatant-hidden" class="${combatantHidden ? "is-active" : ""}" aria-pressed="${combatantHidden}" title="${escapeAttr(combatantVisibilityLabel)}"><i class="fa-solid ${combatantHidden ? "fa-list" : "fa-list-check"}"></i><span>${escapeHtml(combatantVisibilityLabel)}</span></button><button type="button" data-sf-action="toggle-combatant-visibility" class="${visibilityHidden ? "is-active" : ""}" aria-pressed="${visibilityHidden}" title="${escapeAttr(combinedVisibilityLabel)}"><i class="fa-solid ${visibilityHidden ? "fa-eye" : "fa-eye-slash"}"></i><span>${escapeHtml(combinedVisibilityLabel)}</span></button></div></details>
         <button type="button" data-sf-action="toggle-combatant-defeated" class="sf-icon-button ${context.combatant.isDefeated ? "is-active" : ""}" title="${escapeAttr(defeatedLabel)}"><i class="fa-solid fa-skull"></i><span class="sf-control-label">${escapeHtml(defeatedLabel)}</span></button>
         <button type="button" data-sf-action="remove-combatant" class="sf-icon-button is-danger" title="${escapeAttr(removeLabel)}"><i class="fa-solid fa-circle-minus"></i><span class="sf-control-label">${escapeHtml(removeLabel)}</span></button>
     ` : "";
@@ -521,8 +521,8 @@ async function buildActionBar(context) {
             defenseButton(actor, "defense", "VTD"),
             defenseButton(actor, "bodyresist", "KW"),
             defenseButton(actor, "mindresist", "GW"),
-        ].join(""), defenseAlert ? "is-defense-alert" : "")}
-        <div class="sf-defense-pills" aria-hidden="true">
+        ].join(""), `sf-defense-menu${defenseAlert ? " is-defense-alert" : ""}`)}
+        <div class="sf-defense-pills" aria-label="VTD, KW, GW">
             <span>VTD <b>${escapeHtml(getDerivedValue(actor, "defense"))}</b></span>
             <span>KW <b>${escapeHtml(getDerivedValue(actor, "bodyresist"))}</b></span>
             <span>GW <b>${escapeHtml(getDerivedValue(actor, "mindresist"))}</b></span>
@@ -747,10 +747,10 @@ function itemPlainText(value) {
 }
 
 function defenseButton(actor, type, abbreviation) {
-    const options = actor.activeDefense?.[type] ?? [];
-    const suffix = options.length > 1 ? `<small>${options.length} ${escapeHtml(t("SMOOTHER_FIGHT.HUD.Defense"))}</small>` : "";
-    return `<button type="button" data-sf-action="defense" data-defense-type="${type}">
-        <span>${abbreviation}${suffix}</span><b>${escapeHtml(getDerivedValue(actor, type))}</b>
+    const options = activeDefenseOptionSummaries(actor.activeDefense?.[type]);
+    const optionList = options.length ? `<span class="sf-defense-option-list">${options.map(({ label, value }) => `<small>${escapeHtml(label)}${value !== "" ? ` <b>${escapeHtml(value)}</b>` : ""}</small>`).join("")}</span>` : "";
+    return `<button type="button" class="sf-defense-option" data-sf-action="defense" data-defense-type="${type}">
+        <span class="sf-defense-option-heading"><strong>${abbreviation}</strong><b>${escapeHtml(getDerivedValue(actor, type))}</b></span>${optionList}
     </button>`;
 }
 

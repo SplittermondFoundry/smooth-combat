@@ -36,8 +36,7 @@
     }
 
     #splittermond-smoother-fight-hud .sf-action-menu > summary span,
-    #splittermond-smoother-fight-hud .sf-quick-targets > summary span,
-    #splittermond-smoother-fight-hud .sf-defense-pills {
+    #splittermond-smoother-fight-hud .sf-quick-targets > summary span {
         display: none;
     }
 
@@ -73,9 +72,45 @@
         height: 72px;
     }
 
-    #splittermond-smoother-fight-hud .sf-defense-row,
+    #splittermond-smoother-fight-hud .sf-actor .sf-defense-row,
     #splittermond-smoother-fight-hud .sf-resources,
     #splittermond-smoother-fight-hud .sf-turn-target {
         display: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-defense-pills {
+        flex: 0 0 100%;
+        display: flex;
+        justify-content: center;
+        min-height: 34px;
+        padding: 3px 8px;
+        border-top: 1px solid var(--sf-line);
+        border-left: 0;
+    }
+
+    #splittermond-smoother-fight-hud .sf-defense-pills span {
+        min-width: 42px;
+        flex-direction: row;
+        justify-content: center;
+        gap: 4px;
+        font-size: 8px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-defense-pills b {
+        font-size: 13px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-visibility-popover {
+        right: auto;
+        left: 0;
+    }
+
+    #splittermond-smoother-fight-hud .sf-action-popover button.sf-defense-option {
+        gap: 4px;
+        padding: 6px 8px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-action-popover .sf-defense-option-list > small {
+        padding: 2px 5px;
     }
 }

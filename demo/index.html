@@ -33,7 +33,7 @@
 <body>
     <aside id="sidebar-mock"><h2>Kampfübersicht</h2><p>Farruk · Tick 18</p><p>Rattling · Tick 21</p><p>Liandra · Tick 24</p></aside>
     <section id="splittermond-smoother-fight-hud" class="sf-hud">
-        <div class="sf-shell">
+        <div class="sf-shell is-current-user-turn">
             <aside class="sf-portrait sf-actor" role="button">
                 <div class="sf-portrait-image"><span class="sf-eyebrow">Gerade aktiv</span></div>
                 <div class="sf-portrait-name">Farruk (Andi)</div>
@@ -41,13 +41,26 @@
                 <div class="sf-resources"><div class="sf-resource"><span style="width:74%"></span><small>LP 22/30</small></div><div class="sf-resource sf-resource-focus"><span style="width:62%"></span><small>FO 13/21</small></div></div>
             </aside>
             <main class="sf-center">
-                <header class="sf-turnline"><span class="sf-live-dot"></span><strong>Farruk</strong><span>Tick 18</span><span class="sf-turn-target">◎ Ziel von Andi</span></header>
+                <header class="sf-turnline"><span class="sf-live-dot"></span><strong>Farruk</strong><span>Tick 18</span><span class="sf-your-turn">⚡ Dein Zug</span><span class="sf-turn-target">◎ Primärziel: Rattling-Plünderer</span></header>
+                <section class="sf-combat-controls" aria-label="Kampfsteuerung">
+                    <div class="sf-tick-buttons"><span class="sf-tick-label">Vorrücken</span><button>+1 T</button><button>+2 T</button><button>+3 T</button><button>+5 T</button><button>+7 T</button><button>+10 T</button><button>+X</button></div>
+                    <div class="sf-pause-buttons"><button>◷ <span>Abwartend</span></button><button>✋ <span>Bereithalten</span></button></div>
+                    <div class="sf-tracker-buttons">
+                        <button class="sf-icon-button" title="Token auf der Karte anzeigen">◎ <span class="sf-control-label">Fokus</span></button>
+                        <details class="sf-visibility-menu">
+                            <summary class="sf-icon-button" title="Sichtbarkeit">◉ <span class="sf-control-label">Sichtbarkeit</span><span class="sf-chevron">⌄</span></summary>
+                            <div class="sf-visibility-popover"><button>◉ <span>Auf Karte verbergen</span></button><button>☷ <span>In Tickliste verbergen</span></button><button>◉ <span>Auf Karte und Tickliste verbergen</span></button></div>
+                        </details>
+                        <button class="sf-icon-button" title="Als besiegt markieren">☠ <span class="sf-control-label">Besiegt</span></button>
+                        <button class="sf-icon-button is-danger" title="Aus dem Kampf entfernen">⊖ <span class="sf-control-label">Entfernen</span></button>
+                    </div>
+                </section>
                 <nav class="sf-actions">
                     <details class="sf-action-menu"><summary>◈ <span>Fertigkeiten</span>⌃</summary><div class="sf-action-popover"><button><span>Akrobatik</span><b>17</b></button><button><span>Heimlichkeit</span><b>12</b></button></div></details>
-                    <details class="sf-action-menu"><summary>✦ <span>Zauber</span>⌃</summary><div class="sf-action-popover"><button><span>Flammenschild<small>Feuermagie 15</small></span><b>8 T</b></button></div></details>
                     <details class="sf-action-menu"><summary>♜ <span>Angriff</span>⌃</summary><div class="sf-action-popover"><button class="is-prepared"><span>Breitschwert<small>Klingenwaffen 19</small></span><b>1W10+4</b></button></div></details>
-                    <details class="sf-action-menu"><summary>◆ <span>Aktive Abwehr</span>⌃</summary><div class="sf-action-popover"><button><span>VTD</span><b>20</b></button><button><span>KW</span><b>18</b></button><button><span>GW</span><b>16</b></button></div></details>
-                    <div class="sf-defense-pills"><span>VTD<b>20</b></span><span>KW<b>18</b></span><span>GW<b>16</b></span></div>
+                    <details class="sf-action-menu"><summary>✦ <span>Zauber</span>⌃</summary><div class="sf-action-popover"><button><span>Flammenschild<small>Feuermagie 15</small></span><b>8 T</b></button></div></details>
+                    <details class="sf-action-menu sf-defense-menu"><summary>◆ <span>Aktive Abwehr</span>⌃</summary><div class="sf-action-popover"><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>VTD</strong><b>20</b></span><span class="sf-defense-option-list"><small>Akrobatik <b>17</b></small><small>Säbel · Klingenwaffen <b>19</b></small></span></button><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>KW</strong><b>18</b></span><span class="sf-defense-option-list"><small>Zähigkeit <b>14</b></small></span></button><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>GW</strong><b>16</b></span><span class="sf-defense-option-list"><small>Entschlossenheit <b>12</b></small></span></button></div></details>
+                    <div class="sf-defense-pills" aria-label="VTD, KW, GW"><span>VTD<b>20</b></span><span>KW<b>18</b></span><span>GW<b>16</b></span></div>
                 </nav>
                 <section class="sf-events">
                     <button class="sf-events-heading"><span>▣ Kampfereignisse</span><span>⌄</span></button>
@@ -55,20 +68,20 @@
                         <details class="sf-event-group" open>
                             <summary><span>Farruk</span><span class="sf-event-badge is-defense">◆ Aktive Abwehr</span><span class="sf-event-target">◎ Ziel: Rattling-Plünderer</span><span>⌄</span></summary>
                             <div class="sf-event-body">
-                                <details class="sf-associated-card is-defense" data-subevent-id="defense"><summary><span>◆ Aktive Abwehr</span><i class="fa-solid fa-chevron-down"></i></summary><div class="sf-associated-body"><article class="sf-chat-message message"><div class="message-content"><div class="splittermond check success sf-defense-check"><header class="chat-message-header"><div><h2>Akrobatik</h2><small>Standardwurf gegen 15</small></div></header><div class="sf-check-result-grid"><div class="roll-summary sf-collapsible-roll"><span class="roll-total">24</span><button class="sf-roll-toggle">Wurfdetails⌄</button></div><div class="degree-of-success"><div>★ ★</div><strong>2 EG</strong>Gelungen<div class="degree-of-success-description sf-defense-value"><span>VTD</span><strong>24</strong></div></div></div></div></div></article></div></details>
-                                <article class="sf-chat-message message"><div class="message-content"><div class="splittermond attack check success sf-offense-check"><header class="chat-message-header"><div><h2>Breitschwert</h2><small>Standardwurf gegen 24</small></div></header><div class="sf-offense-target"><i class="fa-solid fa-crosshairs"></i><span>Ausgewähltes Ziel</span><strong>Rattling-Plünderer</strong></div><div class="sf-promoted-controls"><div class="sf-promoted-actions chat-card-segment"><h3>Weitere Aktionen</h3><button>1W10 + 4 Schaden</button><button>6 Ticks</button></div></div><div class="sf-check-result-grid"><div class="roll-summary sf-collapsible-roll"><span class="roll-total">26</span><button class="sf-roll-toggle">Wurfdetails⌄</button></div><div class="degree-of-success"><div>★</div><strong>1 EG</strong>Gelungen</div></div></div></div></div></article>
-                                <details class="sf-associated-card is-damage" data-subevent-id="damage" open><summary><span>● Schaden</span><i class="fa-solid fa-chevron-down"></i></summary><div class="sf-associated-body"><article class="sf-chat-message message"><div class="message-content"><div class="splittermond damage sf-damage-check"><div class="sf-promoted-controls"><div class="actions splittermond-chat-action-container sf-promoted-actions"><h3>Weitere Aktionen</h3><button>Auf Ziel anwenden</button><button>Auf das gespeicherte Ziel anwenden</button><button>Auf sich selbst anwenden</button></div></div><header><div><h2>Breitschwert</h2><small>Schaden</small></div></header><div class="roll-summary sf-collapsible-roll" data-sf-label="Schadenswurf"><div class="roll-total">9</div><button class="sf-roll-toggle">Wurfdetails⌄</button></div></div></div></article></div></details>
+                                <article class="sf-chat-message message"><div class="message-content"><div class="splittermond attack check success sf-offense-check"><header class="chat-message-header"><div><h2>Breitschwert</h2><small>Standardwurf gegen 24</small></div></header><div class="sf-offense-target"><span>Ausgewähltes Ziel</span><strong>Rattling-Plünderer</strong></div><div class="sf-check-result-grid"><div class="roll-summary"><span class="roll-total">26</span></div><div class="degree-of-success"><strong>1 EG</strong> Gelungen</div></div></div></div></article>
                             </div>
                         </details>
                     </div>
                 </section>
             </main>
-            <aside class="sf-portrait sf-target">
-                <div class="sf-portrait-image"><span class="sf-eyebrow">Ausgewähltes Ziel</span></div>
-                <div class="sf-portrait-name">Rattling-Plünderer</div>
-                <div class="sf-defense-row"><span><small>VTD</small>24</span><span><small>KW</small>17</span><span><small>GW</small>14</span></div>
-                <div class="sf-resources"><div class="sf-resource"><span style="width:42%"></span><small>LP 8/19</small></div></div>
-            </aside>
+            <div class="sf-target-column"><div class="sf-target-list"><div class="sf-primary-target-panel">
+                <aside class="sf-portrait sf-target sf-is-primary-target">
+                    <div class="sf-portrait-image"><span class="sf-eyebrow">Primärziel</span></div>
+                    <div class="sf-portrait-name">Rattling-Plünderer</div>
+                    <div class="sf-defense-row"><span><small>VTD</small>24</span><span><small>KW</small>17</span><span><small>GW</small>14</span></div>
+                    <div class="sf-resources"><div class="sf-resource"><span style="width:42%"></span><small>LP 8/19</small></div></div>
+                </aside>
+            </div></div></div>
         </div>
         <details class="sf-gm-targets"><summary>◎ GM: Ziel wechseln⌃</summary><div><button><span>Rattling-Plünderer</span><b>◎</b></button><button><span>Rattling-Späher</span></button></div></details>
     </section>

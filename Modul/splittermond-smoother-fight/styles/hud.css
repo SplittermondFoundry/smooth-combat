@@ -261,13 +261,94 @@
     flex-wrap: wrap;
 }
 
+#splittermond-smoother-fight-hud .sf-tick-buttons > button,
+#splittermond-smoother-fight-hud .sf-tick-action-control > button,
+#splittermond-smoother-fight-hud .sf-tracker-buttons > .sf-icon-button {
+    min-height: 28px;
+    font-size: 11px;
+    line-height: 1.1;
+}
+
+#splittermond-smoother-fight-hud .sf-visibility-menu {
+    position: relative;
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-visibility-menu > summary {
+    box-sizing: border-box;
+    min-width: 27px;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px;
+    border: 1px solid rgba(117, 191, 186, 0.22);
+    border-radius: 4px;
+    color: var(--sf-text);
+    background: rgba(108, 201, 193, 0.06);
+    font-size: 11px;
+    line-height: 1.1;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-visibility-menu > summary:hover,
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-visibility-menu[open] > summary,
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-visibility-menu.is-active > summary {
+    border-color: rgba(216, 168, 93, 0.55);
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.12);
+}
+
+#splittermond-smoother-fight-hud .sf-visibility-menu[open] > summary .sf-chevron {
+    transform: rotate(180deg);
+}
+
+#splittermond-smoother-fight-hud .sf-visibility-popover {
+    position: absolute;
+    z-index: 30;
+    right: 0;
+    bottom: calc(100% + 4px);
+    width: 230px;
+    padding: 4px;
+    border: 1px solid var(--sf-line);
+    border-radius: 6px;
+    background: rgba(5, 15, 18, 0.98);
+    box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.42);
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-visibility-popover button {
+    width: 100%;
+    min-height: 34px;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+    padding: 5px 7px;
+    border: 0;
+    color: var(--sf-text);
+    background: transparent;
+    font-size: 11px;
+    line-height: 1.2;
+    text-align: left;
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-visibility-popover button + button {
+    border-top: 1px solid rgba(117, 191, 186, 0.1);
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-visibility-popover button:hover,
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-visibility-popover button.is-active {
+    color: var(--sf-gold-bright);
+    background: rgba(108, 201, 193, 0.14);
+}
+
 #splittermond-smoother-fight-hud .sf-tick-buttons {
     flex-wrap: wrap;
 }
 
 #splittermond-smoother-fight-hud .sf-tick-buttons > .sf-tick-label {
     color: var(--sf-muted);
-    font-size: 9px;
+    font-size: 10px;
     text-transform: uppercase;
 }
 
@@ -406,6 +487,12 @@
     border-color: var(--sf-danger);
     color: #ffaaa3;
     background: rgba(198, 93, 85, 0.16);
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls .is-danger {
+    border-color: rgba(198, 93, 85, 0.58);
+    color: #ffaaa3;
+    background: rgba(198, 93, 85, 0.1);
 }
 
 #splittermond-smoother-fight-hud .sf-portrait {
@@ -1123,6 +1210,10 @@
     right: 0;
 }
 
+#splittermond-smoother-fight-hud .sf-defense-menu .sf-action-popover {
+    width: max(280px, 100%);
+}
+
 #splittermond-smoother-fight-hud .sf-action-popover button,
 #splittermond-smoother-fight-hud .sf-quick-targets > div button {
     width: 100%;
@@ -1156,6 +1247,56 @@
 
 #splittermond-smoother-fight-hud .sf-action-popover button + button {
     border-top: 1px solid rgba(117, 191, 186, 0.1);
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover button.sf-defense-option {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 8px 10px;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover .sf-defense-option > .sf-defense-option-heading {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-defense-option-heading strong {
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover .sf-defense-option-heading > b {
+    font-size: 15px;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover .sf-defense-option > .sf-defense-option-list {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover .sf-defense-option-list > small {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin: 0;
+    padding: 3px 6px;
+    border: 1px solid rgba(117, 191, 186, 0.16);
+    border-radius: 999px;
+    background: rgba(108, 201, 193, 0.07);
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+#splittermond-smoother-fight-hud .sf-action-popover .sf-defense-option-list > small > b {
+    font-size: 10px;
 }
 
 #splittermond-smoother-fight-hud .sf-quick-target-row {
@@ -1508,7 +1649,7 @@ body > .sf-spell-tooltip footer {
 }
 
 #splittermond-smoother-fight-hud .sf-defense-pills {
-    display: flex;
+    display: none;
     align-items: center;
     gap: 5px;
     padding: 0 8px;
