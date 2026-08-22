@@ -24,6 +24,7 @@ import {
 import {
     escapeAttr,
     getSetting,
+    t,
 } from "../../shared/values.js";
 
 export function announceMessageFeedback(message) {
@@ -100,12 +101,16 @@ export function installHealthCostFeedbackInterceptor() {
             : null;
         const result = original.call(this, resource, cost, ...args);
         if (tracksHealth) {
-            void Promise.resolve(result).then(() => {
+            const completion = Promise.resolve(result).then(async () => {
                 const current = healthCostTotal(this.system?.health);
-                if (damageApplication) void markDamageApplicationCompleted(damageApplication.messageId, this);
+                if (damageApplication) await markDamageApplicationCompleted(damageApplication.messageId, this);
                 if (healthCostFeedbackKind(previous, current, true) !== "damageBlocked") return;
                 publishFeedback("damageBlocked", feedbackReferenceForActor(this));
             }, () => {});
+            if (damageApplication) damageApplication.completionPromises?.push(completion);
+            void completion.catch((error) => {
+                console.error(`${MODULE_ID} | Could not complete tracked damage application`, error);
+            });
         }
         return result;
     };
@@ -114,18 +119,24 @@ export function installHealthCostFeedbackInterceptor() {
 
 async function markDamageApplicationCompleted(messageId, actor) {
     if (!messageId || services.hasCompletedDamageApplication(messageId)) return;
-    services.recordCompletedDamageApplication(messageId);
-    services.scheduleRender(0);
     const message = game.messages.get(messageId);
-    if (!message) return;
+    if (!message) {
+        ui.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.RequiredFlagFailed", { flag: "damageApplicationCompleted" }));
+        throw new Error(`Could not find damage message ${messageId} while persisting its completion`);
+    }
 
     if (game.user.isGM || services.isOwnMessage(message)) {
-        const updated = await services.safeSetFlag(message, "damageApplicationCompleted", true);
-        if (updated) return;
+        await services.setRequiredFlag(message, "damageApplicationCompleted", true);
+        services.recordCompletedDamageApplication(messageId);
+        services.scheduleRender(0);
+        return;
     }
 
     const gm = services.getActivePrimaryGm();
-    if (!gm) return;
+    if (!gm) {
+        ui.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.RequiredFlagFailed", { flag: "damageApplicationCompleted" }));
+        throw new Error(`No GM is available to persist damage completion for ${messageId}`);
+    }
     const reference = feedbackReferenceForActor(actor);
     game.socket.emit(SOCKET, {
         type: "damage-application-completed",

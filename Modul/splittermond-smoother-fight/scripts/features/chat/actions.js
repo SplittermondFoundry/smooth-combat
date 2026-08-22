@@ -30,6 +30,9 @@ function primaryTargetActorUuid(context) {
     return context?.primaryTargetActorUuid ?? context?.targetActorUuid ?? null;
 }
 
+const damageApplicationLocks = new Set();
+const defenseNumbingDamageLocks = new Set();
+
 export async function handleChatCardAction(event, button) {
     const messageElement = button.closest(".sf-chat-message");
     const message = game.messages.get(messageElement?.dataset.messageId);
@@ -115,6 +118,15 @@ export async function handleChatCardAction(event, button) {
                 ui.notifications.warn(localizeSystem("splittermond.chatCard.noGMConnected", "Kein GM verbunden."));
                 return;
             }
+            if (isDamageApplicationAction(action)) {
+                if (damageApplicationLocks.has(message.id) || isDamageApplicationCompleted(message)) return;
+                damageApplicationLocks.add(message.id);
+                try {
+                    await services.setRequiredFlag(message, "damageApplicationStarted", true);
+                } finally {
+                    damageApplicationLocks.delete(message.id);
+                }
+            }
             game.socket.emit(SYSTEM_SOCKET, {
                 type: "chatAction",
                 ...actionData,
@@ -122,7 +134,11 @@ export async function handleChatCardAction(event, button) {
                 userId: game.user.id,
             });
         } else {
-            await message.system.handleGenericAction(actionData);
+            await withTrackedDamageApplication(
+                message,
+                () => message.system.handleGenericAction(actionData),
+                action
+            );
             const content = await renderTemplate(message.system.template, message.system.getData());
             await message.update({ content });
         }
@@ -154,15 +170,23 @@ function clearPendingDamageRoll(messageId) {
 
 async function withTrackedDamageApplication(message, callback, action = "applyDamageToUserTargets") {
     if (!isDamageApplicationAction(action)) return callback();
-    const application = {
-        messageId: message.id,
-        actorUuids: damageApplicationActorUuids(message, action),
-    };
-    services.addPendingDamageApplication(application);
+    if (damageApplicationLocks.has(message.id) || isDamageApplicationCompleted(message)) return;
+    damageApplicationLocks.add(message.id);
+    let application = null;
     try {
-        return await callback();
+        await services.setRequiredFlag(message, "damageApplicationStarted", true);
+        application = {
+            messageId: message.id,
+            actorUuids: damageApplicationActorUuids(message, action),
+            completionPromises: [],
+        };
+        services.addPendingDamageApplication(application);
+        const result = await callback();
+        await Promise.all(application.completionPromises);
+        return result;
     } finally {
-        services.removePendingDamageApplication(application);
+        if (application) services.removePendingDamageApplication(application);
+        damageApplicationLocks.delete(message.id);
     }
 }
 
@@ -187,6 +211,7 @@ function isDamageApplicationAction(action) {
 }
 
 async function applyDefenseNumbingDamage(message, fallbackDamage) {
+    if (defenseNumbingDamageLocks.has(message.id)) return;
     const actor = services.resolveSpeakerActor(message);
     if (!actor || !(game.user.isGM || actor.isOwner)) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseDamageNotAllowed"));
@@ -197,14 +222,26 @@ async function applyDefenseNumbingDamage(message, fallbackDamage) {
     const damage = Math.max(0, Number.parseInt(context.numbingDamage ?? fallbackDamage, 10) || 0);
     if (!damage) return;
 
-    await actor.consumeCost("health", String(damage), t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageSource"));
-    await services.safeSetFlag(message, "context", {
-        ...context,
-        numbingDamage: damage,
-        numbingDamageApplied: true,
-    });
-    ui.notifications.info(t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageApplied", { damage, name: actor.name }));
-    services.scheduleRender(0);
+    if (context.numbingDamageApplicationStarted) return;
+    defenseNumbingDamageLocks.add(message.id);
+    try {
+        await services.setRequiredFlag(message, "context", {
+            ...context,
+            numbingDamage: damage,
+            numbingDamageApplicationStarted: true,
+        });
+        await actor.consumeCost("health", String(damage), t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageSource"));
+        await services.setRequiredFlag(message, "context", {
+            ...context,
+            numbingDamage: damage,
+            numbingDamageApplicationStarted: true,
+            numbingDamageApplied: true,
+        });
+        ui.notifications.info(t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageApplied", { damage, name: actor.name }));
+        services.scheduleRender(0);
+    } finally {
+        defenseNumbingDamageLocks.delete(message.id);
+    }
 }
 
 function isCombatFumbleRollControl(control) {
@@ -233,7 +270,11 @@ function isLegacyTickAction(control) {
 }
 
 async function advanceLegacyChatTicks(message, button) {
-    if (services.hasPendingLegacyTickMessage(message.id)) return;
+    const alreadyStarted = message.getFlag?.(MODULE_ID, "legacyTickAdvanceStarted")
+        ?? message.flags?.[MODULE_ID]?.legacyTickAdvanceStarted;
+    const alreadyApplied = message.getFlag?.(MODULE_ID, "legacyTickAdvanceApplied")
+        ?? message.flags?.[MODULE_ID]?.legacyTickAdvanceApplied;
+    if (services.hasPendingLegacyTickMessage(message.id) || alreadyStarted || alreadyApplied) return;
     const actor = services.resolveSpeakerActor(message);
     const ticks = Number(button.dataset.ticks);
     const mayAdvance = Boolean(game.user.isGM || actor?.testUserPermission?.(game.user, "OWNER") || actor?.isOwner);
@@ -246,10 +287,13 @@ async function advanceLegacyChatTicks(message, button) {
     const previousInitiative = Number(combatant?.initiative);
     services.addPendingLegacyTickMessage(message.id);
     try {
+        await services.setRequiredFlag(message, "legacyTickAdvanceStarted", true);
         await actor.addTicks(ticks, button.dataset.message || undefined);
         const currentCombatant = game.combat?.combatants?.get?.(combatant?.id) ?? combatant;
         if (tickAdvanceConfirmed(previousInitiative, currentCombatant?.initiative)) {
-            await services.safeSetFlag(message, "legacyTickAdvanceApplied", true);
+            await services.setRequiredFlag(message, "legacyTickAdvanceApplied", true);
+        } else {
+            await services.setRequiredFlag(message, "legacyTickAdvanceStarted", false);
         }
         services.scheduleRender(0);
     } finally {
@@ -427,7 +471,9 @@ export function enforceChatPermissions(root, hudContext) {
 function synchronizeLegacyTickActionState(element, message) {
     const applied = message?.getFlag?.(MODULE_ID, "legacyTickAdvanceApplied")
         ?? message?.flags?.[MODULE_ID]?.legacyTickAdvanceApplied;
-    if (!applied) return;
+    const started = message?.getFlag?.(MODULE_ID, "legacyTickAdvanceStarted")
+        ?? message?.flags?.[MODULE_ID]?.legacyTickAdvanceStarted;
+    if (!applied && !started) return;
     for (const button of element.querySelectorAll(".add-tick[data-ticks]")) {
         button.disabled = true;
         button.classList.add("is-applied");
@@ -516,6 +562,11 @@ function decorateEventActionButtons(element, message) {
     }
     for (const button of buttons) {
         const action = String(button.dataset.action ?? button.dataset.localaction ?? button.dataset.localAction ?? "").toLocaleLowerCase();
+        if (damageApplicationCompleted && isDamageApplicationAction(action)) {
+            button.disabled = true;
+            button.classList.add("is-applied");
+            button.title = t("SMOOTHER_FIGHT.HUD.AlreadyApplied");
+        }
         if (isFocusCostControl(button) && ownsSpeaker && actionHighlight.focus && isUsableActionControl(button)) {
             button.classList.add("is-next-focus-cost");
         }
@@ -555,7 +606,16 @@ function isDamageApplicationCompleted(message) {
         message
         && (services.hasCompletedDamageApplication(message.id)
             || message.getFlag?.(MODULE_ID, "damageApplicationCompleted")
-            || message.flags?.[MODULE_ID]?.damageApplicationCompleted)
+            || message.flags?.[MODULE_ID]?.damageApplicationCompleted
+            || hasDamageApplicationStarted(message))
+    );
+}
+
+function hasDamageApplicationStarted(message) {
+    return Boolean(
+        message
+        && (message.getFlag?.(MODULE_ID, "damageApplicationStarted")
+            || message.flags?.[MODULE_ID]?.damageApplicationStarted)
     );
 }
 

@@ -134,8 +134,8 @@ export function registerSocket() {
             const message = game.messages.get(payload.messageId);
             const actor = services.resolveActorUuid(payload.actorUuid) ?? services.resolveToken(payload.tokenUuid)?.actor ?? null;
             if (!sender || !message || !services.isDamageMessage(message) || !services.mayUserApplyDamageToActor(sender, actor)) return;
+            await services.setRequiredFlag(message, "damageApplicationCompleted", true);
             services.recordCompletedDamageApplication(message.id);
-            await services.safeSetFlag(message, "damageApplicationCompleted", true);
             services.scheduleRender(0);
             return;
         }

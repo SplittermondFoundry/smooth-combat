@@ -128,7 +128,7 @@ export function speakerTokenUuid(message) {
     return scene?.tokens?.get(message.speaker?.token)?.uuid ?? null;
 }
 
-export async function safeSetFlag(message, key, value) {
+export async function setOptionalFlag(message, key, value) {
     try {
         return await message.setFlag(MODULE_ID, key, value);
     } catch (error) {
@@ -136,6 +136,28 @@ export async function safeSetFlag(message, key, value) {
         return null;
     }
 }
+
+/**
+ * Persists combat state which must not be lost without stopping the workflow.
+ * Callers may rely on a rejection here to avoid applying a mechanical effect.
+ */
+export async function setRequiredFlag(message, key, value) {
+    try {
+        const updated = await message.setFlag(MODULE_ID, key, value);
+        if (!updated) throw new Error("The document update returned no result");
+        return updated;
+    } catch (cause) {
+        const error = new Error(`Could not persist required ${key} flag on chat message ${message?.id ?? "unknown"}`, {
+            cause,
+        });
+        console.error(`${MODULE_ID} | ${error.message}`, cause);
+        ui.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.RequiredFlagFailed", { flag: key }));
+        throw error;
+    }
+}
+
+// Backwards-compatible name for explicitly best-effort metadata.
+export const safeSetFlag = setOptionalFlag;
 
 export function checkResultMessage(report) {
     if (report.isCrit) return localizeSystem("splittermond.critical", "Kritischer Erfolg");

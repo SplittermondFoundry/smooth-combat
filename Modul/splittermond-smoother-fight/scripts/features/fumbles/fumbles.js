@@ -19,6 +19,8 @@ import {
     t,
 } from "../../shared/values.js";
 
+const fumbleActionLocks = new Set();
+
 export async function attachFumbleActions(message, renderedRoot = null, sourceMessageId = null, sourceItemId = null) {
     const existing = getFumbleData(message);
     if (!(game.user.isGM || services.isOwnMessage(message)) || (existing && !sourceMessageId && !sourceItemId)) return;
@@ -34,7 +36,13 @@ export async function attachFumbleActions(message, renderedRoot = null, sourceMe
     };
     const content = decorateFumbleCard(renderedContent?.innerHTML ?? message.content, fumble);
     if (renderedContent) renderedContent.innerHTML = content;
-    await message.update({ content, [`flags.${MODULE_ID}.fumble`]: fumble });
+    try {
+        await message.update({ content, [`flags.${MODULE_ID}.fumble`]: fumble });
+    } catch (error) {
+        console.error(`${MODULE_ID} | Could not persist required fumble state on chat message ${message.id}`, error);
+        ui.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.RequiredFlagFailed", { flag: "fumble" }));
+        throw error;
+    }
 }
 
 export function createFumbleData(message, contentOrRoot = message.content) {
@@ -57,9 +65,13 @@ export function createFumbleData(message, contentOrRoot = message.content) {
         conditions: extracted.conditions,
         conditionMode: extracted.conditionMode,
         damageApplied: false,
+        damageApplicationStarted: false,
         ticksApplied: false,
+        ticksApplicationStarted: false,
         weaponDamageApplied: false,
+        weaponDamageApplicationStarted: false,
         conditionsApplied: false,
+        conditionsApplicationStarted: false,
     };
 }
 
@@ -164,7 +176,11 @@ export function bindFumbleActions(message, html) {
         button.addEventListener("click", async (event) => {
             event.preventDefault();
             event.stopPropagation();
-            await handleFumbleAction(message, button.dataset.sfFumbleAction);
+            try {
+                await handleFumbleAction(message, button.dataset.sfFumbleAction);
+            } catch (error) {
+                console.error(`${MODULE_ID} | Fumble action failed`, error);
+            }
         });
     }
 }
@@ -183,13 +199,8 @@ function applyFumbleActionState(message, root) {
     const allowed = Boolean(game.user.isGM || actor?.isOwner);
     for (const button of root.querySelectorAll("[data-sf-fumble-action]")) {
         const action = button.dataset.sfFumbleAction;
-        const applied = action === "damage"
-            ? fumble.damageApplied
-            : action === "ticks"
-                ? fumble.ticksApplied
-                : action === "weapon"
-                    ? fumble.weaponDamageApplied
-                : fumble.conditionsApplied;
+        const state = fumbleActionState(action);
+        const applied = Boolean(state && (fumble[state.applied] || fumble[state.started]));
         button.disabled = applied || !allowed;
         button.classList.toggle("is-applied", Boolean(applied));
         if (applied) button.title = t("SMOOTHER_FIGHT.HUD.AlreadyApplied");
@@ -204,39 +215,71 @@ export async function handleFumbleAction(message, action) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.FumbleNotAllowed"));
         return;
     }
-    const updated = { ...fumble };
+    const state = fumbleActionState(action);
+    if (!state || fumble[state.applied] || fumble[state.started]) return;
+    const lockKey = `${message.id}:${state.applied}`;
+    if (fumbleActionLocks.has(lockKey)) return;
+    fumbleActionLocks.add(lockKey);
+    try {
+        await applyFumbleAction(message, actor, fumble, action, state);
+    } finally {
+        fumbleActionLocks.delete(lockKey);
+    }
+}
+
+async function applyFumbleAction(message, actor, fumble, action, state) {
+    const updated = { ...fumble, [state.started]: true };
     const fumbleLabel = updated.kind === "fight"
         ? t("SMOOTHER_FIGHT.HUD.CombatFumble")
         : t("SMOOTHER_FIGHT.HUD.MagicFumble");
-    if (action === "ticks" && !updated.ticksApplied && updated.ticks > 0) {
-        await actor.addTicks(updated.ticks, updated.tickMessage || fumbleLabel, false);
-        updated.ticksApplied = true;
-        ui.notifications.info(t("SMOOTHER_FIGHT.HUD.FumbleTicksApplied", { ticks: updated.ticks, name: actor.name }));
+    const item = action === "weapon" ? actor.items?.get?.(updated.sourceItemId) : null;
+    if (action === "weapon" && (!item || !["weapon", "shield"].includes(item.type))) {
+        throw new Error("Fumble weapon could not be resolved");
     }
-    if (action === "weapon" && !updated.weaponDamageApplied && updated.sourceItemId) {
-        const item = actor.items?.get?.(updated.sourceItemId);
-        if (!item || !["weapon", "shield"].includes(item.type)) throw new Error("Fumble weapon could not be resolved");
+    const selectedConditions = action.startsWith("condition:")
+        ? [updated.conditions[Number.parseInt(action.split(":")[1], 10)]].filter(Boolean)
+        : updated.conditions;
+    const actionable = (action === "ticks" && updated.ticks > 0)
+        || (action === "weapon" && updated.sourceItemId)
+        || (action === "damage" && updated.damage > 0)
+        || ((action === "conditions" || action.startsWith("condition:")) && selectedConditions.length);
+    if (!actionable) return;
+
+    // This durable write-ahead marker is the retry barrier if the completion write fails.
+    await services.setRequiredFlag(message, "fumble", updated);
+    let notification = null;
+    if (action === "ticks") {
+        await actor.addTicks(updated.ticks, updated.tickMessage || fumbleLabel, false);
+        notification = t("SMOOTHER_FIGHT.HUD.FumbleTicksApplied", { ticks: updated.ticks, name: actor.name });
+    }
+    if (action === "weapon") {
         const currentDamageLevel = Math.max(0, numericValue(item.system?.damageLevel));
         const nextDamageLevel = Math.min(2, currentDamageLevel + 1);
         await item.update({ "system.damageLevel": nextDamageLevel });
-        updated.weaponDamageApplied = true;
-        ui.notifications.info(t("SMOOTHER_FIGHT.HUD.FumbleWeaponDamageApplied", { item: item.name }));
+        notification = t("SMOOTHER_FIGHT.HUD.FumbleWeaponDamageApplied", { item: item.name });
     }
-    if (action === "damage" && !updated.damageApplied && updated.damage > 0) {
+    if (action === "damage") {
         await actor.consumeCost("health", fullyConsumedCost(updated.damage), fumbleLabel);
-        updated.damageApplied = true;
-        ui.notifications.info(t("SMOOTHER_FIGHT.HUD.FumbleDamageApplied", { damage: updated.damage, name: actor.name }));
+        notification = t("SMOOTHER_FIGHT.HUD.FumbleDamageApplied", { damage: updated.damage, name: actor.name });
     }
-    if ((action === "conditions" || action.startsWith("condition:")) && !updated.conditionsApplied && updated.conditions.length) {
-        const selectedConditions = action.startsWith("condition:")
-            ? [updated.conditions[Number.parseInt(action.split(":")[1], 10)]].filter(Boolean)
-            : updated.conditions;
+    if (action === "conditions" || action.startsWith("condition:")) {
         await applyFumbleConditions(actor, selectedConditions);
-        updated.conditionsApplied = true;
-        ui.notifications.info(t("SMOOTHER_FIGHT.HUD.FumbleConditionsApplied", { name: actor.name }));
+        notification = t("SMOOTHER_FIGHT.HUD.FumbleConditionsApplied", { name: actor.name });
     }
-    await services.safeSetFlag(message, "fumble", updated);
+    updated[state.applied] = true;
+    await services.setRequiredFlag(message, "fumble", updated);
+    if (notification) ui.notifications.info(notification);
     services.scheduleRender(0);
+}
+
+function fumbleActionState(action) {
+    if (action === "ticks") return { applied: "ticksApplied", started: "ticksApplicationStarted" };
+    if (action === "weapon") return { applied: "weaponDamageApplied", started: "weaponDamageApplicationStarted" };
+    if (action === "damage") return { applied: "damageApplied", started: "damageApplicationStarted" };
+    if (action === "conditions" || String(action).startsWith("condition:")) {
+        return { applied: "conditionsApplied", started: "conditionsApplicationStarted" };
+    }
+    return null;
 }
 
 async function applyFumbleConditions(actor, conditions) {

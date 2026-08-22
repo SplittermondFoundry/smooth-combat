@@ -24,6 +24,6 @@ export {
     isOwnMessage,
     isSpellMessage,
     resolveSpeakerActor,
-    safeSetFlag,
+    setRequiredFlag,
     speakerTokenUuid,
 } from "./messages.js";

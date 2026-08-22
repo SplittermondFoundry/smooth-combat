@@ -384,6 +384,7 @@
       "SelectTargetFirst": "Bitte zuerst ein Ziel auswählen.",
       "DamageTargetMissing": "Das für diesen Angriff gespeicherte Ziel ist nicht mehr verfügbar.",
       "ActionFailed": "Die Aktion konnte nicht ausgeführt werden. Details stehen in der Konsole.",
+      "RequiredFlagFailed": "Der kritische Kampfzustand „{flag}“ konnte nicht gespeichert werden. Die Aktion wurde sicherheitshalber gestoppt; bitte nicht erneut anwenden.",
       "DamageOwnerOnly": "Nur der Besitzer des angreifenden Akteurs darf den Schaden auswählen oder auswürfeln.",
       "DamageTargetNotOwned": "Nur der Besitzer des angegriffenen Ziels darf den Schaden auf sich selbst anwenden.",
       "DefenseNotAllowed": "Du hast keine Owner-Rechte für das ausgewählte Ziel.",

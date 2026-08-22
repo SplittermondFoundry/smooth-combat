@@ -133,12 +133,12 @@ export async function claimPendingDefenseForMessage(message) {
         .find((candidate) => pendingMatchesDefenseMessage(candidate, message));
     if (!pending) return null;
 
-    activeDefenseState.claimedDefenses.set(message.id, pending);
-    clearPendingDefense(pending.pendingDefenseId);
-    await services.safeSetFlag(message, "context", {
+    await services.setRequiredFlag(message, "context", {
         ...(services.getMessageContext(message) ?? {}),
         ...pending,
     });
+    activeDefenseState.claimedDefenses.set(message.id, pending);
+    clearPendingDefense(pending.pendingDefenseId);
     return pending;
 }
 
@@ -172,7 +172,7 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
     contentTemplate.innerHTML = message.content ?? "";
     const defensePresentation = parseActiveDefenseDescription(contentTemplate.content.textContent);
     const numbingDamage = defensePresentation.numbingDamage;
-    await services.safeSetFlag(message, "context", {
+    await services.setRequiredFlag(message, "context", {
         ...existingDefenseContext,
         pendingDefenseId: pending.pendingDefenseId,
         attackMessageId: pending.attackMessageId,
@@ -288,7 +288,7 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
         originalContext.defenseMessageId,
         defenseMessage.id,
     ].filter(Boolean)));
-    await services.safeSetFlag(defenseMessage, "context", {
+    await services.setRequiredFlag(defenseMessage, "context", {
         ...(services.getMessageContext(defenseMessage) ?? pending ?? {}),
         resultingDefenseValue: candidateDefense,
         effectiveDefenseValue: newDefense,
@@ -361,20 +361,25 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
     };
     if (source.flags.splittermond?.chatCard) source.flags.splittermond.chatCard.messageId = null;
 
-    const created = await ChatMessage.create(source);
-    if (!created) return null;
+    let created = null;
+    try {
+        created = await ChatMessage.create(source);
+        if (!created) throw new Error("ChatMessage.create returned no successor");
+    } catch (error) {
+        notifyRequiredContextFailure(error, original.id);
+        throw error;
+    }
     try {
         const rendered = await renderTemplate(created.system.template, created.system.getData());
         const banner = defenseBanner(systemSource.checkReport, defenseCheck.defenseType, newDefense);
         await created.update({ content: decorateRecalculatedCard(rendered, banner) });
-        const linked = await services.safeSetFlag(original, "context", {
+        await services.setRequiredFlag(original, "context", {
             ...(services.getMessageContext(original) ?? historyContext),
             rootAttackMessageId: root.id,
             attemptedDefenseActorUuids,
             defenseMessageIds,
             supersededBy: created.id,
         });
-        if (!linked) throw new Error(`Could not link successor ${created.id} to attack ${original.id}`);
         return created;
     } catch (error) {
         try {
@@ -387,16 +392,24 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
 }
 
 async function updateOffenseCard(message, context, content) {
-    return message.update({
-        content,
-        [`flags.${MODULE_ID}.context`]: context,
-    });
+    try {
+        return await message.update({
+            content,
+            [`flags.${MODULE_ID}.context`]: context,
+        });
+    } catch (error) {
+        notifyRequiredContextFailure(error, message.id);
+        throw error;
+    }
 }
 
 async function setOffenseContext(message, context) {
-    const updated = await services.safeSetFlag(message, "context", context);
-    if (!updated) throw new Error(`Could not update defense history on attack ${message.id}`);
-    return updated;
+    return services.setRequiredFlag(message, "context", context);
+}
+
+function notifyRequiredContextFailure(error, messageId) {
+    console.error(`${MODULE_ID} | Could not persist required attack context on chat message ${messageId}`, error);
+    ui.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.RequiredFlagFailed", { flag: "context" }));
 }
 
 function defenseBanner(report, defenseType, defenseValue) {

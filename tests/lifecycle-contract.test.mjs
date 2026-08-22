@@ -102,8 +102,8 @@ const serviceStubs = {
         return behavior.mayUserApplyDamageToActor(...args);
     },
     recordCompletedDamageApplication: (...args) => record("recordCompletedDamageApplication", args),
-    safeSetFlag: async (...args) => {
-        record("safeSetFlag", args);
+    setRequiredFlag: async (...args) => {
+        record("setRequiredFlag", args);
         return true;
     },
     waitForChatMessage: async (...args) => {
@@ -388,18 +388,18 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         };
 
         await socketHandler(payload);
-        assert.deepEqual(callsOf("safeSetFlag"), []);
+        assert.deepEqual(callsOf("setRequiredFlag"), []);
 
         gameStub.user.isGM = true;
         behavior.mayUserApplyDamageToActor = () => false;
         await socketHandler(payload);
-        assert.deepEqual(callsOf("safeSetFlag"), []);
+        assert.deepEqual(callsOf("setRequiredFlag"), []);
         assert.deepEqual(callsOf("recordCompletedDamageApplication"), []);
 
         behavior.mayUserApplyDamageToActor = () => true;
         await socketHandler(payload);
         assert.deepEqual(callsOf("recordCompletedDamageApplication"), [[message.id]]);
-        assert.deepEqual(callsOf("safeSetFlag"), [[message, "damageApplicationCompleted", true]]);
+        assert.deepEqual(callsOf("setRequiredFlag"), [[message, "damageApplicationCompleted", true]]);
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
         assert.deepEqual(callsOf("mayUserApplyDamageToActor").at(-1), [sender, actor]);
     });

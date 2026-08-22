@@ -8,6 +8,7 @@ import {
     processDefenseMessage,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/active-defense.js";
 import { activeDefenseState } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/state.js";
+import { setRequiredFlag } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 
 const MODULE_ID = "splittermond-smoother-fight";
 const harness = {
@@ -15,6 +16,7 @@ const harness = {
     messages: new Map(),
     tokens: new Map(),
     nextMessageId: 1,
+    rejectSetFlag: null,
 };
 
 function clone(value) {
@@ -46,6 +48,9 @@ class TestMessage {
 
     async setFlag(scope, key, value) {
         await Promise.resolve();
+        if (harness.rejectSetFlag?.({ message: this, scope, key, value })) {
+            throw new Error(`Injected setFlag rejection for ${this.id}.${key}`);
+        }
         this.flags[scope] ??= {};
         this.flags[scope][key] = clone(value);
         return this;
@@ -157,7 +162,7 @@ configureServices({
     messageBelongsToCombatant: () => false,
     resolveSpeakerActor: (message) => ({ uuid: `Actor.${message.speaker?.actor ?? "unknown"}` }),
     resolveToken: (uuid) => harness.tokens.get(uuid) ?? null,
-    safeSetFlag: (message, key, value) => message.setFlag(MODULE_ID, key, value),
+    setRequiredFlag,
     scheduleRender: () => {},
     setCombatEventExpansionRequest: () => {},
 });
@@ -174,6 +179,7 @@ function resetHarness() {
     harness.messages.clear();
     harness.tokens.clear();
     harness.nextMessageId = 1;
+    harness.rejectSetFlag = null;
     installGlobals();
 }
 
@@ -292,6 +298,31 @@ test("an improved defense remains visible when the attack outcome does not chang
     assert.deepEqual(root.flags[MODULE_ID].context.defenseMessageIds, [defense.id]);
     assert.match(root.content, /sf-chat-recalculated/u);
     assert.match(root.content, /<strong>21<\/strong>/u);
+});
+
+test("a rejected supersededBy write removes the unlinked successor and rejects the defense workflow", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    const root = createAttack("attack-link-failure");
+    const defense = createDefense("defense-link-failure", 27, "defender-link-failure");
+    harness.rejectSetFlag = ({ message, key, value }) => Boolean(
+        message.id === root.id && key === "context" && value?.supersededBy
+    );
+
+    await assert.rejects(
+        processDefenseMessage(defense, pendingFor(root, defense, 1)),
+        /Could not persist required context flag/u
+    );
+
+    assert.deepEqual(
+        Array.from(harness.messages.values())
+            .filter((message) => message.type === "attackRollMessage")
+            .map((message) => message.id),
+        [root.id],
+        "the atomically-created successor is deleted when its required back-link cannot be persisted"
+    );
+    assert.equal(root.flags[MODULE_ID].context.supersededBy, undefined);
+    assert.equal(activeDefenseState.attackProcessingQueues.size, 0);
 });
 
 test("dialog nonces isolate stale and cancelled active-defense workflows", async () => {

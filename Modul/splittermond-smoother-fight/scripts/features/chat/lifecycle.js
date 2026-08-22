@@ -118,7 +118,6 @@ async function attachCombatContext(message) {
     const runtimeController = speakerCombatant && actor ? services.getRuntimeController(speakerCombatant) : game.user;
     const targetSelection = services.getTargetSelectionForUser(runtimeController);
     const pendingKind = services.getPendingOffenseKind(actor?.id);
-    if (pendingKind) services.clearPendingOffenseKind(actor?.id);
     const targetContext = combatTargetContext(
         pendingKind?.expiresAt >= createdAt ? pendingKind : null,
         targetSelection
@@ -134,7 +133,8 @@ async function attachCombatContext(message) {
         runtimeControllerId: runtimeController?.id ?? game.user.id,
         createdAt,
     };
-    await services.safeSetFlag(message, "context", context);
+    await services.setRequiredFlag(message, "context", context);
+    if (pendingKind) services.clearPendingOffenseKind(actor?.id);
 }
 
 function combatTargetContext(pendingKind, selection) {

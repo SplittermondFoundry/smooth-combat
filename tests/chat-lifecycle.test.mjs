@@ -65,8 +65,8 @@ configureServices({
     },
     isOwnMessage: (message) => message.author?.id === game.user.id,
     processDefenseMessage: async (message) => record("processDefenseMessage", message),
-    safeSetFlag: async (message, key, value) => {
-        record("safeSetFlag", message, key, value);
+    setRequiredFlag: async (message, key, value) => {
+        record("setRequiredFlag", message, key, value);
         if (key === "context") harness.contexts.set(message, value);
         return true;
     },
@@ -226,9 +226,9 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
         assert.equal(harness.contexts.get(fixture.message)?.targetTokenUuid, fixture.targetA.uuid);
         assert.deepEqual(
             harness.calls
-                .filter((entry) => ["safeSetFlag", "attachFumbleActions", "announceMessageFeedback"].includes(entry.name))
+                .filter((entry) => ["setRequiredFlag", "attachFumbleActions", "announceMessageFeedback"].includes(entry.name))
                 .map((entry) => entry.name),
-            ["safeSetFlag", "attachFumbleActions", "announceMessageFeedback"]
+            ["setRequiredFlag", "attachFumbleActions", "announceMessageFeedback"]
         );
         assert.equal(fixture.hooks.callbacks("diceSoNiceRollComplete").length, 0);
     });
@@ -240,7 +240,7 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
         await completeDiceAnimation(fixture, 2);
         await processing;
 
-        assert.equal(callsOf("safeSetFlag").length, 1);
+        assert.equal(callsOf("setRequiredFlag").length, 1);
         assert.equal(callsOf("getTargetSelectionForUser").length, 1);
         assert.equal(callsOf("attachFumbleActions").length, 1);
         assert.equal(callsOf("announceMessageFeedback").length, 1);
@@ -259,6 +259,8 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
         };
         const fixture = createFixture({ pendingKind });
         const processing = onCreateChatMessage(fixture.message);
+
+        await Promise.resolve();
 
         assert.equal(harness.pendingKinds.has(fixture.actor.id), false);
         assert.equal(harness.contexts.get(fixture.message)?.actionKind, pendingKind.kind);

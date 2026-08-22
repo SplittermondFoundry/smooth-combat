@@ -384,6 +384,7 @@
       "SelectTargetFirst": "Select a target first.",
       "DamageTargetMissing": "The target stored for this attack is no longer available.",
       "ActionFailed": "The action could not be completed. See the console for details.",
+      "RequiredFlagFailed": "The critical combat state “{flag}” could not be saved. The action was stopped for safety; do not apply it again.",
       "DamageOwnerOnly": "Only the attacking actor's owner may select or roll damage.",
       "DamageTargetNotOwned": "Only the attacked target's owner may apply damage to themselves.",
       "DefenseNotAllowed": "You do not own the selected target.",

@@ -309,7 +309,7 @@ function addDefenseNumbingDamageAction(element, message, damage) {
     const actor = services.resolveSpeakerActor(message);
     const context = services.getMessageContext(message) ?? {};
     const allowed = Boolean(actor && (game.user.isGM || actor.isOwner));
-    const applied = Boolean(context.numbingDamageApplied);
+    const applied = Boolean(context.numbingDamageApplied || context.numbingDamageApplicationStarted);
     const actions = document.createElement("div");
     actions.className = "sf-defense-consequence-actions";
     const button = document.createElement("button");
