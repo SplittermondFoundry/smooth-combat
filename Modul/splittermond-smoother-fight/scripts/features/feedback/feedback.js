@@ -218,15 +218,10 @@ export function feedbackMarkup(token, actor) {
     const matches = (feedback.tokenUuid && feedback.tokenUuid === token?.uuid)
         || (feedback.actorUuid && feedback.actorUuid === actor?.uuid);
     if (!matches) return "";
-    const icons = {
-        defense: "fa-shield-halved",
-        damage: "fa-droplet",
-        damageBlocked: "fa-shield",
-        spell: "fa-wand-sparkles",
-        ranged: "fa-crosshairs",
-        turn: "fa-bolt",
-    };
-    return `<span class="sf-action-feedback is-${escapeAttr(feedback.kind)}"><i class="fa-solid ${icons[feedback.kind] ?? "fa-burst"}"></i></span>`;
+    const icon = AUDIO_FEEDBACK_EVENTS[feedback.kind]
+        ? `<span class="sf-media-icon sf-icon-${escapeAttr(feedback.kind)}" aria-hidden="true"></span>`
+        : '<i class="fa-solid fa-burst"></i>';
+    return `<span class="sf-action-feedback is-${escapeAttr(feedback.kind)}">${icon}</span>`;
 }
 
 function legacyAudioFeedbackProfile() {
@@ -311,11 +306,19 @@ export async function playFeedbackSelection(soundId, customSound, fallbackSoundI
 }
 
 async function playFeedbackProfile(soundId, fallbackSoundId = "shield", force = false) {
-    const audio = await prepareFeedbackAudio(force);
-    if (!audio) return false;
     const profile = AUDIO_SOUND_PROFILES[soundId]
         ?? AUDIO_SOUND_PROFILES[fallbackSoundId]
         ?? AUDIO_SOUND_PROFILES.shield;
+    if (profile?.src && game.audio?.play) {
+        try {
+            await game.audio.play(profile.src, { context: game.audio.interface });
+            return true;
+        } catch (error) {
+            console.debug(`${MODULE_ID} | Could not play audio asset ${profile.src}`, error);
+        }
+    }
+    const audio = await prepareFeedbackAudio(force);
+    if (!audio) return false;
     const notes = profile?.notes ?? [];
     if (!notes.length) return false;
     const now = audio.currentTime;

@@ -31,7 +31,8 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 - direkte Tickbuttons für 1, 2, 3, 5, 7 und 10 Ticks, freie Tickeingabe sowie Abwartend/Bereithalten/Reaktivieren; Tickaktionen aus Abwehr- und Schadenskarten werden im HUD gespiegelt und für den zuständigen Benutzer hervorgehoben
 - beschriftete Combat-Reiter-Aktionen für Tokenfokus, Sichtbarkeit, Besiegt-Status und Entfernen aus dem Kampf; auf schmalen Ansichten bleiben die platzsparenden Symbole
 - vorbereitete Zauber und Fernkampfangriffe als hervorgehobene Direktaktion mit Auslösen- und Abbrechen-Button; die Zauberaktion zeigt die mit aktuellem Fokus verfügbaren Zauber
-- Dark-/Lightmode-Schalter, Portraitanimationen sowie je Ereignis separat aktivier- und auswählbare Audiohinweise für Zugbeginn, Aktive Abwehr, Schaden, vollständig abgewehrten Schaden, Zauber und Fernkampf; die persönlichen Signale werden im Benutzerprofil der Welt gespeichert und können auch eigene Audiodateien verwenden
+- Dark-/Lightmode-Schalter, abschaltbare Portrait- und Hinweisanimationen sowie je Ereignis separat aktivier- und auswählbare Audiohinweise für Zugbeginn, Aktive Abwehr, Schaden, vollständig abgewehrten Schaden, Zauber und Fernkampf; die Standards sind echte WAV-Dateien, persönliche Signale können eigene Audiodateien verwenden
+- erkennbare Moduldateien für HUD-Hintergründe, Ereignisicons und Sounds sowie eine persönliche, updatesichere Medienkonfiguration für eigene Hintergründe und vollständige Icon-Sets
 - Socket-Synchronisierung, damit das Ziel des zugeordneten Spielers auf allen Clients sichtbar ist
 - standardmäßiges Ausblenden der normalen Splittermond-Aktionsleiste während eines Kampfes; pro Client deaktivierbar
 - minimiertes HUD horizontal zentriert und mit kleinem Abstand direkt oberhalb der sichtbaren Action-Bar
@@ -39,9 +40,15 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 
 ## Installation zum Entwickeln/Testen
 
-Den gesamten Ordner als `splittermond-smoother-fight` in Foundrys `Data/modules` ablegen oder verlinken. Danach Foundry neu starten, das Modul in der Welt aktivieren und unter **Einstellungen → Moduleinstellungen → Spieler, Bögen und Tokens verknüpfen** die Zuordnungen festlegen.
+Den gesamten Ordner als `splittermond-smoother-fight` in Foundrys `Data/modules` ablegen oder verlinken. Danach Foundry neu starten, das Modul in der Welt aktivieren und unter **Einstellungen → Moduleinstellungen → Spieler, Bögen und Tokens verknüpfen** die Zuordnungen festlegen. Unter **Darstellung und Medien** können Benutzer eigene Hintergründe, ein eigenes Icon-Verzeichnis und den Bewegungsmodus wählen.
 
 Eine direkte Token-Zuordnung hat Vorrang vor der Zuordnung seines Charakter- oder NSC-Bogens. Danach greift der festgelegte Haupt-GM und zuletzt die normalen Owner-Rechte des Akteurs. Jeder Bogen und jedes Token kann dabei höchstens einem Benutzer zugeordnet sein; ein Benutzer darf weiterhin beliebig viele davon besitzen. Alte Einzelzuordnungen werden automatisch weiterverwendet.
+
+## Medien anpassen
+
+Die mitgelieferten Dateien liegen übersichtlich unter `assets/backgrounds`, `assets/icons` und `assets/audio`. Ihre Namen und die Zuordnung stehen zusätzlich in `assets/README.md`.
+
+Dateien im installierten Modulordner sollten nicht direkt ersetzt werden, weil ein Modulupdate sie überschreibt. Updatesicher ist es, eigene Medien im Foundry-Datenverzeichnis abzulegen und in **Darstellung und Medien** beziehungsweise **Audiohinweise** auszuwählen. Ein eigenes Icon-Verzeichnis muss dieselben sechs SVG-Dateinamen wie `assets/icons` enthalten. Farben, Hintergrundüberlagerung und Animationsdauer sind als CSS-Variablen in `styles/themes/default.css` zusammengefasst.
 
 ## Ablauf Aktive Abwehr
 
@@ -55,11 +62,12 @@ Eine direkte Token-Zuordnung hat Vorrang vor der Zuordnung seines Charakter- ode
 ## Qualitätssicherung
 
 ```powershell
+npm run assets:audio
 npm test
 npm run check
 ```
 
-Der Befehl wird aus dem Projektstamm ausgeführt. Die Berechnungen sind in `scripts/combat-rules.js` bewusst unabhängig von Foundry gehalten und werden mit Node-Testfällen abgesichert.
+Die Befehle werden aus dem Projektstamm ausgeführt. `assets:audio` erzeugt die sechs mitgelieferten WAV-Signale deterministisch neu. Die Berechnungen sind in `scripts/combat-rules.js` bewusst unabhängig von Foundry gehalten und werden mit Node-Testfällen abgesichert.
 
 Die verbindlichen Modulgrenzen und Regeln für künftige Änderungen stehen in `ARCHITECTURE.md` im Projektstamm. `npm run check` kontrolliert diese Grenzen einschließlich Importzyklen, Dateigrößen und der Trennung von Domain- und Foundry-Code automatisch.
 

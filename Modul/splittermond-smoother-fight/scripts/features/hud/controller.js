@@ -41,6 +41,10 @@ import {
 } from "../../core/constants.js";
 
 import {
+    applyHudAppearance,
+} from "./appearance.js";
+
+import {
     getSetting,
     t,
 } from "../../shared/values.js";
@@ -92,6 +96,7 @@ class SmootherFightHud {
         const visible = Boolean(enabled && context && !hudState.hiddenByShortcut);
         const minimized = Boolean(visible && getSetting("minimized", false));
         this.element.classList.toggle("sf-theme-light", getSetting("theme", "dark") === "light");
+        applyHudAppearance(this.element);
         this.element.classList.toggle("is-hidden", !visible);
         syncSystemActionBar(visible);
         syncMinimizedHudPosition(this.element, minimized);

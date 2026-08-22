@@ -672,7 +672,7 @@
     background: linear-gradient(135deg, rgba(169, 112, 31, 0.76), rgba(32, 112, 106, 0.82)) !important;
     box-shadow: 0 0 12px rgba(242, 206, 135, 0.36) !important;
     font-weight: 800;
-    animation: sf-defense-attention 1.8s ease-in-out infinite;
+    animation: sf-defense-attention var(--sf-motion-defense-attention) ease-in-out infinite;
 }
 
 #splittermond-smoother-fight-hud.sf-theme-light .sf-center,
@@ -723,12 +723,12 @@
     outline-offset: 2px;
     background: linear-gradient(135deg, rgba(169, 112, 31, 0.2), rgba(32, 112, 106, 0.24));
     box-shadow: 0 0 12px rgba(242, 206, 135, 0.3);
-    animation: sf-defense-attention 1.8s ease-in-out infinite;
+    animation: sf-defense-attention var(--sf-motion-defense-attention) ease-in-out infinite;
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message .has-next-open-degrees .stars {
     text-shadow: 0 0 7px currentColor;
-    animation: sf-defense-attention 1.8s ease-in-out infinite;
+    animation: sf-defense-attention var(--sf-motion-defense-attention) ease-in-out infinite;
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message button {
@@ -742,7 +742,7 @@
     background: linear-gradient(135deg, rgba(184, 128, 42, 0.78), rgba(24, 101, 100, 0.86)) !important;
     box-shadow: 0 0 0 1px rgba(108, 201, 193, 0.3), 0 0 12px rgba(242, 206, 135, 0.38) !important;
     font-weight: 800;
-    animation: sf-defense-attention 1.8s ease-in-out infinite;
+    animation: sf-defense-attention var(--sf-motion-defense-attention) ease-in-out infinite;
 }
 
 @keyframes sf-defense-attention {
@@ -755,24 +755,40 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    #splittermond-smoother-fight-hud .sf-shell.is-current-user-turn .sf-live-dot,
-    #splittermond-smoother-fight-hud .sf-action-menu.is-defense-alert > summary,
-    #splittermond-smoother-fight-hud .sf-event-group.is-defense-alert .sf-chat-message [data-localaction="activeDefense" i],
-    #splittermond-smoother-fight-hud .sf-event-group.is-defense-alert .sf-chat-message [data-local-action="activeDefense" i] {
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-shell.is-current-user-turn .sf-live-dot,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-action-menu.is-defense-alert > summary,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-event-group.is-defense-alert .sf-chat-message [data-localaction="activeDefense" i],
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-event-group.is-defense-alert .sf-chat-message [data-local-action="activeDefense" i] {
         animation: none;
     }
 
-    #splittermond-smoother-fight-hud .sf-action-feedback,
-    #splittermond-smoother-fight-hud .sf-chat-message .sf-tick-advance-action,
-    #splittermond-smoother-fight-hud .sf-chat-message .is-next-degree-options,
-    #splittermond-smoother-fight-hud .sf-chat-message .has-next-open-degrees .stars,
-    #splittermond-smoother-fight-hud .sf-chat-message .is-next-focus-cost,
-    #splittermond-smoother-fight-hud .sf-chat-message .is-next-damage-roll,
-    #splittermond-smoother-fight-hud .sf-chat-message .is-own-fumble-roll,
-    #splittermond-smoother-fight-hud .sf-chat-message .is-gm-target-application,
-    #splittermond-smoother-fight-hud .sf-chat-message .is-self-target {
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-action-feedback,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .sf-tick-advance-action,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-next-degree-options,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .has-next-open-degrees .stars,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-next-focus-cost,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-next-damage-roll,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-own-fumble-roll,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-gm-target-application,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-self-target {
         animation: none;
     }
+}
+
+#splittermond-smoother-fight-hud.sf-motion-none .sf-shell.is-current-user-turn .sf-live-dot,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-action-menu.is-defense-alert > summary,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-event-group.is-defense-alert .sf-chat-message [data-localaction="activeDefense" i],
+#splittermond-smoother-fight-hud.sf-motion-none .sf-event-group.is-defense-alert .sf-chat-message [data-local-action="activeDefense" i],
+#splittermond-smoother-fight-hud.sf-motion-none .sf-action-feedback,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .sf-tick-advance-action,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-next-degree-options,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .has-next-open-degrees .stars,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-next-focus-cost,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-next-damage-roll,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-own-fumble-roll,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-gm-target-application,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-self-target {
+    animation: none;
 }
 
 /* Firefox can flash white compositor tiles when animated filters overlap backdrop-filter layers. */

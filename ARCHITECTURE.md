@@ -84,12 +84,15 @@ Folgende Strukturen sind persistierte oder externe Verträge und dürfen nicht b
 
 Das vollständige HUD-Layout entsteht ausschließlich in `hud/view.js` und `combat-events/view.js`; der Controller montiert das Ergebnis. Fachspezifische DOM-Adapter für Chatkarten, Dialoge, Patzer und Token-HUD dürfen ihr lokal begrenztes Markup im verantwortlichen Feature erzeugen. Die Styles werden in dieser festen Kaskadenreihenfolge geladen:
 
-1. `styles/hud.css`
-2. `styles/combat-events.css`
-3. `styles/settings.css`
-4. `styles/responsive.css`
+1. `styles/themes/default.css`
+2. `styles/hud.css`
+3. `styles/combat-events.css`
+4. `styles/settings.css`
+5. `styles/responsive.css`
 
-Der versionierte Wrapper bleibt der einzige Manifest-Einstieg. `styles/smoother-fight.css` bleibt als einzeiliger Kompatibilitäts-Wrapper für den früheren direkten Asset-Pfad erhalten. Der Asset-Vertragstest vergleicht die zusammengefügte Kaskade mit einem SHA-256-Wert. Dieser Wert wird ausschließlich zusammen mit einer ausdrücklich beabsichtigten optischen Änderung aktualisiert.
+Der versionierte Wrapper bleibt der einzige Manifest-Einstieg. `styles/smoother-fight.css` bleibt als einzeiliger Kompatibilitäts-Wrapper für den früheren direkten Asset-Pfad erhalten. Farben, Medienpfade und Animationsdauer werden zentral in `styles/themes/default.css` deklariert. Der Asset-Vertragstest vergleicht die zusammengefügte Kaskade mit einem SHA-256-Wert. Dieser Wert wird ausschließlich zusammen mit einer ausdrücklich beabsichtigten optischen Änderung aktualisiert.
+
+Die ausgelieferten, austauschbaren Medien liegen unter `assets/backgrounds`, `assets/icons` und `assets/audio`. Laufzeitpfade werden zentral in `core/constants.js` deklariert. Eigene Benutzerdateien werden ausschließlich als Pfade außerhalb des Modulordners gespeichert; direkte Änderungen an ausgelieferten Medien gelten nicht als persistente Konfiguration.
 
 ## Vorgehen bei Änderungen
 

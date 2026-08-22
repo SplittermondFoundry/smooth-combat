@@ -61,6 +61,10 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
         "audioTurnEnabled",
         "audioTurnSound",
         "theme",
+        "hudBackgroundDark",
+        "hudBackgroundLight",
+        "hudIconDirectory",
+        "hudMotion",
         "userTokenLinks",
         "actorUserLinks",
         "primaryGmId",
@@ -87,6 +91,16 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     assert.equal(settingByKey.defenseRecalculation.default, true);
     assert.equal(settingByKey.revealTargetDefenses.scope, "world");
     assert.equal(settingByKey.revealTargetDefenses.default, false);
+    for (const key of ["hudBackgroundDark", "hudBackgroundLight", "hudIconDirectory"]) {
+        assert.deepEqual(
+            [settingByKey[key].scope, settingByKey[key].config, settingByKey[key].type, settingByKey[key].default],
+            ["client", false, String, ""],
+        );
+    }
+    assert.deepEqual(
+        [settingByKey.hudMotion.scope, settingByKey.hudMotion.config, settingByKey.hudMotion.type, settingByKey.hudMotion.default],
+        ["client", false, String, "system"],
+    );
     assert.deepEqual(
         ["userTokenLinks", "actorUserLinks"].map((key) => [key, settingByKey[key].scope, settingByKey[key].config, settingByKey[key].type, settingByKey[key].default]),
         [
@@ -118,6 +132,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     assert.deepEqual(menus.map(({ key, options }) => [key, options.restricted, options.type.PARTS.form.template]), [
         ["userTokenLinksMenu", true, "modules/splittermond-smoother-fight/templates/user-token-links.hbs"],
         ["audioFeedbackMenu", false, "modules/splittermond-smoother-fight/templates/audio-feedback-settings.hbs"],
+        ["appearanceMenu", false, "modules/splittermond-smoother-fight/templates/appearance-settings.hbs"],
     ]);
     assert.deepEqual(keybindings.map(({ key, options }) => [key, options.editable]), [
         ["toggleHud", [{ key: "KeyV" }]],

@@ -16,7 +16,7 @@
         </div>
         {{#each events}}
             <section class="sf-audio-event-row" data-audio-event="{{this.id}}" data-default-sound="{{this.defaultSound}}">
-                <strong>{{this.label}}</strong>
+                <strong><span class="sf-media-icon sf-icon-{{this.id}}" aria-hidden="true"></span>{{this.label}}</strong>
                 <label class="sf-audio-enabled">
                     <input type="checkbox" data-role="audio-enabled" {{#if this.enabled}}checked{{/if}}>
                     <span>{{localize "SMOOTHER_FIGHT.Settings.AudioEnabled"}}</span>

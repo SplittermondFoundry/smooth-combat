@@ -109,6 +109,22 @@ export function registerSettings() {
         default: "dark",
         onChange: rerender,
     });
+    for (const key of ["hudBackgroundDark", "hudBackgroundLight", "hudIconDirectory"]) {
+        game.settings.register(MODULE_ID, key, {
+            scope: "client",
+            config: false,
+            type: String,
+            default: "",
+            onChange: rerender,
+        });
+    }
+    game.settings.register(MODULE_ID, "hudMotion", {
+        scope: "client",
+        config: false,
+        type: String,
+        default: "system",
+        onChange: rerender,
+    });
     game.settings.register(MODULE_ID, "userTokenLinks", {
         scope: "world",
         config: false,

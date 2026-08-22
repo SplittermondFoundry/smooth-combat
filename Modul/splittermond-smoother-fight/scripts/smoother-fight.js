@@ -18,6 +18,7 @@ import {
 import { registerAudioSettingsMenu } from "./features/feedback/settings-app.js";
 import * as fumblesApi from "./features/fumbles/api.js";
 import * as hudApi from "./features/hud/api.js";
+import { registerAppearanceSettingsMenu } from "./features/hud/appearance.js";
 import { mountHud, renderHud } from "./features/hud/controller.js";
 import { registerKeybindings } from "./features/hud/keybindings.js";
 import * as targetingApi from "./features/targeting/api.js";
@@ -39,6 +40,7 @@ Hooks.once("init", () => {
     registerSettings();
     registerSettingsMenu();
     registerAudioSettingsMenu();
+    registerAppearanceSettingsMenu();
     registerKeybindings();
 });
 

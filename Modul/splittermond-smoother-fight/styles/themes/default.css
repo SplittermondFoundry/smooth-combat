@@ -1,0 +1,39 @@
+:root {
+    --sf-bg: rgba(5, 15, 18, 0.94);
+    --sf-bg-soft: rgba(9, 31, 34, 0.92);
+    --sf-line: rgba(117, 191, 186, 0.26);
+    --sf-gold: #d8a85d;
+    --sf-gold-bright: #f2ce87;
+    --sf-teal: #6cc9c1;
+    --sf-text: #eef4ef;
+    --sf-muted: #9caaa5;
+    --sf-danger: #c65d55;
+    --sf-hud-background-dark: url("../assets/backgrounds/hud-dark.jpg");
+    --sf-hud-background-light: url("../assets/backgrounds/hud-light.jpg");
+    --sf-hud-background-image: var(--sf-hud-background-dark);
+    --sf-hud-background-tint: rgba(5, 15, 18, 0.72);
+    --sf-settings-background: url("../assets/backgrounds/hud-light.jpg");
+    --sf-icon-defense: url("../assets/icons/active-defense.svg");
+    --sf-icon-damage: url("../assets/icons/damage.svg");
+    --sf-icon-damage-blocked: url("../assets/icons/damage-blocked.svg");
+    --sf-icon-spell: url("../assets/icons/spell.svg");
+    --sf-icon-ranged: url("../assets/icons/ranged.svg");
+    --sf-icon-turn: url("../assets/icons/turn.svg");
+    --sf-motion-current-turn: 1.6s;
+    --sf-motion-action-feedback: 1.35s;
+    --sf-motion-defense-attention: 1.8s;
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light {
+    --sf-bg: rgba(238, 242, 237, 0.96);
+    --sf-bg-soft: rgba(222, 234, 228, 0.96);
+    --sf-line: rgba(42, 99, 94, 0.32);
+    --sf-gold: #9b6824;
+    --sf-gold-bright: #794a12;
+    --sf-teal: #1e746d;
+    --sf-text: #172321;
+    --sf-muted: #566763;
+    --sf-danger: #a43f38;
+    --sf-hud-background-image: var(--sf-hud-background-light);
+    --sf-hud-background-tint: rgba(238, 242, 237, 0.74);
+}

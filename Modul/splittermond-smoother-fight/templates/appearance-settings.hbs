@@ -1,0 +1,42 @@
+<form class="sf-appearance-settings-form">
+    <header class="sf-appearance-intro">
+        <span class="sf-setting-scope-badge"><i class="fa-solid fa-display"></i> {{localize "SMOOTHER_FIGHT.Settings.ThisClient"}}</span>
+        <span>
+            <h3>{{localize "SMOOTHER_FIGHT.Settings.AppearanceHeading"}}</h3>
+            <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.AppearanceHint"}}</p>
+        </span>
+    </header>
+
+    <section class="sf-appearance-group">
+        <h4><i class="fa-solid fa-image"></i> {{localize "SMOOTHER_FIGHT.Settings.AppearanceBackgrounds"}}</h4>
+        <label for="sf-background-dark">{{localize "SMOOTHER_FIGHT.Settings.AppearanceDarkBackground"}}</label>
+        <file-picker id="sf-background-dark" type="image" value="{{darkBackground}}" placeholder="{{defaults.backgrounds.dark}}" data-role="background-dark"></file-picker>
+        <small>{{localize "SMOOTHER_FIGHT.Settings.AppearanceDefaultPath"}} <code>{{defaults.backgrounds.dark}}</code></small>
+
+        <label for="sf-background-light">{{localize "SMOOTHER_FIGHT.Settings.AppearanceLightBackground"}}</label>
+        <file-picker id="sf-background-light" type="image" value="{{lightBackground}}" placeholder="{{defaults.backgrounds.light}}" data-role="background-light"></file-picker>
+        <small>{{localize "SMOOTHER_FIGHT.Settings.AppearanceDefaultPath"}} <code>{{defaults.backgrounds.light}}</code></small>
+    </section>
+
+    <section class="sf-appearance-group">
+        <h4><i class="fa-solid fa-icons"></i> {{localize "SMOOTHER_FIGHT.Settings.AppearanceIcons"}}</h4>
+        <label for="sf-icon-directory">{{localize "SMOOTHER_FIGHT.Settings.AppearanceIconDirectory"}}</label>
+        <file-picker id="sf-icon-directory" type="folder" value="{{iconDirectory}}" placeholder="modules/splittermond-smoother-fight/assets/icons" data-role="icon-directory"></file-picker>
+        <small>{{localize "SMOOTHER_FIGHT.Settings.AppearanceIconDirectoryHint"}}</small>
+    </section>
+
+    <section class="sf-appearance-group sf-appearance-motion">
+        <h4><i class="fa-solid fa-person-running"></i> {{localize "SMOOTHER_FIGHT.Settings.AppearanceMotion"}}</h4>
+        <label for="sf-motion">{{localize "SMOOTHER_FIGHT.Settings.AppearanceMotionMode"}}</label>
+        <select id="sf-motion" data-role="motion">
+            {{#each motionChoices}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+        </select>
+        <small>{{localize "SMOOTHER_FIGHT.Settings.AppearanceMotionHint"}}</small>
+    </section>
+
+    <footer class="form-footer">
+        <span class="sf-dirty-indicator" data-role="appearance-dirty" hidden><i class="fa-solid fa-circle"></i> {{localize "SMOOTHER_FIGHT.Settings.UnsavedChanges"}}</span>
+        <button type="button" data-action="reset-appearance"><i class="fa-solid fa-arrow-rotate-left"></i> {{localize "SMOOTHER_FIGHT.Settings.AppearanceReset"}}</button>
+        <button type="button" data-action="save-appearance"><i class="fa-solid fa-floppy-disk"></i> {{localize "SMOOTHER_FIGHT.Settings.AppearanceSave"}}</button>
+    </footer>
+</form>
