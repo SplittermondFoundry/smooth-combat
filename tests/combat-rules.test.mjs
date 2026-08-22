@@ -27,6 +27,7 @@ import {
     isTargetDependentDifficulty,
     isOffensiveCombatMessage,
     linkMatchesCombatant,
+    mayRollCombatFumble,
     mayUseRemoteChatActions,
     mayViewActorResources,
     mayViewTargetDefenses,
@@ -594,6 +595,12 @@ test("remote chat actions match Splittermond's owner, author, and GM permissions
     assert.equal(mayUseRemoteChatActions(false, false, true), true);
     assert.equal(mayUseRemoteChatActions(false, false, false, true), true);
     assert.equal(mayUseRemoteChatActions(true, false, false), true);
+});
+
+test("combat fumble rolls are limited to the assigned speaker and GMs", () => {
+    assert.equal(mayRollCombatFumble(false, false), false);
+    assert.equal(mayRollCombatFumble(false, true), true);
+    assert.equal(mayRollCombatFumble(true, false), true);
 });
 
 test("the assigned user receives the turn highlight, including an assigned GM", () => {

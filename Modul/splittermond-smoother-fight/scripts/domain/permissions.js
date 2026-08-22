@@ -18,6 +18,10 @@ export function mayUseRemoteChatActions(isGm, ownsSpeakerActor, isMessageAuthor,
     return Boolean(isGm || ownsSpeakerActor || isMessageAuthor || isAssignedSpeaker);
 }
 
+export function mayRollCombatFumble(isGm, isAssignedSpeaker) {
+    return Boolean(isGm || isAssignedSpeaker);
+}
+
 export function isPlayersTurn({
     isGm = false,
     userId = null,

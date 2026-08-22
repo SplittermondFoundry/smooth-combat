@@ -186,7 +186,8 @@ class SmootherFightHud {
 
         const target = event.target.closest("[data-spell-id], [data-attack-id], [data-item-id]");
         if (!target || !this.element.contains(target) || !target.closest(".sf-actions")) return;
-        const context = getHudContext();
+        const hudContext = getHudContext();
+        const context = resolveHudActionContext(hudContext, target);
         const item = context ? resolveActionItem(context.actor, target) : null;
         if (!item?.sheet) return;
         event.preventDefault();

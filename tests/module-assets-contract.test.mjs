@@ -11,9 +11,9 @@ const moduleRoot = path.join(projectRoot, "Modul", "splittermond-smoother-fight"
 test("Foundry manifest entry points remain stable", () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(moduleRoot, "module.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.3.58");
+    assert.equal(manifest.version, "0.3.59");
     assert.deepEqual(manifest.esmodules, ["scripts/smoother-fight.js"]);
-    assert.deepEqual(manifest.styles, ["styles/smoother-fight-0.3.58.css"]);
+    assert.deepEqual(manifest.styles, ["styles/smoother-fight-0.3.59.css"]);
     assert.equal(manifest.socket, true);
     assert.deepEqual(manifest.languages.map(({ lang, path: languagePath }) => [lang, languagePath]), [
         ["de", "lang/de.json"],
@@ -50,6 +50,7 @@ test("published DOM integration attributes remain available", () => {
     const hudView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "view.js"), "utf8");
     const hudController = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "controller.js"), "utf8");
     const combatEventView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "combat-events", "view.js"), "utf8");
+    const chatActions = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "chat", "actions.js"), "utf8");
     assert.match(hudView, /data-sf-context-actor-id/u);
     assert.match(hudView, /sf-is-primary-target/u);
     assert.match(hudView, /data-sf-action="remove-target"/u);
@@ -80,11 +81,15 @@ test("published DOM integration attributes remain available", () => {
     assert.equal((hudView.match(/data-sf-action="toggle-combatant-visibility"/gu) ?? []).length, 1);
     assert.doesNotMatch(hudView, /sf-defense-pills" aria-hidden="true"/u);
     assert.match(combatEventView, /data-subevent-actor-id/u);
+    assert.match(hudView, /buildAttackControlMarkup\(context\.actor, \{ meleeOnly: true \}\)/u);
+    assert.match(hudView, /filter\(\(attack\) => !meleeOnly \|\| !services\.isRangedAttack\(attack\)\)/u);
+    assert.match(chatActions, /if \(!mayRollFumble\) removeCombatFumbleRollControls\(element\)/u);
+    assert.match(chatActions, /isMessageSpeakerAssignedToCurrentUser\(message\)/u);
 });
 
 test("the local HUD demo loads the manifest stylesheet entry", () => {
     const demo = fs.readFileSync(path.join(projectRoot, "demo", "index.html"), "utf8");
-    assert.match(demo, /href="\.\.\/Modul\/splittermond-smoother-fight\/styles\/smoother-fight-0\.3\.58\.css"/u);
+    assert.match(demo, /href="\.\.\/Modul\/splittermond-smoother-fight\/styles\/smoother-fight-0\.3\.59\.css"/u);
 });
 
 test("the compact HUD retains mechanical status and summarizes secondary targets", () => {
@@ -98,13 +103,13 @@ test("the compact HUD retains mechanical status and summarizes secondary targets
 
 test("the legacy stylesheet URL remains a compatible entry point", () => {
     const compatibilityWrapper = fs.readFileSync(path.join(moduleRoot, "styles", "smoother-fight.css"), "utf8");
-    assert.equal(compatibilityWrapper, '@import url("./smoother-fight-0.3.58.css?module=0.3.58");\n');
+    assert.equal(compatibilityWrapper, '@import url("./smoother-fight-0.3.59.css?module=0.3.59");\n');
 });
 
 test("split styles flatten in the verified cascade order", () => {
-    const wrapperPath = path.join(moduleRoot, "styles", "smoother-fight-0.3.58.css");
+    const wrapperPath = path.join(moduleRoot, "styles", "smoother-fight-0.3.59.css");
     const wrapper = fs.readFileSync(wrapperPath, "utf8");
-    const imports = [...wrapper.matchAll(/@import\s+url\("\.\/([^"?]+)\?module=0\.3\.58"\);/gu)]
+    const imports = [...wrapper.matchAll(/@import\s+url\("\.\/([^"?]+)\?module=0\.3\.59"\);/gu)]
         .map((match) => match[1]);
     assert.deepEqual(imports, ["themes/default.css", "hud.css", "combat-events.css", "settings.css", "responsive.css"]);
     const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));

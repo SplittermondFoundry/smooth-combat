@@ -104,7 +104,7 @@ export async function buildHud(context) {
                     ${buildThemeToggle()}
                     ${hudToggle}
                 </header>
-                ${canAct ? buildCombatControls(context) : buildPersonalControls(context)}
+                ${canAct ? buildCombatControls(context) : await buildPersonalControls(context)}
                 ${canAct ? await buildActionBar(context) : ""}
                 ${getSetting("showCards", true) ? services.buildCombatEvents(context) : ""}
             </main>
@@ -125,7 +125,7 @@ export async function buildHud(context) {
     `;
 }
 
-function buildConcealedHud(context) {
+async function buildConcealedHud(context) {
     const minimized = getSetting("minimized", false);
     const label = t("SMOOTHER_FIGHT.HUD.UnknownActive");
     const hudToggle = buildHudToggle(minimized);
@@ -141,7 +141,7 @@ function buildConcealedHud(context) {
         return `<div class="sf-shell is-minimized is-concealed-turn"><main class="sf-center">${header}</main></div>`;
     }
 
-    const personalControls = buildPersonalControls(context);
+    const personalControls = await buildPersonalControls(context);
     const events = getSetting("showCards", true) ? services.buildCombatEvents(context) : "";
     return `
         <div class="sf-shell is-concealed-turn">
@@ -383,7 +383,7 @@ function tickActionDuration(action) {
     return t(`SMOOTHER_FIGHT.HUD.TickActionDuration${suffix}`);
 }
 
-function buildPersonalControls(activeContext) {
+async function buildPersonalControls(activeContext) {
     const candidates = getPersonalHudCandidates(activeContext);
     const context = getPersonalHudContext(activeContext);
     const picker = candidates.length > 1 ? buildPersonalCombatantPicker(candidates, context) : "";
@@ -397,11 +397,12 @@ function buildPersonalControls(activeContext) {
         </div>`;
     }
     const attributes = `data-sf-context-combatant-id="${escapeAttr(context.combatant.id)}" data-sf-context-actor-id="${escapeAttr(context.actor.id)}"`;
+    const meleeAttackControl = await buildAttackControlMarkup(context.actor, { meleeOnly: true });
     return `<div class="sf-personal-controls" ${attributes}>
         <section class="sf-combat-controls sf-personal-combat-controls" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CombatControls"))}">
             ${buildAdvanceButtons(context, true)}
         </section>
-        ${buildSkillActionBar(context.actor, picker)}
+        ${buildPersonalActionBar(context.actor, picker, meleeAttackControl)}
     </div>`;
 }
 
@@ -453,11 +454,12 @@ function getSkillActionData(actor) {
     return { favoriteSkills, skillControlMarkup };
 }
 
-function buildSkillActionBar(actor, leadingControl = "") {
+function buildPersonalActionBar(actor, leadingControl = "", meleeAttackControl = "") {
     const { favoriteSkills, skillControlMarkup } = getSkillActionData(actor);
-    return `<nav class="sf-actions sf-personal-skill-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.Skills"))}">
+    return `<nav class="sf-actions sf-personal-skill-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
         ${leadingControl}
         ${skillControlMarkup}
+        ${meleeAttackControl}
         ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
     </nav>`;
 }
@@ -466,8 +468,6 @@ async function buildActionBar(context) {
     const actor = context.actor;
     const defenseAlert = services.hasPendingActiveDefense(context);
     const preparedSpellId = actor.getFlag?.("splittermond", "preparedSpell");
-    const preparedAttackId = actor.getFlag?.("splittermond", "preparedAttack");
-    const storedDefaultAttackId = actor.getFlag?.(MODULE_ID, "defaultAttackId");
     const { favoriteSkills, skillControlMarkup } = getSkillActionData(actor);
     const spells = [...(actor.spells ?? [])].sort((a, b) =>
         Number(b.id === preparedSpellId) - Number(a.id === preparedSpellId) || sortByName(a, b)
@@ -475,39 +475,7 @@ async function buildActionBar(context) {
     const preparedSpell = spells.find((spell) => spell.id === preparedSpellId) ?? null;
     const availableSpells = spells.filter((spell) => spell.enoughFocus !== false).length;
     const spellLabel = `${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells})`;
-    const availableAttacks = [...(actor.attacks ?? [])];
-    const equipment = Array.from(actor.items ?? []).filter((item) => ["weapon", "shield"].includes(item.type)).sort(sortByName);
-    const attackControl = attackControlState(availableAttacks.map((attack) => attack.id), storedDefaultAttackId, equipment.length);
-    const attackStates = new Map(availableAttacks.map((attack) => [
-        attack.id,
-        attackReadiness(services.isRangedAttack(attack), attack.id, preparedAttackId),
-    ]));
-    const attacks = availableAttacks.sort((a, b) =>
-        Number(attackStates.get(b.id)?.prepared) - Number(attackStates.get(a.id)?.prepared) || sortByName(a, b)
-    );
-    const preparedAttack = attacks.find((attack) => attackStates.get(attack.id)?.prepared) ?? null;
-    const directAttack = attacks.find((attack) => attack.id === attackControl.directAttackId) ?? null;
-    const attackSpeeds = new Map(await Promise.all(attacks.map(async (attack) => [attack.id, await services.getAttackSpeed(attack)])));
-    const attackMenuBody = buildAttackMenuBody(
-        attacks,
-        equipment,
-        attackStates,
-        attackSpeeds,
-        attackControl.defaultAttackId,
-        attackControl.automaticDefaultAttackId
-    );
-    const attackSelection = attackControlSelection(preparedAttack?.id, directAttack?.id);
-    const attackControlMarkup = attackSelection.mode === "prepared"
-        ? preparedAttackMenu(preparedAttack)
-        : attackSelection.mode === "default"
-            ? directAttackControl(directAttack, {
-                menuBody: attackMenuBody,
-                showMenu: attackControl.showMenu,
-                isDefault: directAttack.id === attackControl.defaultAttackId,
-                readiness: attackStates.get(directAttack.id),
-                speed: attackSpeeds.get(directAttack.id),
-            })
-            : actionMenu("fa-solid fa-hand-fist", t("SMOOTHER_FIGHT.HUD.Attacks"), attackMenuBody, "", "attacks");
+    const attackControlMarkup = await buildAttackControlMarkup(actor);
     return `<nav class="sf-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
         ${skillControlMarkup}
         ${attackControlMarkup}
@@ -537,6 +505,51 @@ async function buildActionBar(context) {
         </div>
         ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
     </nav>`;
+}
+
+async function buildAttackControlMarkup(actor, { meleeOnly = false } = {}) {
+    const preparedAttackId = actor.getFlag?.("splittermond", "preparedAttack");
+    const storedDefaultAttackId = actor.getFlag?.(MODULE_ID, "defaultAttackId");
+    const availableAttacks = [...(actor.attacks ?? [])]
+        .filter((attack) => !meleeOnly || !services.isRangedAttack(attack));
+    const equipment = meleeOnly
+        ? []
+        : Array.from(actor.items ?? []).filter((item) => ["weapon", "shield"].includes(item.type)).sort(sortByName);
+    const attackControl = attackControlState(availableAttacks.map((attack) => attack.id), storedDefaultAttackId, equipment.length);
+    const attackStates = new Map(availableAttacks.map((attack) => [
+        attack.id,
+        attackReadiness(services.isRangedAttack(attack), attack.id, preparedAttackId),
+    ]));
+    const attacks = availableAttacks.sort((a, b) =>
+        Number(attackStates.get(b.id)?.prepared) - Number(attackStates.get(a.id)?.prepared) || sortByName(a, b)
+    );
+    const preparedAttack = attacks.find((attack) => attackStates.get(attack.id)?.prepared) ?? null;
+    const directAttack = attacks.find((attack) => attack.id === attackControl.directAttackId) ?? null;
+    const attackSpeeds = new Map(await Promise.all(attacks.map(async (attack) => [attack.id, await services.getAttackSpeed(attack)])));
+    const attackMenuBody = buildAttackMenuBody(
+        attacks,
+        equipment,
+        attackStates,
+        attackSpeeds,
+        attackControl.defaultAttackId,
+        attackControl.automaticDefaultAttackId
+    );
+    const attackSelection = attackControlSelection(preparedAttack?.id, directAttack?.id);
+    const label = meleeOnly
+        ? t("SMOOTHER_FIGHT.HUD.TickActions.meleeAttack.Name")
+        : t("SMOOTHER_FIGHT.HUD.Attacks");
+    return attackSelection.mode === "prepared"
+        ? preparedAttackMenu(preparedAttack)
+        : attackSelection.mode === "default"
+            ? directAttackControl(directAttack, {
+                menuBody: attackMenuBody,
+                showMenu: attackControl.showMenu,
+                isDefault: directAttack.id === attackControl.defaultAttackId,
+                readiness: attackStates.get(directAttack.id),
+                speed: attackSpeeds.get(directAttack.id),
+                label: meleeOnly ? label : null,
+            })
+            : actionMenu("fa-solid fa-hand-fist", label, attackMenuBody, "", "attacks");
 }
 
 function buildSkillMenuBody(skills, favoriteSkillIds) {
@@ -601,8 +614,8 @@ function buildAttackMenuBody(attacks, equipment, attackStates, attackSpeeds, def
     return attackOptions + equipmentOptions;
 }
 
-function directAttackControl(attack, { menuBody, showMenu, isDefault, readiness, speed }) {
-    const label = t(isDefault ? "SMOOTHER_FIGHT.HUD.DefaultAttack" : "SMOOTHER_FIGHT.HUD.Attacks");
+function directAttackControl(attack, { menuBody, showMenu, isDefault, readiness, speed, label: explicitLabel = null }) {
+    const label = explicitLabel ?? t(isDefault ? "SMOOTHER_FIGHT.HUD.DefaultAttack" : "SMOOTHER_FIGHT.HUD.Attacks");
     const status = readiness?.ready ? displayValue(attack.damage, "–") : `${speed ?? "–"} T`;
     const menuLabel = t("SMOOTHER_FIGHT.HUD.OpenAttackMenu");
     return `<div class="sf-action-menu sf-direct-attack-control ${showMenu ? "has-menu" : ""}">

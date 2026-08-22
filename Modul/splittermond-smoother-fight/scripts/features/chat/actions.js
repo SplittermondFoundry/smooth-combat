@@ -4,6 +4,7 @@ import {
     combatActionHighlightState,
     isDamageSelectionAction,
     isOffensiveCombatMessage,
+    mayRollCombatFumble,
     mayUseRemoteChatActions,
     mayViewActorResources,
     mayViewTargetDifficulty,
@@ -252,7 +253,11 @@ function isCombatFumbleRollControl(control) {
 
 async function rollCombatFumble(message) {
     const actor = services.resolveSpeakerActor(message);
-    if (!actor || !(game.user.isGM || actor.testUserPermission?.(game.user, "OWNER") || actor.isOwner)) {
+    const allowed = mayRollCombatFumble(
+        game.user?.isGM,
+        isMessageSpeakerAssignedToCurrentUser(message)
+    );
+    if (!actor || !allowed) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.FumbleNotAllowed"));
         return;
     }
@@ -433,6 +438,11 @@ export function enforceChatPermissions(root, hudContext) {
         synchronizeLegacyTickActionState(element, message);
         const mayManageRoll = mayManageMessageRoll(message);
         if (!mayManageRoll) removeRollManagementControls(element);
+        const mayRollFumble = mayRollCombatFumble(
+            game.user?.isGM,
+            isMessageSpeakerAssignedToCurrentUser(message)
+        );
+        if (!mayRollFumble) removeCombatFumbleRollControls(element);
         if (!mayControlSpeakerActor(message)) removeOutgoingDamageControls(element);
         const renderedActions = getRenderedChatActionKeys(message.id);
         if (renderedActions) {
@@ -619,8 +629,9 @@ function hasDamageApplicationStarted(message) {
     );
 }
 
-function isMessageSpeakerAssignedToCurrentUser(message) {
+export function isMessageSpeakerAssignedToCurrentUser(message) {
     const context = services.getMessageContext(message);
+    if (context?.assignedUserId) return context.assignedUserId === game.user?.id;
     const token = services.resolveToken(
         (services.isDefenseMessage(message) ? context?.defenderTokenUuid : context?.attackerTokenUuid)
         ?? services.speakerTokenUuid(message)
@@ -628,11 +639,13 @@ function isMessageSpeakerAssignedToCurrentUser(message) {
     if (token && services.isCurrentUserTarget(token)) return true;
     const actor = services.resolveSpeakerActor(message);
     const combatant = Array.from(game.combat?.combatants ?? []).find((candidate) => candidate.actorId === actor?.id);
+    const assignedUser = services.getAssignedUser?.(combatant ?? actor);
+    if (assignedUser) return assignedUser.id === game.user?.id;
     if (combatant && actor) {
         const runtimeController = services.getRuntimeController(combatant);
         if (runtimeController) return runtimeController.id === game.user?.id;
     }
-    return Boolean(!game.user?.isGM && actor?.testUserPermission?.(game.user, "OWNER"));
+    return false;
 }
 
 function getRenderedChatActionElements(messageId) {
@@ -689,6 +702,12 @@ function removeRollManagementControls(element) {
         '.splittermond-chat-action[data-action="useSplinterpoint" i]',
         ".add-tick[data-ticks]",
     ].join(", ")).forEach((control) => control.remove());
+}
+
+function removeCombatFumbleRollControls(element) {
+    for (const control of element.querySelectorAll(".splittermond-chat-action, .rollable[data-roll-type], .rollable[data-rolltype]")) {
+        if (isCombatFumbleRollControl(control)) control.remove();
+    }
 }
 
 function enforceSystemVisibility(element, message, context = services.getMessageContext(message)) {

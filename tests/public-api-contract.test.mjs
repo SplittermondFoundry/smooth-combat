@@ -33,6 +33,7 @@ test("the public combat-rules facade retains its named export contract", () => {
         "isRedundantDeletedTokenLink",
         "isTargetDependentDifficulty",
         "linkMatchesCombatant",
+        "mayRollCombatFumble",
         "mayUseRemoteChatActions",
         "mayViewActorResources",
         "mayViewTargetDefenses",

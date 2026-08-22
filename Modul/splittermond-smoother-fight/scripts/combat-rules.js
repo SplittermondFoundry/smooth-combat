@@ -75,6 +75,7 @@ export {
     isCombatantVisibleToUser,
     isDamageSelectionAction,
     isPlayersTurn,
+    mayRollCombatFumble,
     mayUseRemoteChatActions,
     mayViewActorResources,
     mayViewTargetDefenses,

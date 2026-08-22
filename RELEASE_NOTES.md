@@ -1,13 +1,13 @@
-# Splittermond Smoother Fight 0.3.58
+# Splittermond Smoother Fight 0.3.59
 
-Dieses Update korrigiert die Porträtdarstellung im Kampf-HUD.
+Dieses Update schärft die Charakterberechtigungen im Kampf-HUD und ergänzt Angriffe außerhalb des eigenen Zuges.
 
 ## Änderungen
 
-- **Gerade aktiv** und **Primärziel** zeigen nun bevorzugt das im Charakter- oder NSC-Bogen hinterlegte Bild.
-- Die Porträts werden als echte Bildelemente dargestellt und zuverlässig auf die Kartenfläche zugeschnitten.
-- Das Tokenbild und anschließend das Standardbild bleiben als Rückfall erhalten.
-- Die neue Stylesheet-Version verhindert, dass Foundry veraltete Porträtregeln aus dem Browser-Cache verwendet.
+- Spieler sehen und verwenden die **Patzertabelle** nur noch für den ihnen zugeordneten Charakter; Spielleiter bleiben berechtigt.
+- Die Berechtigungsprüfung schützt zusätzlich den eigentlichen Patzerwurf, auch wenn eine veraltete Karte noch sichtbar sein sollte.
+- Außerhalb des eigenen Zuges bietet das persönliche HUD nun die verfügbaren **Nahkampfangriffe** an, etwa für Gelegenheitsangriffe.
+- Fernkampfangriffe bleiben in diesem persönlichen Reaktionsbereich ausgeblendet.
 
 ## Installation
 

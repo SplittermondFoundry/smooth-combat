@@ -9,6 +9,7 @@ import {
     resetPersonalCombatantSelection,
     selectPersonalCombatantFromMenu,
 } from "../Modul/splittermond-smoother-fight/scripts/features/hud/context.js";
+import { buildHud } from "../Modul/splittermond-smoother-fight/scripts/features/hud/view.js";
 
 const harness = {
     controlledToken: null,
@@ -17,6 +18,9 @@ const harness = {
 };
 
 configureServices({
+    canChooseTarget: () => false,
+    feedbackMarkup: () => "",
+    getAttackSpeed: async (attack) => attack.weaponSpeed ?? 0,
     getAssignedUser: (combatant) => combatant.assignedUser ?? null,
     getControlledTokenDocument: () => harness.controlledToken,
     getRuntimeController: (combatant) => combatant.runtimeController ?? null,
@@ -26,13 +30,22 @@ configureServices({
         primaryTargetTokenUuid: null,
         primaryTargetActorUuid: null,
     }),
+    isRangedAttack: (attack) => Boolean(attack.isRanged),
     resolveCombatantToken: (combatant) => combatant.token ?? null,
     scheduleRender: () => harness.renderCalls += 1,
     tokenUuid: (token) => token?.uuid ?? null,
 });
 
 function combatant(id, controller, { owner = false } = {}) {
-    const actor = { id: `actor-${id}`, isOwner: owner, name: `Actor ${id}` };
+    const actor = {
+        id: `actor-${id}`,
+        isOwner: owner,
+        name: `Actor ${id}`,
+        attacks: [],
+        items: [],
+        skills: {},
+        getFlag: () => null,
+    };
     const token = {
         id: `token-${id}`,
         uuid: `Scene.scene.Token.token-${id}`,
@@ -68,7 +81,23 @@ function installFixture() {
         turns: [active, first, second],
     };
     harness.player = player;
-    globalThis.game = { combat, user: player };
+    globalThis.game = {
+        combat,
+        user: player,
+        i18n: {
+            lang: "de",
+            localize: (key) => key,
+            format: (key, data) => `${key}:${JSON.stringify(data)}`,
+        },
+        settings: {
+            get: (_moduleId, key) => ({
+                minimized: false,
+                revealTargetDefenses: false,
+                showCards: false,
+                theme: "dark",
+            })[key],
+        },
+    };
     globalThis.canvas = { tokens: { get: () => null } };
     return { active, combat, first, second };
 }
@@ -100,4 +129,20 @@ test("the personal combatant menu selects HUD controls outside the player's turn
     assert.equal(personalContext?.combatant, first);
     assert.equal(personalContext?.personal, true);
     assert.equal(harness.renderCalls, 1);
+});
+
+test("personal HUD controls expose melee attacks but not ranged attacks outside the player's turn", async () => {
+    const { first } = installFixture();
+    harness.controlledToken = first.token;
+    first.actor.attacks = [
+        { id: "sword", name: "Sword", img: "sword.webp", isRanged: false, weaponSpeed: 6 },
+        { id: "bow", name: "Bow", img: "bow.webp", isRanged: true, weaponSpeed: 8 },
+    ];
+
+    const html = await buildHud(getHudContext());
+
+    assert.match(html, /data-sf-context-actor-id="actor-first"/u);
+    assert.match(html, /data-attack-id="sword"/u);
+    assert.doesNotMatch(html, /data-attack-id="bow"/u);
+    assert.match(html, /SMOOTHER_FIGHT\.HUD\.TickActions\.meleeAttack\.Name/u);
 });
