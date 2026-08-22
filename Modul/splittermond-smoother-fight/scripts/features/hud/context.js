@@ -29,9 +29,8 @@ export function getHudContext() {
     }
     if (!actor) return null;
     const linkedUser = services.getLinkedUser(combatant, actor);
-    const targets = services.getTargetsForUser(linkedUser);
-    const target = targets.at(-1) ?? null;
-    return { combat, combatant, actor, token, linkedUser, target, targets };
+    const targetSelection = services.getTargetSelectionForUser(linkedUser);
+    return { combat, combatant, actor, token, linkedUser, ...targetSelection };
 }
 
 export function getPersonalHudCandidates(activeContext = getHudContext()) {
@@ -64,15 +63,14 @@ export function getPersonalHudContext(activeContext = getHudContext()) {
         preferredCombatantId
     );
     if (!selected?.actor || !selected.combatant) return null;
-    const targets = services.getTargetsForUser(game.user);
+    const targetSelection = services.getTargetSelectionForUser(game.user);
     return {
         combat,
         combatant: selected.combatant,
         actor: selected.actor,
         token: selected.token,
         linkedUser: game.user,
-        target: targets.at(-1) ?? null,
-        targets,
+        ...targetSelection,
         personal: true,
     };
 }

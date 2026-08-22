@@ -23,6 +23,14 @@ import {
     t,
 } from "../../shared/values.js";
 
+function primaryTargetTokenUuid(context) {
+    return context?.primaryTargetTokenUuid ?? context?.targetTokenUuid ?? null;
+}
+
+function primaryTargetActorUuid(context) {
+    return context?.primaryTargetActorUuid ?? context?.targetActorUuid ?? null;
+}
+
 export async function handleChatCardAction(event, button) {
     const messageElement = button.closest(".sf-chat-message");
     const message = game.messages.get(messageElement?.dataset.messageId);
@@ -300,7 +308,7 @@ async function applyDamageToLinkedTarget(message, actionData) {
 }
 
 function resolveDamageApplicationTarget(message) {
-    const directTargetUuid = services.getMessageContext(message)?.targetTokenUuid;
+    const directTargetUuid = primaryTargetTokenUuid(services.getMessageContext(message));
     if (directTargetUuid) {
         const directTarget = services.resolveToken(directTargetUuid);
         return directTarget && (game.user.isGM || !directTarget.hidden) ? directTarget : null;
@@ -311,7 +319,7 @@ function resolveDamageApplicationTarget(message) {
     const group = services.collectCombatEventGroups(hudContext).find((candidate) =>
         candidate.damages.some((damage) => damage.id === message.id)
     );
-    const attackTargetUuid = services.getMessageContext(group?.primary)?.targetTokenUuid;
+    const attackTargetUuid = primaryTargetTokenUuid(services.getMessageContext(group?.primary));
     if (attackTargetUuid) {
         const attackTarget = services.resolveToken(attackTargetUuid);
         return attackTarget && (game.user.isGM || !attackTarget.hidden) ? attackTarget : null;
@@ -326,7 +334,7 @@ function addEventDefenseActions(element, message) {
     if (!isOffensiveCombatMessage(message) || !message.system?.checkReport?.succeeded) return;
     const context = services.getMessageContext(message);
     if (context?.supersededBy) return;
-    const target = services.resolveToken(context?.targetTokenUuid);
+    const target = services.resolveToken(primaryTargetTokenUuid(context));
     if (!target?.actor) return;
     const attempted = new Set(context?.attemptedDefenseActorUuids ?? []);
     const mayDefendTarget = Boolean(
@@ -399,7 +407,7 @@ export function enforceChatPermissions(root, hudContext) {
 
         const context = services.getMessageContext(message);
         enforceSystemVisibility(element, message, context);
-        const defenseTarget = services.resolveToken(context?.targetTokenUuid) ?? services.getControlledTokenDocument() ?? hudContext.target;
+        const defenseTarget = services.resolveToken(primaryTargetTokenUuid(context)) ?? services.getControlledTokenDocument() ?? hudContext.target;
         const mayDefend = game.user.isGM || defenseTarget?.actor?.isOwner;
         const targetAlreadyDefended = Boolean(
             defenseTarget?.actor?.uuid
@@ -648,14 +656,15 @@ function enforceSystemVisibility(element, message, context = services.getMessage
 
 export function resolveMessageTarget(context) {
     if (!context) return { token: null, actor: null };
-    const token = services.resolveToken(context.targetTokenUuid);
+    const token = services.resolveToken(primaryTargetTokenUuid(context));
     if (token?.actor) return { token, actor: token.actor };
     let actor = null;
-    if (context.targetActorUuid) {
+    const actorUuid = primaryTargetActorUuid(context);
+    if (actorUuid) {
         try {
-            actor = globalThis.fromUuidSync?.(context.targetActorUuid) ?? null;
+            actor = globalThis.fromUuidSync?.(actorUuid) ?? null;
         } catch (error) {
-            console.debug(`${MODULE_ID} | Could not resolve target actor ${context.targetActorUuid}`, error);
+            console.debug(`${MODULE_ID} | Could not resolve target actor ${actorUuid}`, error);
         }
     }
     return { token, actor };

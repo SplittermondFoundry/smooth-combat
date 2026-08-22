@@ -427,12 +427,119 @@
     display: grid;
     gap: 5px;
     max-height: min(620px, 66vh);
-    overflow-y: auto;
-    scrollbar-width: thin;
+    min-height: 0;
 }
 
-#splittermond-smoother-fight-hud .sf-target-list > .sf-portrait {
+#splittermond-smoother-fight-hud .sf-primary-target-panel {
+    position: relative;
+    min-width: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-primary-target-panel > .sf-portrait {
     width: 100%;
+}
+
+#splittermond-smoother-fight-hud .sf-portrait.sf-is-primary-target {
+    border-color: rgba(230, 190, 92, 0.72);
+    box-shadow: inset 0 0 0 1px rgba(230, 190, 92, 0.16), 0 0 16px rgba(230, 190, 92, 0.1);
+}
+
+#splittermond-smoother-fight-hud .sf-primary-target-remove {
+    position: absolute;
+    z-index: 3;
+    top: 5px;
+    right: 5px;
+    width: 24px;
+    height: 24px;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.76);
+    background: rgba(5, 15, 18, 0.72);
+}
+
+#splittermond-smoother-fight-hud .sf-primary-target-remove:hover {
+    border-color: var(--sf-danger);
+    color: #ffaaa3;
+    background: rgba(95, 28, 28, 0.86);
+}
+
+#splittermond-smoother-fight-hud .sf-secondary-targets {
+    display: grid;
+    gap: 3px;
+    max-height: min(360px, 38vh);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    padding: 4px;
+    border: 1px solid var(--sf-line);
+    border-radius: 4px;
+    background: var(--sf-bg);
+}
+
+#splittermond-smoother-fight-hud .sf-secondary-targets-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1px 3px 3px;
+    color: var(--sf-muted);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+#splittermond-smoother-fight-hud .sf-secondary-target {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px;
+}
+
+#splittermond-smoother-fight-hud .sf-secondary-target button {
+    min-width: 0;
+    min-height: 32px;
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 5px;
+    margin: 0;
+    padding: 2px 5px;
+    border: 0;
+    border-radius: 3px;
+    color: var(--sf-text);
+    background: rgba(108, 201, 193, 0.08);
+    text-align: left;
+}
+
+#splittermond-smoother-fight-hud .sf-secondary-target button:hover {
+    color: var(--sf-gold-bright);
+    background: rgba(108, 201, 193, 0.17);
+}
+
+#splittermond-smoother-fight-hud .sf-secondary-target img {
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+#splittermond-smoother-fight-hud .sf-secondary-target span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-secondary-target .sf-secondary-target-remove {
+    width: 26px;
+    display: grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+    padding: 0;
+    color: var(--sf-muted);
+    background: transparent;
 }
 
 #splittermond-smoother-fight-hud .sf-target-list.is-multi > .sf-portrait {
@@ -1040,6 +1147,56 @@
 
 #splittermond-smoother-fight-hud .sf-action-popover button + button {
     border-top: 1px solid rgba(117, 191, 186, 0.1);
+}
+
+#splittermond-smoother-fight-hud .sf-quick-target-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 2px;
+}
+
+#splittermond-smoother-fight-hud .sf-quick-target-row + .sf-quick-target-row {
+    border-top: 1px solid rgba(117, 191, 186, 0.1);
+}
+
+#splittermond-smoother-fight-hud .sf-quick-target-row.is-primary {
+    box-shadow: inset 2px 0 0 var(--sf-gold);
+}
+
+#splittermond-smoother-fight-hud .sf-quick-targets > div .sf-quick-target-remove {
+    width: 30px;
+    min-height: 35px;
+    display: grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+    padding: 0;
+    color: var(--sf-muted);
+    background: transparent;
+}
+
+#splittermond-smoother-fight-hud .sf-quick-targets > div .sf-quick-target-remove:hover {
+    color: #ffaaa3;
+    background: rgba(198, 93, 85, 0.16);
+}
+
+#splittermond-smoother-fight-hud .sf-quick-targets > div button > span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-quick-targets > div button > span b,
+#splittermond-smoother-fight-hud .sf-quick-targets > div button > span small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-quick-targets > div button > span small {
+    margin-top: 2px;
+    color: var(--sf-muted);
+    font-size: 9px;
 }
 
 #splittermond-smoother-fight-hud .sf-action-popover button img,

@@ -4,7 +4,11 @@ import fs from "node:fs";
 
 import { createTickActionChatCard } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 import { COMBAT_TICK_ACTIONS } from "../Modul/splittermond-smoother-fight/scripts/domain/combat/ticks.js";
-import { addCombatTicks } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
+import {
+    addCombatTicks,
+    getPendingOffenseKind,
+    performAttack,
+} from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
 import { services } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
 
 const german = JSON.parse(fs.readFileSync(
@@ -60,6 +64,55 @@ test("choosing a tick action advances its combatant by the selected duration", a
     assert.equal(await addCombatTicks(context, "custom"), 6);
     assert.equal(combatant.initiative, 22);
     assert.equal(renders, 2);
+});
+
+test("single-target attack mechanics use the primary target without losing secondary targets", async () => {
+    const targetA = {
+        id: "target-a",
+        uuid: "Scene.scene.Token.target-a",
+        name: "Ziel A",
+        actor: { uuid: "Actor.target-a" },
+    };
+    const targetB = {
+        id: "target-b",
+        uuid: "Scene.scene.Token.target-b",
+        name: "Ziel B",
+        actor: { uuid: "Actor.target-b" },
+    };
+    const tokenObjectA = { document: targetA };
+    const tokenObjectB = { document: targetB };
+    targetA.object = tokenObjectA;
+    targetB.object = tokenObjectB;
+    const systemTargets = new Set([tokenObjectA, tokenObjectB]);
+    const attack = { id: "attack-1", name: "Klinge", isRanged: false };
+    let rolled = false;
+    const actor = {
+        id: "attacker",
+        attacks: [attack],
+        getFlag: () => attack.id,
+        rollAttack: async (attackId) => {
+            rolled = true;
+            assert.equal(attackId, attack.id);
+            assert.deepEqual([...systemTargets], [tokenObjectB]);
+            return true;
+        },
+        setFlag: async () => {},
+    };
+    globalThis.game = { user: { targets: systemTargets } };
+    globalThis.canvas = { tokens: { get: () => null } };
+    services.scheduleRender = () => {};
+
+    await performAttack({
+        actor,
+        target: targetB,
+        targets: [targetA, targetB],
+        primaryTargetTokenUuid: targetB.uuid,
+    }, attack.id);
+
+    assert.equal(rolled, true);
+    assert.deepEqual([...systemTargets], [tokenObjectA, tokenObjectB]);
+    assert.deepEqual(getPendingOffenseKind(actor.id).targetTokenUuids, [targetA.uuid, targetB.uuid]);
+    assert.equal(getPendingOffenseKind(actor.id).primaryTargetTokenUuid, targetB.uuid);
 });
 
 test("clickable tick actions create a public chat card for the acting token", async () => {

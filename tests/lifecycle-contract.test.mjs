@@ -273,10 +273,12 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             senderId: player.id,
             userId: player.id,
             targetUuids: ["Scene.s.Token.a", "Scene.s.Token.a", "Scene.s.Token.b"],
+            primaryTargetTokenUuid: "Scene.s.Token.b",
         });
         assert.deepEqual(callsOf("rememberTargetReferences"), [[
             player.id,
             ["Scene.s.Token.a", "Scene.s.Token.b"],
+            "Scene.s.Token.b",
         ]]);
 
         await socketHandler({
@@ -286,8 +288,8 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             tokenUuid: "Scene.s.Token.gm-selected",
         });
         assert.deepEqual(callsOf("rememberTargetReferences"), [
-            [player.id, ["Scene.s.Token.a", "Scene.s.Token.b"]],
-            ["victim", ["Scene.s.Token.gm-selected"]],
+            [player.id, ["Scene.s.Token.a", "Scene.s.Token.b"], "Scene.s.Token.b"],
+            ["victim", ["Scene.s.Token.gm-selected"], "Scene.s.Token.gm-selected"],
         ]);
         assert.deepEqual(callsOf("scheduleRender"), [[], []]);
     });
@@ -325,6 +327,22 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         });
         assert.deepEqual(callsOf("setLocalTarget"), [[token, false, true]]);
         assert.deepEqual(callsOf("publishOwnTarget"), [[]]);
+
+        callLog.length = 0;
+        await socketHandler({
+            type: "set-target",
+            senderId: gm.id,
+            recipientId: gameStub.user.id,
+            tokenUuid: token.uuid,
+            targeted: true,
+            targetTokenUuids: ["Scene.s.Token.a", token.uuid],
+            primaryTargetTokenUuid: token.uuid,
+        });
+        assert.deepEqual(callsOf("setLocalTarget"), [[token, true, false]]);
+        assert.deepEqual(callsOf("publishOwnTarget"), [[
+            ["Scene.s.Token.a", token.uuid],
+            token.uuid,
+        ]]);
 
         callLog.length = 0;
         await socketHandler({ type: "combat-feedback", senderId: gameStub.user.id, kind: "damageBlocked" });

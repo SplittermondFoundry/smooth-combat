@@ -43,6 +43,7 @@ test("the public combat-rules facade retains its named export contract", () => {
         "normalizeFavoriteSkillIds",
         "normalizeSearchText",
         "normalizeTargetReferences",
+        "normalizeTargetSelection",
         "normalizeUserTokenLinks",
         "numberOr",
         "parseActiveDefenseDescription",

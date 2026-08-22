@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "aabf36740abebca0d6cff1600f764fbfb9255d8ca4c49bab16c5a6b5fb631d27",
+        "8d880e7ed232ece3f4dde3fe0f473c9895ab20fce82d03a41bebd2cd369f22f3",
     );
 });
 
@@ -45,6 +45,10 @@ test("published DOM integration attributes remain available", () => {
     const hudView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "view.js"), "utf8");
     const combatEventView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "combat-events", "view.js"), "utf8");
     assert.match(hudView, /data-sf-context-actor-id/u);
+    assert.match(hudView, /sf-is-primary-target/u);
+    assert.match(hudView, /data-sf-action="remove-target"/u);
+    assert.match(hudView, /SMOOTHER_FIGHT\.HUD\.PrimaryTarget/u);
+    assert.match(hudView, /\$\{buildSecondaryTargets\(context\)\}<div class="sf-primary-target-panel">/u);
     assert.match(combatEventView, /data-subevent-actor-id/u);
 });
 
@@ -67,7 +71,7 @@ test("split styles flatten in the verified cascade order", () => {
     const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "51ce7f430a8ff7bd3180c7081193e91c9b08c3ad991c6df8a0d5ecfbfa72192d",
+        "7c7c11c349da80fe592b7101d61e361ff0338a25397594cd79a16a9358c89d6b",
     );
 });
 

@@ -9,6 +9,7 @@ const harness = {
     contexts: new WeakMap(),
     fumble: false,
     linkedUser: null,
+    primaryTargetUuid: null,
     pendingKinds: new Map(),
 };
 
@@ -36,9 +37,18 @@ configureServices({
         record("getPendingOffenseKind", actorId);
         return harness.pendingKinds.get(actorId);
     },
-    getTargetsForUser: (user) => {
-        record("getTargetsForUser", user);
-        return Array.from(user?.targets ?? []);
+    getTargetSelectionForUser: (user) => {
+        record("getTargetSelectionForUser", user);
+        const targets = Array.from(user?.targets ?? []);
+        const target = targets.find((candidate) => candidate.uuid === harness.primaryTargetUuid) ?? targets.at(-1) ?? null;
+        return {
+            targets,
+            target,
+            targetTokenUuids: targets.map((candidate) => candidate.uuid),
+            targetActorUuids: targets.map((candidate) => candidate.actor?.uuid).filter(Boolean),
+            primaryTargetTokenUuid: target?.uuid ?? null,
+            primaryTargetActorUuid: target?.actor?.uuid ?? null,
+        };
     },
     isDefenseMessage: (message) => {
         record("isDefenseMessage", message);
@@ -83,6 +93,7 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
     harness.calls.length = 0;
     harness.contexts = new WeakMap();
     harness.fumble = fumble;
+    harness.primaryTargetUuid = null;
     harness.pendingKinds = new Map();
 
     const actor = { id: "actor-attacker", uuid: "Actor.attacker" };
@@ -126,6 +137,7 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
     const hooks = createHooksHarness();
 
     harness.linkedUser = linkedUser;
+    harness.primaryTargetUuid = targetA.uuid;
     if (pendingKind) harness.pendingKinds.set(actor.id, pendingKind);
     globalThis.game = {
         actors: new Map([[actor.id, actor]]),
@@ -166,11 +178,13 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
         else delete globalThis.Hooks;
     });
 
-    await t.test("a target switch during the animation does not retarget the attack", async () => {
+    await t.test("A and B remain selected while B is frozen as the primary target", async () => {
         const fixture = createFixture();
+        fixture.linkedUser.targets = new Set([fixture.targetA, fixture.targetB]);
+        harness.primaryTargetUuid = fixture.targetB.uuid;
         const processing = onCreateChatMessage(fixture.message);
 
-        fixture.linkedUser.targets = new Set([fixture.targetB]);
+        harness.primaryTargetUuid = fixture.targetA.uuid;
         await completeDiceAnimation(fixture);
         await processing;
 
@@ -180,17 +194,20 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
             combatantId: fixture.combatant.id,
             attackerTokenUuid: fixture.attackerToken.uuid,
             attackerActorUuid: fixture.actor.uuid,
-            targetTokenUuid: fixture.targetA.uuid,
-            targetActorUuid: fixture.targetA.actor.uuid,
-            targetName: fixture.targetA.name,
-            targetTokenUuids: [fixture.targetA.uuid],
-            targetActorUuids: [fixture.targetA.actor.uuid],
-            targetNames: [fixture.targetA.name],
+            primaryTargetTokenUuid: fixture.targetB.uuid,
+            primaryTargetActorUuid: fixture.targetB.actor.uuid,
+            primaryTargetName: fixture.targetB.name,
+            targetTokenUuid: fixture.targetB.uuid,
+            targetActorUuid: fixture.targetB.actor.uuid,
+            targetName: fixture.targetB.name,
+            targetTokenUuids: [fixture.targetA.uuid, fixture.targetB.uuid],
+            targetActorUuids: [fixture.targetA.actor.uuid, fixture.targetB.actor.uuid],
+            targetNames: [fixture.targetA.name, fixture.targetB.name],
             actionKind: null,
             linkedUserId: fixture.linkedUser.id,
             createdAt: context.createdAt,
         });
-        assert.equal(callsOf("getTargetsForUser").length, 1);
+        assert.equal(callsOf("getTargetSelectionForUser").length, 1);
     });
 
     await t.test("with Dice So Nice disabled the existing processing remains immediate", async () => {
@@ -216,18 +233,29 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
         await processing;
 
         assert.equal(callsOf("safeSetFlag").length, 1);
-        assert.equal(callsOf("getTargetsForUser").length, 1);
+        assert.equal(callsOf("getTargetSelectionForUser").length, 1);
         assert.equal(callsOf("attachFumbleActions").length, 1);
         assert.equal(callsOf("announceMessageFeedback").length, 1);
     });
 
     await t.test("PendingOffenseKind is consumed once before delayed presentation", async () => {
-        const pendingKind = { kind: "ranged", expiresAt: Date.now() + 60_000 };
+        const pendingKind = {
+            kind: "ranged",
+            expiresAt: Date.now() + 60_000,
+            primaryTargetTokenUuid: "Scene.scene.Token.frozen",
+            primaryTargetActorUuid: "Actor.frozen",
+            primaryTargetName: "Eingefrorenes Ziel",
+            targetTokenUuids: ["Scene.scene.Token.other", "Scene.scene.Token.frozen"],
+            targetActorUuids: ["Actor.other", "Actor.frozen"],
+            targetNames: ["Weiteres Ziel", "Eingefrorenes Ziel"],
+        };
         const fixture = createFixture({ pendingKind });
         const processing = onCreateChatMessage(fixture.message);
 
         assert.equal(harness.pendingKinds.has(fixture.actor.id), false);
         assert.equal(harness.contexts.get(fixture.message)?.actionKind, pendingKind.kind);
+        assert.equal(harness.contexts.get(fixture.message)?.primaryTargetTokenUuid, pendingKind.primaryTargetTokenUuid);
+        assert.deepEqual(harness.contexts.get(fixture.message)?.targetTokenUuids, pendingKind.targetTokenUuids);
         assert.deepEqual(callsOf("clearPendingOffenseKind").map((entry) => entry.args), [[fixture.actor.id]]);
 
         await completeDiceAnimation(fixture);

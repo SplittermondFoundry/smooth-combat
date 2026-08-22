@@ -39,13 +39,14 @@ import {
 
 export async function buildHud(context) {
     if (context.concealed) return buildConcealedHud(context);
-    const { combat, combatant, actor, token, linkedUser, targets } = context;
+    const { combat, combatant, actor, token, linkedUser, target, targets } = context;
     const canAct = Boolean(game.user.isGM || actor.isOwner);
     const tick = combat.currentTick ?? Math.round(Number(combatant.initiative) || 0);
     const userName = linkedUser?.name ?? t("SMOOTHER_FIGHT.HUD.AutomaticOwner");
-    const targetNames = targets.map((candidate) => candidate.name ?? candidate.actor?.name).filter(Boolean).join(", ");
-    const targetLine = targets.length
-        ? t("SMOOTHER_FIGHT.HUD.PlayerTargetName", { user: userName, target: targetNames })
+    const targetName = target?.name ?? target?.actor?.name ?? "–";
+    const additionalTargetCount = Math.max(0, targets.length - 1);
+    const targetLine = target
+        ? `${t("SMOOTHER_FIGHT.HUD.PlayerPrimaryTargetName", { user: userName, target: targetName })}${additionalTargetCount ? ` (+${additionalTargetCount})` : ""}`
         : t("SMOOTHER_FIGHT.HUD.NoTargetDetail");
     const minimized = getSetting("minimized", false);
     const hudToggle = buildHudToggle(minimized);
@@ -98,15 +99,16 @@ export async function buildHud(context) {
             </main>
             <div class="sf-target-column">
                 ${services.canChooseTarget(context) ? buildQuickTargets(context) : ""}
-                ${targets.length ? `<div class="sf-target-list ${targets.length > 1 ? "is-multi" : ""}">${targets.map((candidate) => portraitPanel({
+                ${target ? `<div class="sf-target-list">${buildSecondaryTargets(context)}<div class="sf-primary-target-panel">${portraitPanel({
                     side: "target",
-                    token: candidate,
-                    actor: candidate.actor,
-                    eyebrow: t("SMOOTHER_FIGHT.HUD.Target"),
+                    token: target,
+                    actor: target.actor,
+                    eyebrow: t("SMOOTHER_FIGHT.HUD.PrimaryTarget"),
                     action: "open-token-sheet",
-                    highlighted: services.isCurrentUserTarget(candidate),
-                    showDefenses: canViewTargetDefenseValues(candidate.actor),
-                })).join("")}</div>` : noTargetPanel()}
+                    highlighted: services.isCurrentUserTarget(target),
+                    primary: true,
+                    showDefenses: canViewTargetDefenseValues(target.actor),
+                })}${services.canChooseTarget(context) ? `<button type="button" class="sf-primary-target-remove" data-sf-action="remove-target" data-token-uuid="${escapeAttr(target.uuid)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName }))}" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName }))}"><i class="fa-solid fa-xmark"></i></button>` : ""}</div></div>` : noTargetPanel()}
             </div>
         </div>
     `;
@@ -161,7 +163,7 @@ function buildThemeToggle() {
     return `<button type="button" class="sf-hud-toggle sf-theme-toggle" data-sf-action="toggle-theme" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid ${light ? "fa-moon" : "fa-sun"}"></i></button>`;
 }
 
-function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false, showDefenses = true }) {
+function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false, primary = false, showDefenses = true }) {
     const image = token?.texture?.src ?? actor?.img ?? "icons/svg/mystery-man.svg";
     const clickable = action ? `data-sf-action="${action}" role="button" tabindex="0"` : "";
     const tokenReference = token?.uuid ? `data-sf-token-uuid="${escapeAttr(token.uuid)}"` : "";
@@ -169,7 +171,7 @@ function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted =
     const body = getDerivedValue(actor, "bodyresist");
     const mind = getDerivedValue(actor, "mindresist");
     return `
-        <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""}" ${clickable} ${tokenReference}>
+        <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""} ${primary ? "sf-is-primary-target" : ""}" ${clickable} ${tokenReference}>
             <div class="sf-portrait-image" style="--sf-token-image:url('${escapeCssUrl(image)}')">
                 <span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>
                 ${highlighted ? `<span class="sf-target-alert"><i class="fa-solid fa-bullseye"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YouAreTarget"))}</span></span>` : ""}
@@ -199,6 +201,27 @@ function noTargetPanel() {
             <small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoTargetDetail"))}</small>
         </aside>
     `;
+}
+
+function buildSecondaryTargets(context) {
+    const secondaryTargets = context.targets.filter((candidate) => candidate.uuid !== context.target?.uuid);
+    if (!secondaryTargets.length) return "";
+    const canChoose = services.canChooseTarget(context);
+    return `<div class="sf-secondary-targets" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.AdditionalTargets"))}">
+        <div class="sf-secondary-targets-heading"><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.AdditionalTargets"))}</span><b>+${secondaryTargets.length}</b></div>
+        ${secondaryTargets.map((candidate) => {
+            const name = candidate.name ?? candidate.actor?.name ?? "–";
+            const image = candidate.texture?.src ?? candidate.actor?.img ?? "icons/svg/mystery-man.svg";
+            const action = canChoose ? "set-target" : "open-token-sheet";
+            const uuidAttribute = canChoose ? `data-token-uuid="${escapeAttr(candidate.uuid)}"` : `data-sf-token-uuid="${escapeAttr(candidate.uuid)}"`;
+            return `<div class="sf-secondary-target">
+                <button type="button" data-sf-action="${action}" ${uuidAttribute} title="${escapeAttr(canChoose ? t("SMOOTHER_FIGHT.HUD.MakePrimaryTarget", { target: name }) : name)}">
+                    <img src="${escapeAttr(image)}" alt=""><span>${escapeHtml(name)}</span><i class="fa-solid fa-crosshairs"></i>
+                </button>
+                ${canChoose ? `<button type="button" class="sf-secondary-target-remove" data-sf-action="remove-target" data-token-uuid="${escapeAttr(candidate.uuid)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: name }))}" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: name }))}"><i class="fa-solid fa-xmark"></i></button>` : ""}
+            </div>`;
+        }).join("")}
+    </div>`;
 }
 
 function resourceBars(actor) {
@@ -728,11 +751,20 @@ function buildQuickTargets(context) {
     const candidates = services.getTargetSceneTokens(context.combat).filter((token) => token.uuid !== context.token?.uuid);
     const labels = quickTargetLabels(candidates);
     const selected = new Set(context.targets.map((token) => token.uuid));
+    const primaryTargetUuid = context.target?.uuid;
     const body = candidates.length
-        ? candidates.map((token) => `<button type="button" data-sf-action="set-target" data-token-uuid="${escapeAttr(token.uuid)}" class="${selected.has(token.uuid) ? "is-current" : ""}" aria-pressed="${selected.has(token.uuid)}">
-            <img src="${escapeAttr(token.texture?.src ?? token.actor?.img ?? "icons/svg/mystery-man.svg")}" alt=""><span>${escapeHtml(labels.get(token.uuid) ?? token.name)}</span>
-            ${selected.has(token.uuid) ? '<i class="fa-solid fa-crosshairs"></i>' : ""}
-        </button>`).join("")
+        ? candidates.map((token) => {
+            const isSelected = selected.has(token.uuid);
+            const isPrimary = token.uuid === primaryTargetUuid;
+            const name = labels.get(token.uuid) ?? token.name;
+            return `<div class="sf-quick-target-row ${isPrimary ? "is-primary" : isSelected ? "is-selected" : ""}">
+                <button type="button" data-sf-action="set-target" data-token-uuid="${escapeAttr(token.uuid)}" class="${isSelected ? "is-current" : ""} ${isPrimary ? "is-primary" : ""}" aria-pressed="${isSelected}" title="${escapeAttr(isPrimary ? t("SMOOTHER_FIGHT.HUD.PrimaryTarget") : t("SMOOTHER_FIGHT.HUD.MakePrimaryTarget", { target: name }))}">
+                    <img src="${escapeAttr(token.texture?.src ?? token.actor?.img ?? "icons/svg/mystery-man.svg")}" alt=""><span><b>${escapeHtml(name)}</b>${isSelected ? `<small>${escapeHtml(t(isPrimary ? "SMOOTHER_FIGHT.HUD.PrimaryTarget" : "SMOOTHER_FIGHT.HUD.AdditionalTarget"))}</small>` : ""}</span>
+                    ${isSelected ? `<i class="fa-solid ${isPrimary ? "fa-bullseye" : "fa-check"}"></i>` : ""}
+                </button>
+                ${isSelected ? `<button type="button" class="sf-quick-target-remove" data-sf-action="remove-target" data-token-uuid="${escapeAttr(token.uuid)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: name }))}" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: name }))}"><i class="fa-solid fa-xmark"></i></button>` : ""}
+            </div>`;
+        }).join("")
         : `<p>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoCombatants"))}</p>`;
     const label = t("SMOOTHER_FIGHT.HUD.QuickTarget");
     return `<details class="sf-quick-targets">

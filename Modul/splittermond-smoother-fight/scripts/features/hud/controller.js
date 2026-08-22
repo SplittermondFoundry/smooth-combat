@@ -290,6 +290,9 @@ class SmootherFightHud {
                 case "set-target":
                     await services.setTargetFromQuickMenu(context, target.dataset.tokenUuid);
                     break;
+                case "remove-target":
+                    await services.removeTargetFromQuickMenu(context, target.dataset.tokenUuid);
+                    break;
                 case "toggle-cards":
                     services.clearCombatEventExpansionRequest();
                     services.toggleCombatEventCardsCollapsed();

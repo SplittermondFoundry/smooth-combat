@@ -7,6 +7,7 @@ export {
     normalizeActorUserLinks,
     normalizeSearchText,
     normalizeTargetReferences,
+    normalizeTargetSelection,
     normalizeUserTokenLinks,
     replaceManagedUserTokenLinks,
     uniqueTokensByReference,

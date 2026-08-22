@@ -90,21 +90,29 @@ function buildAssociatedEvent(message, { kind, icon, label, open = false }) {
 function buildEventTargetBadge(context) {
     const targetName = getMessageTargetName(context);
     if (!targetName) return "";
-    const label = t("SMOOTHER_FIGHT.HUD.EventTarget", { target: targetName });
+    const label = t("SMOOTHER_FIGHT.HUD.EventPrimaryTarget", { target: targetName });
     return `<span class="sf-event-target" title="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs"></i>${escapeHtml(label)}</span>`;
 }
 
 function getMessageTargetName(context) {
-    if (Array.isArray(context?.targetNames) && context.targetNames.length) return context.targetNames.join(", ");
     const target = services.resolveMessageTarget(context);
-    return context?.targetName ?? target?.token?.name ?? target?.actor?.name ?? "";
+    return context?.primaryTargetName
+        ?? context?.targetName
+        ?? target?.token?.name
+        ?? target?.actor?.name
+        ?? context?.targetNames?.at?.(-1)
+        ?? "";
+}
+
+function primaryTargetTokenUuid(context) {
+    return context?.primaryTargetTokenUuid ?? context?.targetTokenUuid ?? null;
 }
 
 function shouldHighlightActiveDefense(group, isLatest, hudContext, messageContext) {
     if (group.damages.length > 0) return false;
     if (!messageOffersActiveDefense(group.primary) && !messageContext?.recalculatedFrom) return false;
     if (messageContext?.supersededBy) return false;
-    const storedTarget = services.resolveToken(messageContext?.targetTokenUuid);
+    const storedTarget = services.resolveToken(primaryTargetTokenUuid(messageContext));
     if (storedTarget) {
         const alreadyDefended = messageContext?.attemptedDefenseActorUuids?.includes?.(storedTarget.actor?.uuid);
         return !alreadyDefended && services.isCurrentUserTarget(storedTarget);
@@ -220,8 +228,8 @@ function addOffenseTarget(card, message) {
     const targetName = getMessageTargetName(messageContext);
     if (!header || !targetName) return;
 
-    const targetToken = services.resolveToken(messageContext?.targetTokenUuid);
-    const label = t(targetToken ? "SMOOTHER_FIGHT.HUD.ShowEventTarget" : "SMOOTHER_FIGHT.HUD.EventTarget", { target: targetName });
+    const targetToken = services.resolveToken(primaryTargetTokenUuid(messageContext));
+    const label = t(targetToken ? "SMOOTHER_FIGHT.HUD.ShowPrimaryEventTarget" : "SMOOTHER_FIGHT.HUD.EventPrimaryTarget", { target: targetName });
     const target = document.createElement(targetToken ? "button" : "div");
     target.className = "sf-offense-target";
     target.title = label;
@@ -231,7 +239,7 @@ function addOffenseTarget(card, message) {
         target.dataset.sfAction = "show-token";
         target.dataset.tokenUuid = targetToken.uuid;
     }
-    target.innerHTML = `<i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Target"))}</span><strong>${escapeHtml(targetName)}</strong>`;
+    target.innerHTML = `<i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.PrimaryTarget"))}</span><strong>${escapeHtml(targetName)}</strong>`;
     header.after(target);
 }
 

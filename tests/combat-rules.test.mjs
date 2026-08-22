@@ -37,6 +37,7 @@ import {
     normalizeFavoriteSkillIds,
     normalizeSearchText,
     normalizeTargetReferences,
+    normalizeTargetSelection,
     normalizeUserTokenLinks,
     parseActiveDefenseDescription,
     parseStatusEffectLabel,
@@ -554,6 +555,30 @@ test("multi-target references are stable and de-duplicated", () => {
         "Scene.s.Token.a",
         null,
     ]), ["Scene.s.Token.a", "Scene.s.Token.b"]);
+});
+
+test("primary targeting retains the full selection and falls back deterministically", () => {
+    const targetA = "Scene.s.Token.a";
+    const targetB = "Scene.s.Token.b";
+
+    const initial = normalizeTargetSelection([targetA, targetB], targetB);
+    assert.deepEqual(initial, {
+        targetTokenUuids: [targetA, targetB],
+        primaryTargetTokenUuid: targetB,
+        targetTokenUuid: targetB,
+    });
+
+    const switched = normalizeTargetSelection(initial.targetTokenUuids, targetA);
+    assert.deepEqual(switched.targetTokenUuids, [targetA, targetB]);
+    assert.equal(switched.primaryTargetTokenUuid, targetA);
+
+    const removedPrimary = normalizeTargetSelection(
+        switched.targetTokenUuids.filter((uuid) => uuid !== switched.primaryTargetTokenUuid),
+        switched.primaryTargetTokenUuid
+    );
+    assert.deepEqual(removedPrimary.targetTokenUuids, [targetB]);
+    assert.equal(removedPrimary.primaryTargetTokenUuid, targetB);
+    assert.equal(removedPrimary.targetTokenUuid, targetB);
 });
 
 test("target-dependent difficulties require observer permission unless the viewer is a GM", () => {

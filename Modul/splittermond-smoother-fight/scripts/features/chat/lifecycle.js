@@ -113,26 +113,59 @@ async function attachCombatContext(message) {
     );
     const actor = speakerCombatant?.actor ?? (message.speaker?.actor ? game.actors.get(message.speaker.actor) : null);
     const linkedUser = speakerCombatant && actor ? services.getLinkedUser(speakerCombatant, actor) : game.user;
-    const targets = services.getTargetsForUser(linkedUser);
-    const target = targets.at(-1) ?? null;
+    const targetSelection = services.getTargetSelectionForUser(linkedUser);
     const pendingKind = services.getPendingOffenseKind(actor?.id);
     if (pendingKind) services.clearPendingOffenseKind(actor?.id);
+    const targetContext = combatTargetContext(
+        pendingKind?.expiresAt >= createdAt ? pendingKind : null,
+        targetSelection
+    );
     const context = {
         combatId: combat?.id ?? null,
         combatantId: speakerCombatant?.id ?? null,
         attackerTokenUuid: speakerCombatant?.token?.uuid ?? services.speakerTokenUuid(message),
         attackerActorUuid: actor?.uuid ?? null,
-        targetTokenUuid: target?.uuid ?? null,
-        targetActorUuid: target?.actor?.uuid ?? null,
-        targetName: target?.name ?? target?.actor?.name ?? null,
-        targetTokenUuids: targets.map((candidate) => candidate.uuid),
-        targetActorUuids: targets.map((candidate) => candidate.actor?.uuid).filter(Boolean),
-        targetNames: targets.map((candidate) => candidate.name ?? candidate.actor?.name).filter(Boolean),
+        ...targetContext,
         actionKind: pendingKind?.expiresAt >= createdAt ? pendingKind.kind : null,
         linkedUserId: linkedUser?.id ?? game.user.id,
         createdAt,
     };
     await services.safeSetFlag(message, "context", context);
+}
+
+function combatTargetContext(pendingKind, selection) {
+    if (pendingKind && Object.hasOwn(pendingKind, "primaryTargetTokenUuid")) {
+        const primaryTargetTokenUuid = pendingKind.primaryTargetTokenUuid ?? null;
+        const primaryTargetActorUuid = pendingKind.primaryTargetActorUuid ?? null;
+        const primaryTargetName = pendingKind.primaryTargetName ?? pendingKind.targetName ?? null;
+        return {
+            primaryTargetTokenUuid,
+            primaryTargetActorUuid,
+            primaryTargetName,
+            targetTokenUuid: primaryTargetTokenUuid,
+            targetActorUuid: primaryTargetActorUuid,
+            targetName: primaryTargetName,
+            targetTokenUuids: Array.from(pendingKind.targetTokenUuids ?? []),
+            targetActorUuids: Array.from(pendingKind.targetActorUuids ?? []),
+            targetNames: Array.from(pendingKind.targetNames ?? []),
+        };
+    }
+    const targets = Array.from(selection?.targets ?? []);
+    const primaryTarget = selection?.target ?? null;
+    const primaryTargetTokenUuid = selection?.primaryTargetTokenUuid ?? primaryTarget?.uuid ?? null;
+    const primaryTargetActorUuid = selection?.primaryTargetActorUuid ?? primaryTarget?.actor?.uuid ?? null;
+    const primaryTargetName = primaryTarget?.name ?? primaryTarget?.actor?.name ?? null;
+    return {
+        primaryTargetTokenUuid,
+        primaryTargetActorUuid,
+        primaryTargetName,
+        targetTokenUuid: primaryTargetTokenUuid,
+        targetActorUuid: primaryTargetActorUuid,
+        targetName: primaryTargetName,
+        targetTokenUuids: targets.map((candidate) => candidate.uuid).filter(Boolean),
+        targetActorUuids: targets.map((candidate) => candidate.actor?.uuid).filter(Boolean),
+        targetNames: targets.map((candidate) => candidate.name ?? candidate.actor?.name).filter(Boolean),
+    };
 }
 
 function captureSystemActiveDefense(message, html) {

@@ -124,3 +124,16 @@ export function normalizeTargetReferences(values) {
     }
     return Array.from(references);
 }
+
+export function normalizeTargetSelection(values, primaryReference = null) {
+    const targetTokenUuids = normalizeTargetReferences(values);
+    const requestedPrimary = normalizeTargetReferences([primaryReference])[0] ?? null;
+    const primaryTargetTokenUuid = targetTokenUuids.includes(requestedPrimary)
+        ? requestedPrimary
+        : targetTokenUuids.at(-1) ?? null;
+    return {
+        targetTokenUuids,
+        primaryTargetTokenUuid,
+        targetTokenUuid: primaryTargetTokenUuid,
+    };
+}

@@ -8,6 +8,7 @@ import {
     isTargetDependentDifficulty,
     toggleFavoriteSkillId,
     visibleCanvasCenterY,
+    withTemporarySetValues,
 } from "../../combat-rules.js";
 
 import {
@@ -37,9 +38,10 @@ export async function performAttack(context, attackId) {
         combatActionState.pendingOffenseKinds.set(context.actor.id, {
             kind: isRangedAttack(attack) ? "ranged" : "attack",
             expiresAt: Date.now() + 60_000,
+            ...snapshotTargetContext(context),
         });
         try {
-            const success = await context.actor.rollAttack(attackId);
+            const success = await withPrimarySystemTarget(context, () => context.actor.rollAttack(attackId));
             if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
         } catch (error) {
             combatActionState.pendingOffenseKinds.delete(context.actor.id);
@@ -104,8 +106,18 @@ export async function performSpell(context, spellId) {
         return;
     }
     if (prepared) {
-        const success = await context.actor.rollSpell(spellId);
-        if (success) await context.actor.setFlag("splittermond", "preparedSpell", null);
+        combatActionState.pendingOffenseKinds.set(context.actor.id, {
+            kind: "spell",
+            expiresAt: Date.now() + 60_000,
+            ...snapshotTargetContext(context),
+        });
+        try {
+            const success = await withPrimarySystemTarget(context, () => context.actor.rollSpell(spellId));
+            if (success) await context.actor.setFlag("splittermond", "preparedSpell", null);
+        } catch (error) {
+            combatActionState.pendingOffenseKinds.delete(context.actor.id);
+            throw error;
+        }
     } else {
         combatActionState.preparingSpellId = spellId;
         services.scheduleRender(0);
@@ -142,6 +154,36 @@ export function getPendingOffenseKind(actorId) {
 
 export function clearPendingOffenseKind(actorId) {
     combatActionState.pendingOffenseKinds.delete(actorId);
+}
+
+function snapshotTargetContext(context) {
+    const targets = Array.from(context.targets ?? []);
+    const primaryTarget = context.target ?? null;
+    const primaryTargetTokenUuid = primaryTarget?.uuid ?? null;
+    const primaryTargetActorUuid = primaryTarget?.actor?.uuid ?? null;
+    const primaryTargetName = primaryTarget?.name ?? primaryTarget?.actor?.name ?? null;
+    return {
+        primaryTargetTokenUuid,
+        primaryTargetActorUuid,
+        primaryTargetName,
+        targetTokenUuid: primaryTargetTokenUuid,
+        targetActorUuid: primaryTargetActorUuid,
+        targetName: primaryTargetName,
+        targetTokenUuids: targets.map((target) => target.uuid).filter(Boolean),
+        targetActorUuids: targets.map((target) => target.actor?.uuid).filter(Boolean),
+        targetNames: targets.map((target) => target.name ?? target.actor?.name).filter(Boolean),
+    };
+}
+
+async function withPrimarySystemTarget(context, callback) {
+    const targetSet = game.user?.targets;
+    const primaryUuid = context.primaryTargetTokenUuid ?? context.target?.uuid;
+    if (!primaryUuid || !targetSet?.clear || !targetSet?.add) return callback();
+    const primaryTargetObject = Array.from(targetSet).find((target) =>
+        (target?.document?.uuid ?? target?.uuid) === primaryUuid
+    ) ?? context.target?.object ?? canvas?.tokens?.get?.(context.target?.id);
+    if (!primaryTargetObject) return callback();
+    return withTemporarySetValues(targetSet, [primaryTargetObject], callback);
 }
 
 export async function addCombatTicks(context, requestedTicks) {

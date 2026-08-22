@@ -4,6 +4,7 @@ import { services } from "../../core/services.js";
 
 import {
     normalizeTargetReferences,
+    normalizeTargetSelection,
     uniqueTokensByReference,
 } from "../../combat-rules.js";
 
@@ -16,18 +17,54 @@ import {
     t,
 } from "../../shared/values.js";
 
-export function getTargetsForUser(user) {
-    if (!user) return [];
-    let uuids = normalizeTargetReferences(targetingState.targetByUser.get(user.id));
+export function getTargetSelectionForUser(user) {
+    if (!user) return emptyTargetSelection();
+    let selection = rememberTargetReferences(user.id, targetingState.targetByUser.get(user.id));
     if (user.id === game.user.id) {
-        uuids = normalizeTargetReferences(user.targets);
-        targetingState.targetByUser.set(user.id, uuids);
+        selection = rememberTargetReferences(user.id, user.targets);
     }
-    return uuids.map(resolveToken).filter((target) => target && (game.user.isGM || !target.hidden));
+    const targets = selection.targetTokenUuids
+        .map(resolveToken)
+        .filter((target) => target && (game.user.isGM || !target.hidden));
+    const target = targets.find((candidate) => candidate.uuid === selection.primaryTargetTokenUuid)
+        ?? targets.at(-1)
+        ?? null;
+    const targetTokenUuids = targets.map((candidate) => candidate.uuid);
+    const targetActorUuids = targets.map((candidate) => candidate.actor?.uuid).filter(Boolean);
+    return {
+        targets,
+        target,
+        targetTokenUuids,
+        targetActorUuids,
+        primaryTargetTokenUuid: target?.uuid ?? null,
+        primaryTargetActorUuid: target?.actor?.uuid ?? null,
+        targetTokenUuid: target?.uuid ?? null,
+        targetActorUuid: target?.actor?.uuid ?? null,
+    };
 }
 
-export function rememberTargetReferences(userId, references) {
-    targetingState.targetByUser.set(userId, references);
+function emptyTargetSelection() {
+    return {
+        targets: [],
+        target: null,
+        targetTokenUuids: [],
+        targetActorUuids: [],
+        primaryTargetTokenUuid: null,
+        primaryTargetActorUuid: null,
+        targetTokenUuid: null,
+        targetActorUuid: null,
+    };
+}
+
+export function rememberTargetReferences(
+    userId,
+    references,
+    primaryTargetTokenUuid = targetingState.primaryTargetByUser.get(userId)
+) {
+    const selection = normalizeTargetSelection(references, primaryTargetTokenUuid);
+    targetingState.targetByUser.set(userId, selection.targetTokenUuids);
+    targetingState.primaryTargetByUser.set(userId, selection.primaryTargetTokenUuid);
+    return selection;
 }
 
 export function getSceneTokens() {
@@ -69,33 +106,79 @@ export async function setTargetFromQuickMenu(context, uuid) {
     if (!token) return;
     const recipient = game.user.isGM ? (context.linkedUser ?? game.user) : game.user;
     const current = new Set(context.targets.map((candidate) => candidate.uuid));
-    const targeted = !current.has(token.uuid);
-    if (targeted) current.add(token.uuid);
-    else current.delete(token.uuid);
-    const targetUuids = Array.from(current);
-    targetingState.targetByUser.set(recipient.id, targetUuids);
+    const alreadySelected = current.has(token.uuid);
+    const existingPrimaryTargetUuid = context.target?.uuid
+        ?? targetingState.primaryTargetByUser.get(recipient.id)
+        ?? null;
+    current.add(token.uuid);
+    const primaryTargetTokenUuid = alreadySelected
+        ? token.uuid
+        : existingPrimaryTargetUuid ?? token.uuid;
+    const selection = rememberTargetReferences(recipient.id, current, primaryTargetTokenUuid);
 
     if (recipient.id === game.user.id) {
-        setLocalTarget(token, targeted, false);
-        publishOwnTarget();
+        if (!alreadySelected) setLocalTarget(token, true, false);
+        publishOwnTarget(selection.targetTokenUuids, selection.primaryTargetTokenUuid);
     } else {
-        game.socket.emit(SOCKET, {
-            type: "set-target",
-            senderId: game.user.id,
-            recipientId: recipient.id,
-            tokenUuid: token.uuid,
-            targeted,
-            releaseOthers: false,
-        });
-        game.socket.emit(SOCKET, {
-            type: "target-update",
-            senderId: game.user.id,
-            userId: recipient.id,
-            tokenUuids: targetUuids,
-        });
+        if (!alreadySelected) emitRemoteSetTarget(recipient.id, token, true, selection);
+        emitTargetUpdate(recipient.id, selection);
     }
-    ui.notifications.info(t(targeted ? "SMOOTHER_FIGHT.HUD.TargetAdded" : "SMOOTHER_FIGHT.HUD.TargetRemoved", { target: token.name }));
+    ui.notifications.info(t(alreadySelected ? "SMOOTHER_FIGHT.HUD.PrimaryTargetChanged" : "SMOOTHER_FIGHT.HUD.TargetAdded", { target: token.name }));
     services.scheduleRender();
+}
+
+export async function removeTargetFromQuickMenu(context, uuid) {
+    if (!canChooseTarget(context)) return;
+    const token = resolveToken(uuid);
+    if (!token) return;
+    const recipient = game.user.isGM ? (context.linkedUser ?? game.user) : game.user;
+    const current = new Set(context.targets.map((candidate) => candidate.uuid));
+    if (!current.delete(token.uuid)) return;
+    const selection = rememberTargetReferences(recipient.id, current);
+
+    if (recipient.id === game.user.id) {
+        setLocalTarget(token, false, false);
+        publishOwnTarget(selection.targetTokenUuids, selection.primaryTargetTokenUuid);
+    } else {
+        emitRemoteSetTarget(recipient.id, token, false, selection);
+        emitTargetUpdate(recipient.id, selection);
+    }
+    ui.notifications.info(t("SMOOTHER_FIGHT.HUD.TargetRemoved", { target: token.name }));
+    services.scheduleRender();
+}
+
+function emitRemoteSetTarget(recipientId, token, targeted, selection) {
+    game.socket.emit(SOCKET, {
+        type: "set-target",
+        senderId: game.user.id,
+        recipientId,
+        tokenUuid: token.uuid,
+        targeted,
+        releaseOthers: false,
+        targetUuids: selection.targetTokenUuids,
+        primaryTargetTokenUuid: selection.primaryTargetTokenUuid,
+        primaryTargetActorUuid: resolveToken(selection.primaryTargetTokenUuid)?.actor?.uuid ?? null,
+    });
+}
+
+function emitTargetUpdate(userId, selection) {
+    const primaryTarget = resolveToken(selection.primaryTargetTokenUuid);
+    const targetActorUuids = selection.targetTokenUuids
+        .map((uuid) => resolveToken(uuid)?.actor?.uuid)
+        .filter(Boolean);
+    game.socket.emit(SOCKET, {
+        type: "target-update",
+        senderId: game.user.id,
+        userId,
+        targetUuids: selection.targetTokenUuids,
+        targetTokenUuids: selection.targetTokenUuids,
+        targetActorUuids,
+        primaryTargetTokenUuid: selection.primaryTargetTokenUuid,
+        primaryTargetActorUuid: primaryTarget?.actor?.uuid ?? null,
+        targetTokenUuid: selection.primaryTargetTokenUuid,
+        tokenUuid: selection.primaryTargetTokenUuid,
+        targetActorUuid: primaryTarget?.actor?.uuid ?? null,
+    });
 }
 
 export function setLocalTarget(tokenDocument, targeted = true, releaseOthers = false) {
@@ -152,15 +235,9 @@ function refreshTokenHover(tokenObject) {
     }
 }
 
-export function publishOwnTarget(explicitUuids) {
+export function publishOwnTarget(explicitUuids, explicitPrimaryTargetTokenUuid) {
     if (!game.user) return;
     const targetUuids = normalizeTargetReferences(explicitUuids === undefined ? game.user.targets : explicitUuids);
-    targetingState.targetByUser.set(game.user.id, targetUuids);
-    game.socket?.emit(SOCKET, {
-        type: "target-update",
-        senderId: game.user.id,
-        userId: game.user.id,
-        targetUuids,
-        tokenUuid: targetUuids.at(-1) ?? null,
-    });
+    const selection = rememberTargetReferences(game.user.id, targetUuids, explicitPrimaryTargetTokenUuid);
+    if (game.socket?.emit) emitTargetUpdate(game.user.id, selection);
 }

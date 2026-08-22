@@ -96,8 +96,9 @@ export function registerSocket() {
         if (payload.type === "target-update" && typeof payload.userId === "string") {
             const sender = game.users.get(payload.senderId);
             if (payload.senderId !== payload.userId && !sender?.isGM) return;
-            const targetUuids = normalizeTargetReferences(payload.targetUuids ?? [payload.tokenUuid]);
-            services.rememberTargetReferences(payload.userId, targetUuids);
+            const targetUuids = normalizeTargetReferences(payload.targetTokenUuids ?? payload.targetUuids ?? [payload.tokenUuid]);
+            const primaryTargetTokenUuid = payload.primaryTargetTokenUuid ?? payload.targetTokenUuid ?? payload.tokenUuid ?? null;
+            services.rememberTargetReferences(payload.userId, targetUuids, primaryTargetTokenUuid);
             services.scheduleRender();
             return;
         }
@@ -108,7 +109,11 @@ export function registerSocket() {
             const target = services.resolveToken(payload.tokenUuid);
             if (!target) return;
             services.setLocalTarget(target, payload.targeted !== false, Boolean(payload.releaseOthers));
-            services.publishOwnTarget();
+            const targetUuids = payload.targetTokenUuids ?? payload.targetUuids;
+            const primaryTargetTokenUuid = payload.primaryTargetTokenUuid
+                ?? (payload.targeted === false ? undefined : payload.tokenUuid);
+            if (targetUuids === undefined && primaryTargetTokenUuid === undefined) services.publishOwnTarget();
+            else services.publishOwnTarget(targetUuids, primaryTargetTokenUuid);
             return;
         }
 

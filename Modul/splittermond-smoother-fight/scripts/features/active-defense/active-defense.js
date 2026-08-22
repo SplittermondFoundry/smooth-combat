@@ -29,15 +29,25 @@ import {
     t,
 } from "../../shared/values.js";
 
+function primaryTargetTokenUuid(context) {
+    return context?.primaryTargetTokenUuid ?? context?.targetTokenUuid ?? null;
+}
+
+function primaryTargetActorUuid(context) {
+    return context?.primaryTargetActorUuid ?? context?.targetActorUuid ?? null;
+}
+
 function rememberPendingDefense(message, targetOverride = null, options = {}) {
     const context = services.getMessageContext(message);
     const target = targetOverride
-        ?? services.resolveToken(context?.targetTokenUuid)
+        ?? services.resolveToken(primaryTargetTokenUuid(context))
         ?? getControlledTokenDocument()
         ?? services.getHudContext()?.target;
     const defender = options.defender ?? target;
     activeDefenseState.pendingDefense = {
         attackMessageId: message.id,
+        primaryTargetTokenUuid: target?.uuid ?? null,
+        primaryTargetActorUuid: target?.actor?.uuid ?? null,
         targetTokenUuid: target?.uuid ?? null,
         targetActorUuid: target?.actor?.uuid ?? null,
         defenderTokenUuid: defender?.uuid ?? null,
@@ -57,10 +67,14 @@ export function getControlledTokenDocument() {
 
 export function normalizePendingDefense(value) {
     if (!value || typeof value !== "object" || typeof value.attackMessageId !== "string") return null;
+    const targetTokenUuid = primaryTargetTokenUuid(value);
+    const targetActorUuid = primaryTargetActorUuid(value);
     return {
         attackMessageId: value.attackMessageId,
-        targetTokenUuid: typeof value.targetTokenUuid === "string" ? value.targetTokenUuid : null,
-        targetActorUuid: typeof value.targetActorUuid === "string" ? value.targetActorUuid : null,
+        primaryTargetTokenUuid: typeof targetTokenUuid === "string" ? targetTokenUuid : null,
+        primaryTargetActorUuid: typeof targetActorUuid === "string" ? targetActorUuid : null,
+        targetTokenUuid: typeof targetTokenUuid === "string" ? targetTokenUuid : null,
+        targetActorUuid: typeof targetActorUuid === "string" ? targetActorUuid : null,
         defenderTokenUuid: typeof value.defenderTokenUuid === "string" ? value.defenderTokenUuid : null,
         defenderActorUuid: typeof value.defenderActorUuid === "string" ? value.defenderActorUuid : null,
         defenseId: typeof value.defenseId === "string" ? value.defenseId : null,
@@ -110,6 +124,8 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
     await services.safeSetFlag(message, "context", {
         ...existingDefenseContext,
         attackMessageId: pending.attackMessageId,
+        primaryTargetTokenUuid: pending.targetTokenUuid,
+        primaryTargetActorUuid: pending.targetActorUuid,
         targetTokenUuid: pending.targetTokenUuid,
         targetActorUuid: pending.targetActorUuid,
         defenderTokenUuid: pending.defenderTokenUuid,
@@ -193,16 +209,19 @@ function findPendingOffenseForDefense(message) {
     const defenseActorId = message.speaker?.actor;
     const offense = messages.find((candidate) => {
         const context = services.getMessageContext(candidate);
-        if (!context?.targetActorUuid) return false;
-        const actor = globalThis.fromUuidSync?.(context.targetActorUuid);
+        const actorUuid = primaryTargetActorUuid(context);
+        if (!actorUuid) return false;
+        const actor = globalThis.fromUuidSync?.(actorUuid);
         return actor?.id === defenseActorId && !context.supersededBy;
     });
     if (!offense) return null;
     const context = services.getMessageContext(offense);
     return {
         attackMessageId: offense.id,
-        targetTokenUuid: context.targetTokenUuid,
-        targetActorUuid: context.targetActorUuid,
+        primaryTargetTokenUuid: primaryTargetTokenUuid(context),
+        primaryTargetActorUuid: primaryTargetActorUuid(context),
+        targetTokenUuid: primaryTargetTokenUuid(context),
+        targetActorUuid: primaryTargetActorUuid(context),
         expiresAt: Date.now() + 1000,
     };
 }
@@ -214,7 +233,7 @@ async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, def
     const featureValue = findDefensiveFeatureValue(defenseCheck.itemData);
     const originalContext = services.getMessageContext(original) ?? {};
     if (originalContext.supersededBy) return game.messages.get(originalContext.supersededBy) ?? null;
-    const target = services.resolveToken(originalContext.targetTokenUuid);
+    const target = services.resolveToken(primaryTargetTokenUuid(originalContext));
     const calculatedBase = await target?.actor?.derivedValues?.[defenseCheck.defenseType]?.value?.calculate?.();
     const candidateDefense = displayedDefenseValue !== null && Number.isFinite(Number(displayedDefenseValue))
         ? Number(displayedDefenseValue)
@@ -359,7 +378,7 @@ export async function beginAdditionalTargetDefense(message) {
     if (!message) return;
     message = resolveLatestOffenseMessage(message);
     const context = services.getMessageContext(message);
-    const target = services.resolveToken(context?.targetTokenUuid);
+    const target = services.resolveToken(primaryTargetTokenUuid(context));
     const attempted = new Set(context?.attemptedDefenseActorUuids ?? []);
     if (!target?.actor || attempted.has(target.actor.uuid) || !(game.user.isGM || target.actor.isOwner)) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNotAllowed"));
@@ -379,7 +398,7 @@ export async function beginDefenderDefense(message) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenderUnavailable"));
         return;
     }
-    const target = services.resolveToken(services.getMessageContext(message)?.targetTokenUuid);
+    const target = services.resolveToken(primaryTargetTokenUuid(services.getMessageContext(message)));
     if (!target?.actor) return;
 
     const options = choices.map((choice, index) =>
@@ -465,7 +484,7 @@ export function getEligibleDefenderChoices(message, user) {
     if (!services.messageOffersActiveDefense(message) && !context?.recalculatedFrom) return [];
     const defenseType = String(message.system?.checkReport?.defenseType ?? context?.defenseType ?? "defense").toLocaleLowerCase();
     if (defenseType !== "defense" && defenseType !== "vtd") return [];
-    const target = services.resolveToken(context?.targetTokenUuid);
+    const target = services.resolveToken(primaryTargetTokenUuid(context));
     if (!target?.actor) return [];
     const attempted = new Set(context?.attemptedDefenseActorUuids ?? []);
     const choices = [];
