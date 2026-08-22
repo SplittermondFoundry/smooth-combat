@@ -19,7 +19,9 @@ const EXPECTED_HOOKS = [
     "createItem",
     "updateItem",
     "deleteItem",
+    "updateUser",
     "controlToken",
+    "userConnected",
     "updateToken",
     "canvasReady",
     "preUpdateActor",
@@ -192,6 +194,10 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         resetHarness(gameStub);
         handlersFor(hookRegistrations, "combatRound")[0]({ id: "combat" });
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
+
+        callLog.length = 0;
+        handlersFor(hookRegistrations, "userConnected")[0]({ id: "player" }, true);
+        assert.deepEqual(callsOf("scheduleRender"), [[0]]);
 
         callLog.length = 0;
         const movedToken = { id: "token" };

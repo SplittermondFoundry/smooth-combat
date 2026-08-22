@@ -1726,6 +1726,20 @@
     white-space: nowrap;
 }
 
+.smoother-fight.sf-settings .sf-token-controller-status {
+    display: grid;
+    min-width: 0;
+    line-height: 1.2;
+}
+
+.smoother-fight.sf-settings .sf-token-controller-status > small {
+    overflow: hidden;
+    color: var(--sf-muted);
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .smoother-fight.sf-settings .sf-sheet-assignment-row small,
 .smoother-fight.sf-settings .sf-token-context small {
     color: rgba(62, 70, 65, 0.78);

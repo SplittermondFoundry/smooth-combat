@@ -6,6 +6,7 @@ import {
     normalizeTargetReferences,
     normalizeTargetSelection,
     uniqueTokensByReference,
+    withTemporarySetValues,
 } from "../../combat-rules.js";
 
 import {
@@ -101,13 +102,20 @@ export function tokenUuid(tokenOrObject) {
 }
 
 export async function setTargetFromQuickMenu(context, uuid) {
-    if (!canChooseTarget(context)) return;
+    const recipient = runtimeControllerFor(context);
+    if (!recipient) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable"));
+        return;
+    }
+    if (!canChooseTarget(context, recipient)) return;
     const token = resolveToken(uuid);
     if (!token) return;
-    const recipient = game.user.isGM ? (context.linkedUser ?? game.user) : game.user;
-    const current = new Set(context.targets.map((candidate) => candidate.uuid));
+    const liveContext = recipient.id === context.runtimeController?.id
+        ? context
+        : services.getTargetSelectionForUser(recipient);
+    const current = new Set(liveContext.targets.map((candidate) => candidate.uuid));
     const alreadySelected = current.has(token.uuid);
-    const existingPrimaryTargetUuid = context.target?.uuid
+    const existingPrimaryTargetUuid = liveContext.target?.uuid
         ?? targetingState.primaryTargetByUser.get(recipient.id)
         ?? null;
     current.add(token.uuid);
@@ -128,11 +136,18 @@ export async function setTargetFromQuickMenu(context, uuid) {
 }
 
 export async function removeTargetFromQuickMenu(context, uuid) {
-    if (!canChooseTarget(context)) return;
+    const recipient = runtimeControllerFor(context);
+    if (!recipient) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable"));
+        return;
+    }
+    if (!canChooseTarget(context, recipient)) return;
     const token = resolveToken(uuid);
     if (!token) return;
-    const recipient = game.user.isGM ? (context.linkedUser ?? game.user) : game.user;
-    const current = new Set(context.targets.map((candidate) => candidate.uuid));
+    const liveContext = recipient.id === context.runtimeController?.id
+        ? context
+        : services.getTargetSelectionForUser(recipient);
+    const current = new Set(liveContext.targets.map((candidate) => candidate.uuid));
     if (!current.delete(token.uuid)) return;
     const selection = rememberTargetReferences(recipient.id, current);
 
@@ -186,12 +201,40 @@ export function setLocalTarget(tokenDocument, targeted = true, releaseOthers = f
     tokenObject?.setTarget(targeted, { user: game.user, releaseOthers, groupSelection: false });
 }
 
-export function canChooseTarget(context) {
+export function canChooseTarget(context, runtimeController = runtimeControllerFor(context)) {
     return Boolean(
         game.user.isGM ||
-        context.linkedUser?.id === game.user.id ||
-        (!context.linkedUser && context.actor?.isOwner)
+        runtimeController?.id === game.user.id
     );
+}
+
+function runtimeControllerFor(context) {
+    const subject = context?.combatant ?? context?.token ?? context?.actor ?? null;
+    const resolved = subject ? services.getRuntimeController?.(subject) : null;
+    const controller = resolved ?? context?.runtimeController ?? null;
+    return controller?.active ? controller : null;
+}
+
+export async function withTemporarySystemTargets(targets, callback) {
+    // Splittermond 14.3 resolves attack and resistance-spell difficulty from the
+    // first entry of game.user.targets inside Skill.roll(); its actor roll API has
+    // no target parameter. Keep that system-facing state exact and transactional.
+    const targetSet = game.user?.targets;
+    const requested = Array.from(targets ?? []).filter(Boolean);
+    if (!requested.length) return callback();
+    if (!targetSet?.clear || !targetSet?.add) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SystemTargetUnavailable"));
+        return null;
+    }
+    const targetObjects = requested.map((target) => {
+        if (target.document) return target;
+        return target.object ?? canvas?.tokens?.get?.(target.id) ?? null;
+    }).filter(Boolean);
+    if (targetObjects.length !== requested.length) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SystemTargetUnavailable"));
+        return null;
+    }
+    return withTemporarySetValues(targetSet, targetObjects, callback);
 }
 
 export function bindQuickTargetHover(root) {

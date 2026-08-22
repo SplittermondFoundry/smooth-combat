@@ -21,16 +21,18 @@ export function getHudContext() {
             combatant,
             actor: null,
             token: null,
-            linkedUser: null,
+            assignedUser: null,
+            runtimeController: null,
             target: null,
             targets: [],
             concealed: true,
         };
     }
     if (!actor) return null;
-    const linkedUser = services.getLinkedUser(combatant, actor);
-    const targetSelection = services.getTargetSelectionForUser(linkedUser);
-    return { combat, combatant, actor, token, linkedUser, ...targetSelection };
+    const assignedUser = services.getAssignedUser(combatant);
+    const runtimeController = services.getRuntimeController(combatant);
+    const targetSelection = services.getTargetSelectionForUser(runtimeController);
+    return { combat, combatant, actor, token, assignedUser, runtimeController, ...targetSelection };
 }
 
 export function getPersonalHudCandidates(activeContext = getHudContext()) {
@@ -46,9 +48,9 @@ export function getPersonalHudCandidates(activeContext = getHudContext()) {
             token,
             tokenId: token?.id ?? combatant.tokenId ?? null,
             tokenUuid: services.tokenUuid(token),
-            owned: Boolean(actor?.testUserPermission?.(game.user, "OWNER") ?? actor?.isOwner),
+            controlled: services.getRuntimeController(combatant)?.id === game.user?.id,
         };
-    }).filter((candidate) => candidate.owned && candidate.actor);
+    }).filter((candidate) => candidate.controlled && candidate.actor);
 }
 
 export function getPersonalHudContext(activeContext = getHudContext()) {
@@ -69,7 +71,8 @@ export function getPersonalHudContext(activeContext = getHudContext()) {
         combatant: selected.combatant,
         actor: selected.actor,
         token: selected.token,
-        linkedUser: game.user,
+        assignedUser: services.getAssignedUser(selected.combatant),
+        runtimeController: game.user,
         ...targetSelection,
         personal: true,
     };

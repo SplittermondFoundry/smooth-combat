@@ -9,7 +9,6 @@ import {
     mayViewTargetDifficulty,
     requiresRollManagementPermission,
     tickAdvanceConfirmed,
-    withTemporarySetValues,
 } from "../../combat-rules.js";
 
 import {
@@ -292,8 +291,7 @@ function forwardToOriginalChatHandler(message, sourceButton, action) {
 async function applyDamageToLinkedTarget(message, actionData) {
     const target = resolveDamageApplicationTarget(message);
     const tokenObject = target?.object ?? canvas?.tokens?.get(target?.id);
-    const currentTargets = game.user?.targets;
-    if (!target || !tokenObject || !currentTargets?.clear || !currentTargets?.add) {
+    if (!target || !tokenObject) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageTargetMissing"));
         return;
     }
@@ -302,7 +300,7 @@ async function applyDamageToLinkedTarget(message, actionData) {
         return;
     }
 
-    await withTemporarySetValues(currentTargets, [tokenObject], () =>
+    await services.withTemporarySystemTargets([target], () =>
         message.system.handleGenericAction({ ...actionData, action: "applyDamageToTargets" })
     );
 }
@@ -571,8 +569,8 @@ function isMessageSpeakerAssignedToCurrentUser(message) {
     const actor = services.resolveSpeakerActor(message);
     const combatant = Array.from(game.combat?.combatants ?? []).find((candidate) => candidate.actorId === actor?.id);
     if (combatant && actor) {
-        const linkedUser = services.getLinkedUser(combatant, actor);
-        if (linkedUser) return linkedUser.id === game.user?.id;
+        const runtimeController = services.getRuntimeController(combatant);
+        if (runtimeController) return runtimeController.id === game.user?.id;
     }
     return Boolean(!game.user?.isGM && actor?.testUserPermission?.(game.user, "OWNER"));
 }

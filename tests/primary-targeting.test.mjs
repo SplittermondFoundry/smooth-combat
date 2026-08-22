@@ -35,10 +35,11 @@ test("quick targeting promotes, adds, and removes targets without collapsing the
     const targetB = createToken("b");
     const targetC = createToken("c");
     const tokens = new Map([targetA, targetB, targetC].map((token) => [token.uuid, token]));
-    const user = { id: "player", isGM: false, targets: new Set([targetA.object, targetB.object]) };
+    const user = { id: "player", isGM: false, active: true, targets: new Set([targetA.object, targetB.object]) };
     targetingHarness.targetCalls.length = 0;
     targetingHarness.socketPayloads.length = 0;
     services.scheduleRender = () => {};
+    services.getRuntimeController = () => user;
     globalThis.fromUuidSync = (uuid) => tokens.get(uuid) ?? null;
     globalThis.game = {
         user,
@@ -48,7 +49,7 @@ test("quick targeting promotes, adds, and removes targets without collapsing the
         },
         socket: { emit: (_channel, payload) => targetingHarness.socketPayloads.push(payload) },
     };
-    globalThis.ui = { notifications: { info: () => {} } };
+    globalThis.ui = { notifications: { info: () => {}, warn: () => {} } };
     globalThis.canvas = { scene: { tokens: new Map() }, tokens: { get: () => null } };
 
     const firstSelection = rememberTargetReferences("first-target-user", [targetA.uuid]);
@@ -63,7 +64,7 @@ test("quick targeting promotes, adds, and removes targets without collapsing the
     assert.equal(initial.targetTokenUuid, targetB.uuid);
     assert.equal(initial.primaryTargetActorUuid, targetB.actor.uuid);
 
-    const context = { actor: { isOwner: true }, linkedUser: user, target: targetB, targets: [targetA, targetB] };
+    const context = { actor: { isOwner: true }, runtimeController: user, target: targetB, targets: [targetA, targetB] };
     await setTargetFromQuickMenu(context, targetA.uuid);
     assert.deepEqual(targetingHarness.targetCalls, []);
     assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetTokenUuids, [targetA.uuid, targetB.uuid]);
@@ -84,4 +85,52 @@ test("quick targeting promotes, adds, and removes targets without collapsing the
     assert.deepEqual(targetingHarness.targetCalls, [[targetA.uuid, false]]);
     assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetTokenUuids, [targetB.uuid]);
     assert.equal(targetingHarness.socketPayloads.at(-1).primaryTargetTokenUuid, targetB.uuid);
+});
+
+test("an active GM substitutes locally without sending target operations to an offline player", async () => {
+    const target = createToken("fallback");
+    const offlinePlayer = { id: "offline-player", isGM: false, active: false, targets: new Set() };
+    const gm = { id: "primary-gm", isGM: true, active: true, targets: new Set() };
+    targetingHarness.targetCalls.length = 0;
+    targetingHarness.socketPayloads.length = 0;
+    services.getRuntimeController = () => gm;
+    services.scheduleRender = () => {};
+    globalThis.fromUuidSync = (uuid) => uuid === target.uuid ? target : null;
+    globalThis.game = {
+        user: gm,
+        i18n: {
+            format: (key, data) => `${key}:${data.target}`,
+            localize: (key) => key,
+        },
+        socket: { emit: (_channel, payload) => targetingHarness.socketPayloads.push(payload) },
+    };
+    globalThis.ui = { notifications: { info: () => {}, warn: () => assert.fail("GM fallback is available") } };
+    globalThis.canvas = { scene: { tokens: new Map() }, tokens: { get: () => null } };
+
+    await setTargetFromQuickMenu({
+        actor: { isOwner: true },
+        assignedUser: offlinePlayer,
+        runtimeController: gm,
+        target: null,
+        targets: [],
+    }, target.uuid);
+
+    assert.deepEqual(targetingHarness.targetCalls, [[target.uuid, true]]);
+    assert.ok(targetingHarness.socketPayloads.every((payload) => payload.recipientId !== offlinePlayer.id));
+    assert.equal(targetingHarness.socketPayloads.at(-1).userId, gm.id);
+});
+
+test("missing runtime control reports a clean unavailable state", async () => {
+    const target = createToken("unavailable");
+    let warnings = 0;
+    services.getRuntimeController = () => null;
+    globalThis.game = {
+        user: { id: "observer", isGM: false, active: true, targets: new Set() },
+        i18n: { localize: (key) => key },
+        socket: { emit: () => assert.fail("no target operation should be emitted") },
+    };
+    globalThis.ui = { notifications: { warn: () => warnings += 1 } };
+
+    await setTargetFromQuickMenu({ actor: {}, runtimeController: null, target: null, targets: [] }, target.uuid);
+    assert.equal(warnings, 1);
 });

@@ -124,7 +124,7 @@ async function markDamageApplicationCompleted(messageId, actor) {
         if (updated) return;
     }
 
-    const gm = services.getActiveGm();
+    const gm = services.getActivePrimaryGm();
     if (!gm) return;
     const reference = feedbackReferenceForActor(actor);
     game.socket.emit(SOCKET, {
@@ -191,9 +191,7 @@ export function announceTurnFeedback(combat) {
     const actor = combatant.actor;
     const token = combatant.token ?? services.resolveCombatantToken(combatant);
     if (!actor || !isCombatantVisibleToUser(game.user?.isGM, combatant.hidden, token?.hidden)) return;
-    const linkedUser = services.getLinkedUser(combatant, actor);
-    const ownTurn = linkedUser?.id === game.user?.id
-        || (!linkedUser && Boolean(actor.testUserPermission?.(game.user, "OWNER")));
+    const ownTurn = services.getCurrentTurnController(combat)?.id === game.user?.id;
     if (ownTurn) triggerFeedback("turn", { tokenUuid: token?.uuid ?? null, actorUuid: actor.uuid });
 }
 

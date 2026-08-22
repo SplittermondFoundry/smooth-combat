@@ -20,7 +20,31 @@ import {
     t,
 } from "../../shared/values.js";
 
-export function getLinkedUser(combatant, actor) {
+export function getAssignedUser(actorOrCombatant, actorOverride = null) {
+    return resolveAssignedUser(actorOrCombatant, actorOverride).user;
+}
+
+export function getRuntimeController(actorOrCombatant, actorOverride = null) {
+    const assignedUser = getAssignedUser(actorOrCombatant, actorOverride);
+    return assignedUser?.active ? assignedUser : getActivePrimaryGm();
+}
+
+export function getCurrentTurnController(combat = game.combat) {
+    const combatant = combat?.combatant ?? combat?.turns?.[0] ?? null;
+    return combatant ? getRuntimeController(combatant) : null;
+}
+
+export function getActivePrimaryGm() {
+    const primaryGm = game.users.get(getSetting("primaryGmId", ""));
+    if (primaryGm?.isGM && primaryGm.active) return primaryGm;
+    return Array.from(game.users ?? [])
+        .filter((user) => user.isGM && user.active)
+        .sort(compareUserIds)[0] ?? null;
+}
+
+function resolveAssignedUser(actorOrCombatant, actorOverride = null) {
+    const { actor, combatant } = assignmentSubject(actorOrCombatant, actorOverride);
+    if (!actor) return { user: null, source: "unassigned" };
     const primaryGmId = getSetting("primaryGmId", "");
     const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}), primaryGmId);
     const assignments = Object.entries(links).sort(([leftId], [rightId]) =>
@@ -33,18 +57,40 @@ export function getLinkedUser(combatant, actor) {
         userLinks.some((link) => !link.tokenUuid && linkMatchesCombatant(link, combatant))
     );
     const explicitlyLinkedUser = exact ? game.users.get(exact[0]) : null;
-    if (explicitlyLinkedUser) return explicitlyLinkedUser;
+    if (explicitlyLinkedUser) return { user: explicitlyLinkedUser, source: "direct" };
 
     const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
     const actorLinkedUser = game.users.get(actorLinks[actorAssignmentUuid(actor, combatant.actorId)]);
-    if (actorLinkedUser) return actorLinkedUser;
+    if (actorLinkedUser) return { user: actorLinkedUser, source: "sheet" };
 
-    const primaryGm = game.users.get(primaryGmId);
-    if (primaryGm?.isGM) return primaryGm;
+    const owner = Array.from(game.users ?? [])
+        .filter((user) => !user.isGM && actor.testUserPermission?.(user, "OWNER"))
+        .sort(compareUserIds)[0] ?? null;
+    return { user: owner, source: owner ? "owner" : "unassigned" };
+}
 
-    const users = Array.from(game.users ?? []);
-    const owners = users.filter((user) => !user.isGM && actor.testUserPermission?.(user, "OWNER"));
-    return owners.find((user) => user.active) ?? owners[0] ?? (game.user.isGM ? game.user : null);
+function assignmentSubject(subject, actorOverride) {
+    const token = subject?.token?.document
+        ?? subject?.token
+        ?? (subject?.documentName === "Token" || (subject?.actor && subject?.uuid) ? subject : null);
+    const actor = actorOverride
+        ?? subject?.actor
+        ?? token?.actor
+        ?? (subject?.documentName === "Actor" ? subject : null)
+        ?? (!subject?.token && !subject?.actor ? subject : null);
+    return {
+        actor,
+        combatant: {
+            actor,
+            actorId: subject?.actorId ?? token?.actorId ?? actor?.id ?? null,
+            token,
+            tokenUuid: subject?.tokenUuid ?? token?.uuid ?? null,
+        },
+    };
+}
+
+function compareUserIds(left, right) {
+    return String(left?.id ?? "").localeCompare(String(right?.id ?? ""));
 }
 
 export function assignmentSourceLabel(source) {
@@ -108,30 +154,11 @@ export function getExplicitTokenOwnerId(token) {
 }
 
 function getEffectiveTokenOwner(token) {
-    const explicitOwner = game.users.get(getExplicitTokenOwnerId(token));
-    if (explicitOwner) return explicitOwner;
-    const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
-    const actorOwner = game.users.get(actorLinks[actorAssignmentUuid(token.actor, token.actorId)]);
-    if (actorOwner) return actorOwner;
-    const primaryGm = game.users.get(getSetting("primaryGmId", ""));
-    if (primaryGm?.isGM) return primaryGm;
-    const owners = Array.from(game.users ?? [])
-        .filter((user) => !user.isGM && token.actor?.testUserPermission?.(user, "OWNER"));
-    return owners.find((user) => user.active) ?? owners[0] ?? null;
+    return getAssignedUser(token);
 }
 
 export function isCurrentUserTarget(token) {
-    if (!token || !game.user) return false;
-    const explicitOwnerId = getExplicitTokenOwnerId(token);
-    if (explicitOwnerId) return explicitOwnerId === game.user.id;
-
-    const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
-    const actorOwnerId = actorLinks[actorAssignmentUuid(token.actor, token.actorId)];
-    if (actorOwnerId) return actorOwnerId === game.user.id;
-    const primaryGmId = getSetting("primaryGmId", "");
-    if (primaryGmId && game.user.isGM) return primaryGmId === game.user.id;
-    if (game.user.isGM) return false;
-    return Boolean(token.actor?.testUserPermission?.(game.user, "OWNER"));
+    return Boolean(token && game.user && getRuntimeController(token)?.id === game.user.id);
 }
 
 async function openTokenOwnerDialog(token) {
@@ -141,18 +168,9 @@ async function openTokenOwnerDialog(token) {
     );
     if (!users.length) return;
 
-    const explicitOwnerId = getExplicitTokenOwnerId(token);
-    const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
-    const actorOwner = game.users.get(actorLinks[actorAssignmentUuid(token.actor, token.actorId)]);
-    const primaryGm = game.users.get(getSetting("primaryGmId", ""));
-    const effectiveOwner = getEffectiveTokenOwner(token);
-    const source = explicitOwnerId
-        ? t("SMOOTHER_FIGHT.Settings.DirectTokenAssignment")
-        : actorOwner
-            ? t("SMOOTHER_FIGHT.Settings.SheetAssignment")
-            : primaryGm?.isGM
-                ? t("SMOOTHER_FIGHT.Settings.PrimaryGmAssignment")
-                : t("SMOOTHER_FIGHT.Settings.OwnerAssignment");
+    const assignment = resolveAssignedUser(token);
+    const effectiveOwner = assignment.user;
+    const source = assignmentSourceLabel(assignment.source);
     const options = users.map((user) =>
         `<option value="${escapeAttr(user.id)}" ${user.id === effectiveOwner?.id ? "selected" : ""}>${escapeHtml(user.name)}${user.isGM ? " (GM)" : ""}</option>`
     ).join("");

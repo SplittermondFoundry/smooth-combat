@@ -142,10 +142,6 @@ export async function claimPendingDefenseForMessage(message) {
     return pending;
 }
 
-export function getActiveGm() {
-    return Array.from(game.users ?? []).find((user) => user.isGM && user.active) ?? null;
-}
-
 export async function processDefenseMessage(message, pendingOverride = null, { allowForeign = false } = {}) {
     if (activeDefenseState.processingDefenseMessages.has(message.id)) return null;
     activeDefenseState.processingDefenseMessages.add(message.id);
@@ -194,7 +190,7 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
     });
 
     if (!game.user.isGM) {
-        const gm = getActiveGm();
+        const gm = services.getActivePrimaryGm();
         if (!gm) {
             ui.notifications.warn(localizeSystem("splittermond.chatCard.noGMConnected", "Kein GM verbunden."));
             return;

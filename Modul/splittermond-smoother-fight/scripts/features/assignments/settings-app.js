@@ -2,6 +2,7 @@ import {
     actorAssignmentUuid,
     assignmentSourceIcon,
     assignmentSourceLabel,
+    getRuntimeController,
 } from "./assignments.js";
 
 import { services } from "../../core/services.js";
@@ -55,7 +56,6 @@ export function registerSettingsMenu() {
             const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
             const allUsers = Array.from(game.users ?? []);
             const validUserIds = new Set(allUsers.map((user) => user.id));
-            const validPrimaryGm = allUsers.find((user) => user.id === primaryGmId && user.isGM) ?? null;
             const explicitOwnerByToken = new Map();
             const legacyOwnerByActor = new Map();
             for (const [userId, userLinks] of Object.entries(links)) {
@@ -106,9 +106,11 @@ export function registerSettingsMenu() {
                 }
                 const legacyUserId = validUserIds.has(legacyOwnerByActor.get(actorUuid)) ? legacyOwnerByActor.get(actorUuid) : null;
                 const sheetUserId = validUserIds.has(displayActorLinks[actorUuid]) ? displayActorLinks[actorUuid] : null;
-                const ownerUsers = allUsers.filter((user) => !user.isGM && token.actor?.testUserPermission?.(user, "OWNER"));
-                const ownerUser = ownerUsers.find((user) => user.active) ?? ownerUsers[0] ?? null;
-                const ownerAmbiguous = !legacyUserId && !sheetUserId && !validPrimaryGm && ownerUsers.length > 1;
+                const ownerUsers = allUsers
+                    .filter((user) => !user.isGM && token.actor?.testUserPermission?.(user, "OWNER"))
+                    .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+                const ownerUser = ownerUsers[0] ?? null;
+                const ownerAmbiguous = !legacyUserId && !sheetUserId && ownerUsers.length > 1;
                 if (ownerAmbiguous) {
                     ambiguousOwnerCount += 1;
                     warningItems.push({
@@ -124,18 +126,17 @@ export function registerSettingsMenu() {
                         }),
                     });
                 }
-                const standardUserId = legacyUserId || sheetUserId || validPrimaryGm?.id || ownerUser?.id || null;
+                const standardUserId = legacyUserId || sheetUserId || ownerUser?.id || null;
                 const standardSource = legacyUserId || sheetUserId
                     ? "sheet"
-                    : validPrimaryGm
-                        ? "primary-gm"
-                        : ownerUser
-                            ? "owner"
-                            : "unassigned";
+                    : ownerUser
+                        ? "owner"
+                        : "unassigned";
                 const effectiveUserId = directUserId || standardUserId;
                 const source = directUserId ? "direct" : standardSource;
                 const effectiveUser = allUsers.find((user) => user.id === effectiveUserId) ?? null;
                 const standardUser = allUsers.find((user) => user.id === standardUserId) ?? null;
+                const runtimeController = getRuntimeController(token);
                 return {
                     uuid: token.uuid,
                     actorUuid,
@@ -149,6 +150,10 @@ export function registerSettingsMenu() {
                     directUserId,
                     isDirect: Boolean(directUserId),
                     effectiveUserName: effectiveUser?.name ?? t("SMOOTHER_FIGHT.Settings.Unassigned"),
+                    hasEffectiveUser: Boolean(effectiveUser),
+                    effectiveUserActive: Boolean(effectiveUser?.active),
+                    runtimeControllerName: runtimeController?.name ?? t("SMOOTHER_FIGHT.Settings.NoRuntimeController"),
+                    usesRuntimeFallback: Boolean(effectiveUser && runtimeController?.id !== effectiveUser.id),
                     sourceLabel: assignmentSourceLabel(source),
                     sourceClass: `is-${source}`,
                     sourceIcon: assignmentSourceIcon(source),
@@ -163,6 +168,7 @@ export function registerSettingsMenu() {
                         id: user.id,
                         name: user.name,
                         isGM: user.isGM,
+                        active: user.active,
                         selected: directUserId === user.id,
                     })),
                 };
@@ -173,6 +179,7 @@ export function registerSettingsMenu() {
             const gms = allUsers.filter((user) => user.isGM).map((user) => ({
                 id: user.id,
                 name: user.name,
+                active: user.active,
                 selected: user.id === primaryGmId,
             }));
             const actors = Array.from(game.actors ?? [])
@@ -191,6 +198,7 @@ export function registerSettingsMenu() {
                         id: user.id,
                         name: user.name,
                         isGM: user.isGM,
+                        active: user.active,
                         selected: displayActorLinks[actor.uuid] === user.id,
                     })),
                 }));
@@ -221,7 +229,6 @@ export function registerSettingsMenu() {
                     if (token.directUserId) return token.directUserId === user.id;
                     const actorUserId = displayActorLinks[token.actorUuid];
                     if (actorUserId) return actorUserId === user.id;
-                    if (validPrimaryGm) return validPrimaryGm.id === user.id;
                     return token.ownerUserId === user.id;
                 }).length,
             }));
@@ -295,7 +302,39 @@ export function registerSettingsMenu() {
             const primaryGmSelect = this.element.querySelector('[data-role="primary-gm"]');
             const actorAssignmentSelects = () => Array.from(this.element.querySelectorAll('select[data-actor-uuid]'));
             const tokenAssignmentSelects = () => Array.from(this.element.querySelectorAll('select[data-token-uuid]'));
-            const userName = (userId) => Array.from(game.users ?? []).find((user) => user.id === userId)?.name ?? t("SMOOTHER_FIGHT.Settings.Unassigned");
+            const userById = new Map(Array.from(game.users ?? [], (user) => [user.id, user]));
+            const userName = (userId) => userById.get(userId)?.name ?? t("SMOOTHER_FIGHT.Settings.Unassigned");
+            const runtimeControllerId = (assignedUserId) => {
+                const assignedUser = userById.get(assignedUserId);
+                if (assignedUser?.active) return assignedUser.id;
+                const primaryGm = userById.get(primaryGmSelect?.value ?? "");
+                if (primaryGm?.isGM && primaryGm.active) return primaryGm.id;
+                return Array.from(userById.values())
+                    .filter((user) => user.isGM && user.active)
+                    .sort((left, right) => String(left.id).localeCompare(String(right.id)))[0]?.id ?? "";
+            };
+            const refreshControllerStatus = (row, assignedUserId) => {
+                const assignedUser = userById.get(assignedUserId);
+                const runtimeUserId = runtimeControllerId(assignedUserId);
+                const effectiveUser = row.querySelector('[data-role="token-effective-user"]');
+                const runtimeUser = row.querySelector('[data-role="token-runtime-controller"]');
+                if (effectiveUser) {
+                    effectiveUser.textContent = assignedUser
+                        ? `${assignedUser.name}${assignedUser.active ? "" : ` – ${t("SMOOTHER_FIGHT.Settings.Offline")}`}`
+                        : t("SMOOTHER_FIGHT.Settings.Unassigned");
+                }
+                if (runtimeUser) {
+                    const usesFallback = Boolean(assignedUser && runtimeUserId !== assignedUser.id);
+                    runtimeUser.hidden = !usesFallback;
+                    runtimeUser.textContent = usesFallback
+                        ? t("SMOOTHER_FIGHT.Settings.CurrentController", {
+                            controller: runtimeUserId
+                                ? userName(runtimeUserId)
+                                : t("SMOOTHER_FIGHT.Settings.NoRuntimeController"),
+                        })
+                        : "";
+                }
+            };
             const markDirty = () => this.element.querySelector('[data-role="assignment-dirty"]')?.removeAttribute("hidden");
             const cleanupTokenUuids = new Set(context.cleanupTokenUuids ?? []);
             const refreshWarningCount = () => {
@@ -383,9 +422,8 @@ export function registerSettingsMenu() {
                     }
                     const actorUserId = actorAssignmentSelects()
                         .find((select) => select.dataset.actorUuid === tokenRow.dataset.actorUuid)?.value ?? "";
-                    const primaryGmId = primaryGmSelect?.value ?? "";
-                    const standardUserId = actorUserId || primaryGmId || tokenRow.dataset.ownerUserId || "";
-                    const standardSource = actorUserId ? "sheet" : primaryGmId ? "primary-gm" : tokenRow.dataset.ownerUserId ? "owner" : "unassigned";
+                    const standardUserId = actorUserId || tokenRow.dataset.ownerUserId || "";
+                    const standardSource = actorUserId ? "sheet" : tokenRow.dataset.ownerUserId ? "owner" : "unassigned";
                     const directUserId = tokenSelect.value;
                     const effectiveUserId = directUserId || standardUserId;
                     const source = directUserId ? "direct" : standardSource;
@@ -432,19 +470,17 @@ export function registerSettingsMenu() {
                 }
             };
             const refreshTokenRows = () => {
-                const primaryGmId = primaryGmSelect?.value ?? "";
                 for (const select of tokenAssignmentSelects()) {
                     const row = select.closest("[data-token-row]");
                     if (!row) continue;
                     const actorOwnerId = actorAssignmentSelects().find((candidate) => candidate.dataset.actorUuid === row.dataset.actorUuid)?.value ?? "";
-                    const standardUserId = actorOwnerId || primaryGmId || row.dataset.ownerUserId || "";
-                    const standardSource = actorOwnerId ? "sheet" : primaryGmId ? "primary-gm" : row.dataset.ownerUserId ? "owner" : "unassigned";
+                    const standardUserId = actorOwnerId || row.dataset.ownerUserId || "";
+                    const standardSource = actorOwnerId ? "sheet" : row.dataset.ownerUserId ? "owner" : "unassigned";
                     const directUserId = select.value;
                     const source = directUserId ? "direct" : standardSource;
                     const sourceBadge = row.querySelector('[data-role="token-source"]');
                     const sourceIcon = sourceBadge?.querySelector('[data-role="token-source-icon"]');
                     const sourceLabel = sourceBadge?.querySelector('[data-role="token-source-label"]');
-                    const effectiveUser = row.querySelector('[data-role="token-effective-user"]');
                     const standardOption = select.querySelector('option[value=""]');
                     if (standardOption) standardOption.textContent = t("SMOOTHER_FIGHT.Settings.StandardAssignment", {
                         owner: userName(standardUserId),
@@ -455,7 +491,7 @@ export function registerSettingsMenu() {
                     }
                     if (sourceIcon) sourceIcon.className = assignmentSourceIcon(source);
                     if (sourceLabel) sourceLabel.textContent = assignmentSourceLabel(source);
-                    if (effectiveUser) effectiveUser.textContent = userName(directUserId || standardUserId);
+                    refreshControllerStatus(row, directUserId || standardUserId);
                     row.dataset.isDirect = String(Boolean(directUserId));
                 }
                 refreshOverviewAssignments();
@@ -487,11 +523,10 @@ export function registerSettingsMenu() {
                 const assignedSheets = actorAssignmentSelects().filter((select) => select.value).length;
                 const directTokens = tokenAssignmentSelects().filter((select) => select.value).length;
                 const effectiveTokenCounts = new Map(Array.from(game.users ?? [], (user) => [user.id, 0]));
-                const primaryGmId = primaryGmSelect?.value ?? "";
                 for (const select of tokenAssignmentSelects()) {
                     const row = select.closest("[data-token-row]");
                     const actorUserId = actorAssignmentSelects().find((candidate) => candidate.dataset.actorUuid === row?.dataset.actorUuid)?.value ?? "";
-                    const userId = select.value || actorUserId || primaryGmId || row?.dataset.ownerUserId || "";
+                    const userId = select.value || actorUserId || row?.dataset.ownerUserId || "";
                     if (userId) effectiveTokenCounts.set(userId, (effectiveTokenCounts.get(userId) ?? 0) + 1);
                 }
                 const assignedSheetCount = this.element.querySelector('[data-role="assigned-sheet-count"]');

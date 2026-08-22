@@ -18,9 +18,14 @@ export function mayUseRemoteChatActions(isGm, ownsSpeakerActor, isMessageAuthor,
     return Boolean(isGm || ownsSpeakerActor || isMessageAuthor || isAssignedSpeaker);
 }
 
-export function isPlayersTurn({ isGm = false, userId = null, linkedUserId = null, ownsActor = false } = {}) {
+export function isPlayersTurn({
+    isGm = false,
+    userId = null,
+    controllerUserId = null,
+    ownsActor = false,
+} = {}) {
     if (!userId) return false;
-    if (linkedUserId) return linkedUserId === userId;
+    if (controllerUserId) return controllerUserId === userId;
     return Boolean(!isGm && ownsActor);
 }
 

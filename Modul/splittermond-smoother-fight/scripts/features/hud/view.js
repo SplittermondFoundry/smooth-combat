@@ -39,10 +39,10 @@ import {
 
 export async function buildHud(context) {
     if (context.concealed) return buildConcealedHud(context);
-    const { combat, combatant, actor, token, linkedUser, target, targets } = context;
-    const canAct = Boolean(game.user.isGM || actor.isOwner);
+    const { combat, combatant, actor, token, assignedUser, runtimeController, target, targets } = context;
+    const canAct = Boolean(game.user.isGM || (runtimeController?.id === game.user?.id && actor.isOwner));
     const tick = combat.currentTick ?? Math.round(Number(combatant.initiative) || 0);
-    const userName = linkedUser?.name ?? t("SMOOTHER_FIGHT.HUD.AutomaticOwner");
+    const userName = runtimeController?.name ?? t("SMOOTHER_FIGHT.HUD.NoRuntimeController");
     const targetName = target?.name ?? target?.actor?.name ?? "–";
     const additionalTargetCount = Math.max(0, targets.length - 1);
     const targetLine = target
@@ -54,11 +54,17 @@ export async function buildHud(context) {
     const currentPlayersTurn = isPlayersTurn({
         isGm: game.user?.isGM,
         userId: game.user?.id,
-        linkedUserId: linkedUser?.id,
+        controllerUserId: runtimeController?.id,
         ownsActor: actor.isOwner,
     });
     const turnNotice = currentPlayersTurn
         ? `<span class="sf-your-turn"><i class="fa-solid fa-bolt"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YourTurn"))}</span>`
+        : "";
+    const controllerNotice = assignedUser && runtimeController?.id !== assignedUser.id
+        ? `<span class="sf-runtime-controller"><i class="fa-solid fa-user-shield"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.RuntimeControllerFor", {
+            controller: runtimeController?.name ?? t("SMOOTHER_FIGHT.HUD.NoRuntimeController"),
+            assigned: assignedUser.name,
+        }))}</span>`
         : "";
     const shellClass = currentPlayersTurn ? "sf-shell is-current-user-turn" : "sf-shell";
 
@@ -71,6 +77,7 @@ export async function buildHud(context) {
                         <strong>${escapeHtml(actor.name)}</strong>
                         <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
                         ${turnNotice}
+                        ${controllerNotice}
                         <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
                         ${buildThemeToggle()}
                         ${hudToggle}
@@ -89,6 +96,7 @@ export async function buildHud(context) {
                     <strong>${escapeHtml(actor.name)}</strong>
                     <span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CurrentTick", { tick }))}</span>
                     ${turnNotice}
+                    ${controllerNotice}
                     <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
                     ${buildThemeToggle()}
                     ${hudToggle}
@@ -372,9 +380,12 @@ function buildPersonalControls(activeContext) {
     const context = getPersonalHudContext(activeContext);
     const picker = candidates.length > 1 ? buildPersonalCombatantPicker(candidates, context) : "";
     if (!context) {
+        const note = activeContext.runtimeController
+            ? t("SMOOTHER_FIGHT.HUD.SelectOwnedToken")
+            : t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable");
         return `<div class="sf-personal-controls sf-personal-selection-required">
             ${picker ? `<nav class="sf-actions sf-personal-skill-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.ChooseOwnCombatant"))}">${picker}</nav>` : ""}
-            <p class="sf-owner-note"><i class="fa-solid fa-arrow-pointer"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SelectOwnedToken"))}</p>
+            <p class="sf-owner-note"><i class="fa-solid fa-arrow-pointer"></i>${escapeHtml(note)}</p>
         </div>`;
     }
     const attributes = `data-sf-context-combatant-id="${escapeAttr(context.combatant.id)}" data-sf-context-actor-id="${escapeAttr(context.actor.id)}"`;

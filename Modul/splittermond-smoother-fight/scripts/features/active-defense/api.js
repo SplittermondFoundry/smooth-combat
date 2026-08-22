@@ -4,7 +4,6 @@ export {
     beginDefenderDefense,
     canUserSubmitDefense,
     claimPendingDefenseForMessage,
-    getActiveGm,
     getControlledTokenDocument,
     getEligibleDefenderChoices,
     isDefenseMessageProcessing,

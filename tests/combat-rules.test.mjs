@@ -597,11 +597,11 @@ test("remote chat actions match Splittermond's owner, author, and GM permissions
 });
 
 test("the assigned user receives the turn highlight, including an assigned GM", () => {
-    assert.equal(isPlayersTurn({ userId: "player", linkedUserId: "player" }), true);
-    assert.equal(isPlayersTurn({ userId: "player", linkedUserId: "other", ownsActor: true }), false);
+    assert.equal(isPlayersTurn({ userId: "player", controllerUserId: "player" }), true);
+    assert.equal(isPlayersTurn({ userId: "player", controllerUserId: "other", ownsActor: true }), false);
     assert.equal(isPlayersTurn({ userId: "player", ownsActor: true }), true);
-    assert.equal(isPlayersTurn({ isGm: true, userId: "gm", linkedUserId: "gm" }), true);
-    assert.equal(isPlayersTurn({ isGm: true, userId: "gm", linkedUserId: "player", ownsActor: true }), false);
+    assert.equal(isPlayersTurn({ isGm: true, userId: "gm", controllerUserId: "gm" }), true);
+    assert.equal(isPlayersTurn({ isGm: true, userId: "gm", controllerUserId: "player", ownsActor: true }), false);
     assert.equal(isPlayersTurn({ isGm: true, userId: "gm", ownsActor: true }), false);
 });
 

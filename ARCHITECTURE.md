@@ -65,6 +65,18 @@ Es gibt keinen gemeinsamen globalen Laufzeitcontainer. Flüchtiger Zustand liegt
 
 Neue Zustände gehören in das verantwortliche Feature. Eine `state.js` darf ausschließlich innerhalb ihres besitzenden Features importiert werden. Andere Features, Core und Composition Root lesen oder verändern diesen Zustand nur über benannte Operationen der öffentlichen Feature-API.
 
+## Benutzerzuständigkeit und Systemziele
+
+Das Feature `assignments` trennt drei Begriffe strikt:
+
+- Der **Assigned User** stammt dauerhaft aus direkter Token-Zuordnung, Bogen-Zuordnung oder deterministischem Foundry-OWNER-Fallback. Anwesenheit beeinflusst diese Auflösung nicht.
+- Der **Runtime Controller** ist der aktive Assigned User oder ersatzweise der aktive konfigurierte Primary GM beziehungsweise deterministisch der erste andere aktive GM. Dieser Fallback wird niemals gespeichert.
+- Der **Current Turn Controller** ist der Runtime Controller des aktuellen Combatants und alleinige Quelle für persönliche Zughinweise und Feedback.
+
+HUD, Chat, Targeting, Angriffe, Zauber und Aktive Abwehr verwenden diese Resolver über die Service-Fassade. Eigene Online-/Fallback-Varianten in einzelnen Features sind nicht zulässig.
+
+Splittermond 14.3 wertet zielabhängige Würfe über das erste Element von `game.user.targets` aus und bietet der Actor-Roll-API keinen Targetparameter. `targeting.withTemporarySystemTargets(...)` ist deshalb die einzige Stelle, die für einen Systemwurf den Targetzustand des ausführenden Clients temporär ersetzt und anschließend auch im Fehlerfall wiederherstellt.
+
 ## Stabile Laufzeitverträge
 
 Folgende Strukturen sind persistierte oder externe Verträge und dürfen nicht beiläufig umbenannt oder umgeformt werden:

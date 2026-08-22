@@ -7,8 +7,6 @@
             <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
             <span class="is-sheet"><i class="fa-solid fa-address-card"></i> {{localize "SMOOTHER_FIGHT.Settings.SheetAssignment"}}</span>
             <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
-            <span class="is-primary-gm"><i class="fa-solid fa-user-tie"></i> {{localize "SMOOTHER_FIGHT.Settings.PrimaryGmAssignment"}}</span>
-            <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
             <span class="is-owner"><i class="fa-solid fa-key"></i> {{localize "SMOOTHER_FIGHT.Settings.OwnerAssignment"}}</span>
         </div>
     </header>
@@ -22,7 +20,7 @@
         <select id="smoother-fight-primary-gm" data-role="primary-gm">
             <option value="">{{localize "SMOOTHER_FIGHT.Settings.NoPrimaryGm"}}</option>
             {{#each gms}}
-                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>
+                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#unless this.active}} – {{localize "SMOOTHER_FIGHT.Settings.Offline"}}{{/unless}}</option>
             {{/each}}
         </select>
     </section>
@@ -150,7 +148,7 @@
                         <select data-overview-actor-select data-overview-actor-uuid="{{this.uuid}}">
                             <option value="">{{localize "SMOOTHER_FIGHT.Settings.NoSheetAssignment"}}</option>
                             {{#each this.users}}
-                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}</option>
+                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}{{#unless this.active}} – {{localize "SMOOTHER_FIGHT.Settings.Offline"}}{{/unless}}</option>
                             {{/each}}
                         </select>
                     </article>
@@ -166,7 +164,7 @@
                         <select data-overview-token-select data-overview-token-uuid="{{this.uuid}}">
                             <option value="">{{this.standardLabel}}</option>
                             {{#each this.users}}
-                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}</option>
+                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}{{#unless this.active}} – {{localize "SMOOTHER_FIGHT.Settings.Offline"}}{{/unless}}</option>
                             {{/each}}
                         </select>
                     </article>
@@ -180,7 +178,7 @@
                         <select data-overview-token-select data-overview-token-uuid="{{this.uuid}}">
                             <option value="">{{this.standardLabel}}</option>
                             {{#each this.users}}
-                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}</option>
+                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}{{#unless this.active}} – {{localize "SMOOTHER_FIGHT.Settings.Offline"}}{{/unless}}</option>
                             {{/each}}
                         </select>
                     </article>
@@ -221,7 +219,7 @@
                                         <select data-actor-uuid="{{this.uuid}}">
                                             <option value="">{{localize "SMOOTHER_FIGHT.Settings.NoSheetAssignment"}}</option>
                                             {{#each this.users}}
-                                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}</option>
+                                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}{{#unless this.active}} – {{localize "SMOOTHER_FIGHT.Settings.Offline"}}{{/unless}}</option>
                                             {{/each}}
                                         </select>
                                     </label>
@@ -256,7 +254,7 @@
             <div class="sf-token-list-heading">
                 <span>{{localize "SMOOTHER_FIGHT.Settings.Token"}}</span>
                 <span>{{localize "SMOOTHER_FIGHT.Settings.SceneAndSheet"}}</span>
-                <span>{{localize "SMOOTHER_FIGHT.Settings.EffectiveUser"}}</span>
+                <span>{{localize "SMOOTHER_FIGHT.Settings.AssignedUser"}}</span>
                 <span>{{localize "SMOOTHER_FIGHT.Settings.Source"}}</span>
                 <span>{{localize "SMOOTHER_FIGHT.Settings.DirectException"}}</span>
             </div>
@@ -268,12 +266,15 @@
                             <strong title="{{this.displayName}}">{{this.displayName}}</strong>
                         </span>
                         <span class="sf-token-context"><strong title="{{this.sceneName}}">{{this.sceneName}}</strong><small title="{{this.actorName}}">{{this.actorName}}</small></span>
-                        <strong data-role="token-effective-user">{{this.effectiveUserName}}</strong>
+                        <span class="sf-token-controller-status" data-role="token-controller-status">
+                            <strong data-role="token-effective-user">{{this.effectiveUserName}}{{#if this.hasEffectiveUser}}{{#unless this.effectiveUserActive}} – {{localize "SMOOTHER_FIGHT.Settings.Offline"}}{{/unless}}{{/if}}</strong>
+                            {{#if this.usesRuntimeFallback}}<small data-role="token-runtime-controller">{{localize "SMOOTHER_FIGHT.Settings.CurrentController" controller=this.runtimeControllerName}}</small>{{else}}<small data-role="token-runtime-controller" hidden></small>{{/if}}
+                        </span>
                         <span class="sf-assignment-source {{this.sourceClass}}" data-role="token-source"><i class="{{this.sourceIcon}}" data-role="token-source-icon"></i><span data-role="token-source-label">{{this.sourceLabel}}</span></span>
                         <select data-token-uuid="{{this.uuid}}" data-actor-uuid="{{this.actorUuid}}" data-actor-id="{{this.actorId}}" data-token-label="{{this.name}}">
                             <option value="">{{this.standardLabel}}</option>
                             {{#each this.users}}
-                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}</option>
+                                <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}{{#if this.isGM}} (GM){{/if}}{{#unless this.active}} – {{localize "SMOOTHER_FIGHT.Settings.Offline"}}{{/unless}}</option>
                             {{/each}}
                         </select>
                         {{#if this.ownerAmbiguous}}<small class="sf-token-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "SMOOTHER_FIGHT.Settings.AmbiguousOwnerShort"}}</small>{{/if}}

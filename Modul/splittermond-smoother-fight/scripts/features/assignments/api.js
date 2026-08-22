@@ -1,6 +1,9 @@
 export {
+    getActivePrimaryGm,
+    getAssignedUser,
+    getCurrentTurnController,
     getExplicitTokenOwnerId,
-    getLinkedUser,
+    getRuntimeController,
     isCurrentUserTarget,
     renderTokenOwnerControl,
 } from "./assignments.js";

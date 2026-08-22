@@ -147,6 +147,15 @@
     font-size: 9px;
 }
 
+#splittermond-smoother-fight-hud .sf-runtime-controller {
+    flex: 0 1 auto;
+    overflow: hidden;
+    color: var(--sf-gold-bright);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 #splittermond-smoother-fight-hud .sf-hud-toggle {
     flex: 0 0 27px;
     width: 27px;

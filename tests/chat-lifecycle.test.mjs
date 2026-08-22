@@ -8,7 +8,8 @@ const harness = {
     calls: [],
     contexts: new WeakMap(),
     fumble: false,
-    linkedUser: null,
+    assignedUser: null,
+    runtimeController: null,
     primaryTargetUuid: null,
     pendingKinds: new Map(),
 };
@@ -28,9 +29,13 @@ configureServices({
         record("clearPendingOffenseKind", actorId);
         harness.pendingKinds.delete(actorId);
     },
-    getLinkedUser: (combatant, actor) => {
-        record("getLinkedUser", combatant, actor);
-        return harness.linkedUser;
+    getAssignedUser: (combatant) => {
+        record("getAssignedUser", combatant);
+        return harness.assignedUser;
+    },
+    getRuntimeController: (combatant) => {
+        record("getRuntimeController", combatant);
+        return harness.runtimeController;
     },
     getMessageContext: (message) => harness.contexts.get(message) ?? null,
     getPendingOffenseKind: (actorId) => {
@@ -114,7 +119,8 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
         name: "Ziel B",
         actor: { uuid: "Actor.target-b" },
     };
-    const linkedUser = { id: "linked-user", targets: new Set([targetA]) };
+    const assignedUser = { id: "assigned-user", targets: new Set([targetA]), active: true };
+    const runtimeController = { id: "runtime-controller", targets: assignedUser.targets, active: true };
     const combatant = {
         id: "combatant-attacker",
         actorId: actor.id,
@@ -136,7 +142,8 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
     };
     const hooks = createHooksHarness();
 
-    harness.linkedUser = linkedUser;
+    harness.assignedUser = assignedUser;
+    harness.runtimeController = runtimeController;
     harness.primaryTargetUuid = targetA.uuid;
     if (pendingKind) harness.pendingKinds.set(actor.id, pendingKind);
     globalThis.game = {
@@ -147,7 +154,7 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
     };
     globalThis.Hooks = hooks.api;
 
-    return { actor, attackerToken, combatant, hooks, linkedUser, message, targetA, targetB };
+    return { actor, attackerToken, assignedUser, combatant, hooks, message, runtimeController, targetA, targetB };
 }
 
 async function waitForDiceHook(hooks) {
@@ -180,7 +187,7 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
 
     await t.test("A and B remain selected while B is frozen as the primary target", async () => {
         const fixture = createFixture();
-        fixture.linkedUser.targets = new Set([fixture.targetA, fixture.targetB]);
+        fixture.runtimeController.targets = new Set([fixture.targetA, fixture.targetB]);
         harness.primaryTargetUuid = fixture.targetB.uuid;
         const processing = onCreateChatMessage(fixture.message);
 
@@ -204,7 +211,8 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
             targetActorUuids: [fixture.targetA.actor.uuid, fixture.targetB.actor.uuid],
             targetNames: [fixture.targetA.name, fixture.targetB.name],
             actionKind: null,
-            linkedUserId: fixture.linkedUser.id,
+            assignedUserId: fixture.assignedUser.id,
+            runtimeControllerId: fixture.runtimeController.id,
             createdAt: context.createdAt,
         });
         assert.equal(callsOf("getTargetSelectionForUser").length, 1);

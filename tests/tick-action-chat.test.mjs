@@ -10,6 +10,7 @@ import {
     performAttack,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
 import { services } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
+import { withTemporarySystemTargets } from "../Modul/splittermond-smoother-fight/scripts/features/targeting/targeting.js";
 
 const german = JSON.parse(fs.readFileSync(
     new URL("../Modul/splittermond-smoother-fight/lang/de.json", import.meta.url),
@@ -98,12 +99,25 @@ test("single-target attack mechanics use the primary target without losing secon
         },
         setFlag: async () => {},
     };
-    globalThis.game = { user: { targets: systemTargets } };
+    const gm = { id: "primary-gm", isGM: true, active: true, targets: systemTargets };
+    const offlinePlayer = { id: "offline-player", isGM: false, active: false };
+    globalThis.game = { user: gm };
     globalThis.canvas = { tokens: { get: () => null } };
+    globalThis.ui = { notifications: { warn: () => assert.fail("system target should resolve") } };
     services.scheduleRender = () => {};
+    services.withTemporarySystemTargets = withTemporarySystemTargets;
+    services.getRuntimeController = () => game.user;
+    services.getTargetSelectionForUser = () => ({
+        target: targetB,
+        targets: [targetA, targetB],
+        primaryTargetTokenUuid: targetB.uuid,
+        primaryTargetActorUuid: targetB.actor.uuid,
+    });
 
     await performAttack({
         actor,
+        assignedUser: offlinePlayer,
+        runtimeController: gm,
         target: targetB,
         targets: [targetA, targetB],
         primaryTargetTokenUuid: targetB.uuid,
@@ -113,6 +127,23 @@ test("single-target attack mechanics use the primary target without losing secon
     assert.deepEqual([...systemTargets], [tokenObjectA, tokenObjectB]);
     assert.deepEqual(getPendingOffenseKind(actor.id).targetTokenUuids, [targetA.uuid, targetB.uuid]);
     assert.equal(getPendingOffenseKind(actor.id).primaryTargetTokenUuid, targetB.uuid);
+});
+
+test("temporary Splittermond system targets are restored when a roll fails", async () => {
+    const original = { document: { uuid: "Scene.scene.Token.original" } };
+    const primary = { document: { uuid: "Scene.scene.Token.primary" } };
+    const systemTargets = new Set([original]);
+    globalThis.game = { user: { targets: systemTargets } };
+    globalThis.ui = { notifications: { warn: () => assert.fail("target object is available") } };
+
+    await assert.rejects(
+        withTemporarySystemTargets([primary], async () => {
+            assert.deepEqual([...systemTargets], [primary]);
+            throw new Error("roll failed");
+        }),
+        /roll failed/u,
+    );
+    assert.deepEqual([...systemTargets], [original]);
 });
 
 test("clickable tick actions create a public chat card for the acting token", async () => {

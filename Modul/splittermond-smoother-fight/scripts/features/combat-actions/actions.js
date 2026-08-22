@@ -8,7 +8,6 @@ import {
     isTargetDependentDifficulty,
     toggleFavoriteSkillId,
     visibleCanvasCenterY,
-    withTemporarySetValues,
 } from "../../combat-rules.js";
 
 import {
@@ -26,6 +25,8 @@ import {
 } from "../../shared/values.js";
 
 export async function performAttack(context, attackId) {
+    context = liveRuntimeActionContext(context);
+    if (!context) return;
     const attack = context.actor.attacks?.find((candidate) => candidate.id === attackId);
     if (!attack) return;
     const preparedAttackId = context.actor.getFlag?.("splittermond", "preparedAttack");
@@ -41,7 +42,7 @@ export async function performAttack(context, attackId) {
             ...snapshotTargetContext(context),
         });
         try {
-            const success = await withPrimarySystemTarget(context, () => context.actor.rollAttack(attackId));
+            const success = await services.withTemporarySystemTargets([context.target], () => context.actor.rollAttack(attackId));
             if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
         } catch (error) {
             combatActionState.pendingOffenseKinds.delete(context.actor.id);
@@ -97,6 +98,8 @@ export async function toggleFavoriteSkill(context, skillId) {
 }
 
 export async function performSpell(context, spellId) {
+    context = liveRuntimeActionContext(context);
+    if (!context) return;
     const spell = context.actor.spells?.find((candidate) => candidate.id === spellId);
     if (!spell) return;
     const prepared = context.actor.getFlag("splittermond", "preparedSpell") === spellId;
@@ -112,7 +115,7 @@ export async function performSpell(context, spellId) {
             ...snapshotTargetContext(context),
         });
         try {
-            const success = await withPrimarySystemTarget(context, () => context.actor.rollSpell(spellId));
+            const success = await services.withTemporarySystemTargets([context.target], () => context.actor.rollSpell(spellId));
             if (success) await context.actor.setFlag("splittermond", "preparedSpell", null);
         } catch (error) {
             combatActionState.pendingOffenseKinds.delete(context.actor.id);
@@ -175,15 +178,17 @@ function snapshotTargetContext(context) {
     };
 }
 
-async function withPrimarySystemTarget(context, callback) {
-    const targetSet = game.user?.targets;
-    const primaryUuid = context.primaryTargetTokenUuid ?? context.target?.uuid;
-    if (!primaryUuid || !targetSet?.clear || !targetSet?.add) return callback();
-    const primaryTargetObject = Array.from(targetSet).find((target) =>
-        (target?.document?.uuid ?? target?.uuid) === primaryUuid
-    ) ?? context.target?.object ?? canvas?.tokens?.get?.(context.target?.id);
-    if (!primaryTargetObject) return callback();
-    return withTemporarySetValues(targetSet, [primaryTargetObject], callback);
+function liveRuntimeActionContext(context) {
+    const runtimeController = services.getRuntimeController(context.combatant ?? context.actor);
+    if (!runtimeController) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable"));
+        return null;
+    }
+    return {
+        ...context,
+        runtimeController,
+        ...services.getTargetSelectionForUser(runtimeController),
+    };
 }
 
 export async function addCombatTicks(context, requestedTicks) {
@@ -325,7 +330,12 @@ export async function toggleEquipped(actor, itemId) {
 }
 
 export async function requireOwner(context, callback) {
-    if (!(game.user.isGM || context.actor.isOwner)) {
+    const runtimeController = services.getRuntimeController(context.combatant ?? context.actor);
+    if (!runtimeController) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable"));
+        return;
+    }
+    if (!(game.user.isGM || (runtimeController.id === game.user.id && context.actor.isOwner))) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.NoOwner"));
         return;
     }

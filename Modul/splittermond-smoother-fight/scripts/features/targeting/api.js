@@ -14,4 +14,5 @@ export {
     setLocalTarget,
     setTargetFromQuickMenu,
     tokenUuid,
+    withTemporarySystemTargets,
 } from "./targeting.js";

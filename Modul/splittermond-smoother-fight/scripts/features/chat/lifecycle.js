@@ -114,8 +114,9 @@ async function attachCombatContext(message) {
         (message.speaker?.actor && combatant.actorId === message.speaker.actor)
     );
     const actor = speakerCombatant?.actor ?? (message.speaker?.actor ? game.actors.get(message.speaker.actor) : null);
-    const linkedUser = speakerCombatant && actor ? services.getLinkedUser(speakerCombatant, actor) : game.user;
-    const targetSelection = services.getTargetSelectionForUser(linkedUser);
+    const assignedUser = speakerCombatant && actor ? services.getAssignedUser(speakerCombatant) : game.user;
+    const runtimeController = speakerCombatant && actor ? services.getRuntimeController(speakerCombatant) : game.user;
+    const targetSelection = services.getTargetSelectionForUser(runtimeController);
     const pendingKind = services.getPendingOffenseKind(actor?.id);
     if (pendingKind) services.clearPendingOffenseKind(actor?.id);
     const targetContext = combatTargetContext(
@@ -129,7 +130,8 @@ async function attachCombatContext(message) {
         attackerActorUuid: actor?.uuid ?? null,
         ...targetContext,
         actionKind: pendingKind?.expiresAt >= createdAt ? pendingKind.kind : null,
-        linkedUserId: linkedUser?.id ?? game.user.id,
+        assignedUserId: assignedUser?.id ?? null,
+        runtimeControllerId: runtimeController?.id ?? game.user.id,
         createdAt,
     };
     await services.safeSetFlag(message, "context", context);
