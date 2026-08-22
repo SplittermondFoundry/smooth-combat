@@ -1,0 +1,79 @@
+name: Publish Foundry Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+
+      - name: Run test suite
+        run: npm run check
+
+      - name: Validate manifest and create module archive
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          module_root="Modul/splittermond-smoother-fight"
+          manifest_file="${module_root}/module.json"
+          module_id="$(jq -r '.id' "${manifest_file}")"
+          version="$(jq -r '.version' "${manifest_file}")"
+          expected_tag="v${version}"
+          archive="${module_id}-${expected_tag}.zip"
+          expected_manifest="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/module.json"
+          expected_download="https://github.com/${GITHUB_REPOSITORY}/releases/download/${expected_tag}/${archive}"
+
+          test "${GITHUB_REF_NAME}" = "${expected_tag}" || {
+            echo "Tag ${GITHUB_REF_NAME} does not match module version ${version}." >&2
+            exit 1
+          }
+          test "$(jq -r '.manifest' "${manifest_file}")" = "${expected_manifest}" || {
+            echo "Manifest URL does not match this repository." >&2
+            exit 1
+          }
+          test "$(jq -r '.download' "${manifest_file}")" = "${expected_download}" || {
+            echo "Download URL does not match tag and archive name." >&2
+            exit 1
+          }
+
+          (
+            cd "${module_root}"
+            zip -r "${GITHUB_WORKSPACE}/${archive}" \
+              assets \
+              lang \
+              scripts \
+              styles \
+              templates \
+              LICENSE \
+              module.json \
+              README.md
+          )
+
+          echo "archive=${archive}" >> "${GITHUB_OUTPUT}"
+          echo "manifest_file=${manifest_file}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          MANIFEST_FILE: ${{ steps.package.outputs.manifest_file }}
+          VERSION: ${{ steps.package.outputs.version }}
+        shell: bash
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "${ARCHIVE}" \
+            "${MANIFEST_FILE}" \
+            --verify-tag \
+            --title "Splittermond Smoother Fight ${VERSION}" \
+            --notes-file RELEASE_NOTES.md
