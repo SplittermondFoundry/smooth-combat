@@ -23,6 +23,7 @@ import {
     isDamageSelectionAction,
     isDefenderMasteryName,
     isPlayersTurn,
+    isRedundantDeletedTokenLink,
     isTargetDependentDifficulty,
     isOffensiveCombatMessage,
     linkMatchesCombatant,
@@ -31,6 +32,7 @@ import {
     mayViewTargetDefenses,
     mayViewTargetDifficulty,
     mergeActiveDefenseCheck,
+    normalizeAudioFeedbackProfile,
     normalizeActorUserLinks,
     normalizeFavoriteSkillIds,
     normalizeSearchText,
@@ -40,6 +42,7 @@ import {
     parseStatusEffectLabel,
     recalculateAttackReport,
     reorderFavoriteSkillIds,
+    replaceManagedUserTokenLinks,
     requiresRollManagementPermission,
     resolveCombatEventOpenIds,
     selectPersonalCombatant,
@@ -77,6 +80,29 @@ test("successful active defense increases the base defense by 1 + EG + Defensiv"
 
 test("failed active defense leaves the base defense unchanged", () => {
     assert.equal(calculateActiveDefenseValue({ baseDefense: 20, succeeded: false }, 3), 20);
+});
+
+test("audio feedback profiles preserve valid personal and custom world settings", () => {
+    const defaults = {
+        defense: { enabled: true, sound: "shield" },
+        turn: { enabled: true, sound: "turn" },
+    };
+    const profile = normalizeAudioFeedbackProfile({
+        version: 1,
+        events: {
+            defense: { enabled: false, sound: "custom", customSound: "  sounds/defense.ogg  " },
+            turn: { enabled: true, sound: "unknown" },
+            removedEvent: { enabled: true, sound: "custom", customSound: "ignored.ogg" },
+        },
+    }, defaults, ["shield", "turn", "custom"]);
+
+    assert.deepEqual(profile, {
+        version: 1,
+        events: {
+            defense: { enabled: false, sound: "custom", customSound: "sounds/defense.ogg" },
+            turn: { enabled: true, sound: "turn", customSound: "" },
+        },
+    });
 });
 
 test("combat action highlighting advances from open degrees through focus costs to ticks", () => {
@@ -410,6 +436,72 @@ test("a token can only be assigned once and explicit players win over the fallba
     assert.deepEqual(normalized.gm.map((link) => link.tokenUuid), ["Scene.s1.Token.t2"]);
 });
 
+test("saving one set of token assignments preserves tokens outside the managed set", () => {
+    const merged = replaceManagedUserTokenLinks({
+        player: [
+            { tokenUuid: "Scene.current.Token.old", label: "Old current token" },
+            { tokenUuid: "Scene.other.Token.keep", label: "Other scene" },
+            { actorUuid: "Actor.legacy", label: "Legacy sheet mapping" },
+        ],
+        gm: [],
+    }, new Set(["Scene.current.Token.old", "Scene.current.Token.new"]), {
+        player: [],
+        gm: [{ tokenUuid: "Scene.current.Token.new", label: "New current token" }],
+    }, "gm");
+
+    assert.deepEqual(merged.player, [
+        { tokenUuid: "Scene.other.Token.keep", label: "Other scene" },
+        { actorUuid: "Actor.legacy", label: "Legacy sheet mapping" },
+    ]);
+    assert.deepEqual(merged.gm, [{ tokenUuid: "Scene.current.Token.new", label: "New current token" }]);
+});
+
+test("a deleted duplicate token link is redundant only for the same scene, sheet, and effective user", () => {
+    const link = {
+        tokenUuid: "Scene.scene1.Token.deleted",
+        actorUuid: "Actor.hero",
+    };
+    const survivingToken = {
+        uuid: "Scene.scene1.Token.surviving",
+        sceneId: "scene1",
+        actorUuid: "Actor.hero",
+        effectiveUserId: "player1",
+    };
+
+    assert.equal(isRedundantDeletedTokenLink("player1", link, [survivingToken]), true);
+    assert.equal(isRedundantDeletedTokenLink("player2", link, [survivingToken]), false);
+    assert.equal(isRedundantDeletedTokenLink("player1", link, [{ ...survivingToken, sceneId: "scene2" }]), false);
+    assert.equal(isRedundantDeletedTokenLink("player1", link, [{ ...survivingToken, actorUuid: "Actor.other" }]), false);
+    assert.equal(isRedundantDeletedTokenLink("player1", { ...link, tokenUuid: "invalid" }, [survivingToken]), false);
+});
+
+test("a deleted token link is redundant when its sheet already has the same user assignment", () => {
+    assert.equal(isRedundantDeletedTokenLink("player1", {
+        tokenUuid: "Scene.deletedScene.Token.deleted",
+        actorUuid: "Scene.deletedScene.Token.deleted.Actor.hero",
+    }, [], {
+        "Actor.hero": "player1",
+    }), true);
+    assert.equal(isRedundantDeletedTokenLink("player2", {
+        tokenUuid: "Scene.deletedScene.Token.deleted",
+        actorUuid: "Actor.hero",
+    }, [], {
+        "Actor.hero": "player1",
+    }), false);
+});
+
+test("deleted duplicate detection supports stored actor ids from older assignments", () => {
+    assert.equal(isRedundantDeletedTokenLink("player1", {
+        tokenUuid: "Scene.scene1.Token.deleted",
+        actorId: "hero",
+    }, [{
+        uuid: "Scene.scene1.Token.surviving",
+        sceneId: "scene1",
+        actorUuid: "Actor.hero",
+        effectiveUserId: "player1",
+    }]), true);
+});
+
 test("actor assignments keep exactly one user per character or NPC sheet", () => {
     assert.deepEqual(normalizeActorUserLinks({
         "Actor.hero": "player1",
@@ -426,6 +518,7 @@ test("actor assignments keep exactly one user per character or NPC sheet", () =>
 test("unlinked synthetic tokens resolve to their stable source sheet UUID", () => {
     assert.equal(actorLinkUuid("Actor.hero", "hero"), "Actor.hero");
     assert.equal(actorLinkUuid("Scene.scene.Token.token.Actor.hero", "hero"), "Actor.hero");
+    assert.equal(actorLinkUuid("Scene.scene.Token.token.Actor.hero"), "Actor.hero");
 });
 
 test("sheet search is case- and accent-insensitive", () => {

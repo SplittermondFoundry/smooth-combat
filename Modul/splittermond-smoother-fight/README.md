@@ -31,7 +31,7 @@ Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Ka
 - direkte Tickbuttons für 1, 2, 3, 5, 7 und 10 Ticks, freie Tickeingabe sowie Abwartend/Bereithalten/Reaktivieren; Tickaktionen aus Abwehr- und Schadenskarten werden im HUD gespiegelt und für den zuständigen Benutzer hervorgehoben
 - beschriftete Combat-Reiter-Aktionen für Tokenfokus, Sichtbarkeit, Besiegt-Status und Entfernen aus dem Kampf; auf schmalen Ansichten bleiben die platzsparenden Symbole
 - vorbereitete Zauber und Fernkampfangriffe als hervorgehobene Direktaktion mit Auslösen- und Abbrechen-Button; die Zauberaktion zeigt die mit aktuellem Fokus verfügbaren Zauber
-- Dark-/Lightmode-Schalter, Portraitanimationen sowie je Ereignis separat aktivier- und auswählbare Audiohinweise für Zugbeginn, Aktive Abwehr, Schaden, vollständig abgewehrten Schaden, Zauber und Fernkampf
+- Dark-/Lightmode-Schalter, Portraitanimationen sowie je Ereignis separat aktivier- und auswählbare Audiohinweise für Zugbeginn, Aktive Abwehr, Schaden, vollständig abgewehrten Schaden, Zauber und Fernkampf; die persönlichen Signale werden im Benutzerprofil der Welt gespeichert und können auch eigene Audiodateien verwenden
 - Socket-Synchronisierung, damit das Ziel des zugeordneten Spielers auf allen Clients sichtbar ist
 - standardmäßiges Ausblenden der normalen Splittermond-Aktionsleiste während eines Kampfes; pro Client deaktivierbar
 - minimiertes HUD horizontal zentriert und mit kleinem Abstand direkt oberhalb der sichtbaren Action-Bar

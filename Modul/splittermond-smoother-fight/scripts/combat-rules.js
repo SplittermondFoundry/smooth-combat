@@ -330,6 +330,41 @@ export function normalizeUserTokenLinks(value, fallbackUserId = null) {
     return result;
 }
 
+export function replaceManagedUserTokenLinks(value, managedTokenUuids, replacementsByUser, fallbackUserId = null) {
+    const current = normalizeUserTokenLinks(value, fallbackUserId);
+    const managed = new Set(Array.from(managedTokenUuids ?? []).filter((uuid) => typeof uuid === "string" && uuid));
+    const replacements = replacementsByUser && typeof replacementsByUser === "object" ? replacementsByUser : {};
+    const userIds = new Set([...Object.keys(current), ...Object.keys(replacements)]);
+    const merged = Object.fromEntries(Array.from(userIds, (userId) => [
+        userId,
+        (current[userId] ?? []).filter((link) => !link.tokenUuid || !managed.has(link.tokenUuid)),
+    ]));
+
+    for (const [userId, links] of Object.entries(replacements)) {
+        merged[userId] ??= [];
+        for (const link of Array.isArray(links) ? links : []) {
+            if (!link?.tokenUuid || !managed.has(link.tokenUuid)) continue;
+            merged[userId].push({ ...link });
+        }
+    }
+    return normalizeUserTokenLinks(merged, fallbackUserId);
+}
+
+export function isRedundantDeletedTokenLink(userId, link, tokens, actorUserLinks = {}) {
+    if (typeof userId !== "string" || !userId || typeof link?.tokenUuid !== "string") return false;
+    const sceneMatch = /^Scene\.([^.]+)\.Token\.[^.]+$/.exec(link.tokenUuid);
+    if (!sceneMatch) return false;
+    const actorUuid = actorLinkUuid(link.actorUuid, link.actorId);
+    if (!actorUuid) return false;
+    if (actorUserLinks?.[actorUuid] === userId) return true;
+    return Array.from(tokens ?? []).some((token) =>
+        token?.uuid !== link.tokenUuid
+        && token?.sceneId === sceneMatch[1]
+        && token?.actorUuid === actorUuid
+        && token?.effectiveUserId === userId
+    );
+}
+
 export function normalizeActorUserLinks(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
     return Object.fromEntries(Object.entries(value)
@@ -345,7 +380,9 @@ export function normalizeActorUserLinks(value) {
 
 export function actorLinkUuid(actorUuid, actorId = null) {
     if (typeof actorUuid === "string" && actorUuid.startsWith("Actor.")) return actorUuid;
-    return actorId ? `Actor.${actorId}` : actorUuid ?? "";
+    if (actorId) return `Actor.${actorId}`;
+    const embeddedActor = typeof actorUuid === "string" ? /\.Actor\.([^.]+)$/.exec(actorUuid) : null;
+    return embeddedActor ? `Actor.${embeddedActor[1]}` : actorUuid ?? "";
 }
 
 export function normalizeSearchText(value) {
@@ -507,6 +544,32 @@ export function parseStatusEffectLabel(value) {
         name: (match?.[1] ?? label).trim(),
         level: Math.max(1, Number.parseInt(match?.[2] ?? "1", 10) || 1),
     };
+}
+
+export function normalizeAudioFeedbackProfile(profile, defaults = {}, allowedSoundIds = []) {
+    const source = profile && typeof profile === "object" && !Array.isArray(profile) ? profile : {};
+    const sourceEvents = source.events && typeof source.events === "object" && !Array.isArray(source.events)
+        ? source.events
+        : {};
+    const allowed = new Set(Array.from(allowedSoundIds ?? [], (value) => String(value)));
+    const events = {};
+
+    for (const [eventId, fallbackValue] of Object.entries(defaults ?? {})) {
+        const fallback = fallbackValue && typeof fallbackValue === "object" ? fallbackValue : {};
+        const raw = sourceEvents[eventId] && typeof sourceEvents[eventId] === "object"
+            ? sourceEvents[eventId]
+            : {};
+        const fallbackSound = String(fallback.sound ?? "").trim();
+        const requestedSound = String(raw.sound ?? fallbackSound).trim();
+        const sound = !allowed.size || allowed.has(requestedSound) ? requestedSound : fallbackSound;
+        events[eventId] = {
+            enabled: typeof raw.enabled === "boolean" ? raw.enabled : fallback.enabled !== false,
+            sound,
+            customSound: String(raw.customSound ?? "").trim(),
+        };
+    }
+
+    return { version: 1, events };
 }
 
 export function fullyConsumedCost(value) {

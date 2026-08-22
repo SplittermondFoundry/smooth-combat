@@ -1,0 +1,43 @@
+<form class="sf-audio-settings-form">
+    <header class="sf-audio-intro">
+        <span class="sf-setting-scope-badge"><i class="fa-solid fa-user"></i> {{localize "SMOOTHER_FIGHT.Settings.AudioUserProfile"}}: {{userName}}</span>
+        <span>
+            <h3>{{localize "SMOOTHER_FIGHT.Settings.AudioHeading"}}</h3>
+            <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.AudioHint"}}</p>
+        </span>
+    </header>
+
+    <div class="sf-audio-event-list">
+        <div class="sf-audio-list-heading">
+            <span>{{localize "SMOOTHER_FIGHT.Settings.AudioEvent"}}</span>
+            <span>{{localize "SMOOTHER_FIGHT.Settings.AudioEnabled"}}</span>
+            <span>{{localize "SMOOTHER_FIGHT.Settings.AudioSignal"}}</span>
+            <span></span>
+        </div>
+        {{#each events}}
+            <section class="sf-audio-event-row" data-audio-event="{{this.id}}" data-default-sound="{{this.defaultSound}}">
+                <strong>{{this.label}}</strong>
+                <label class="sf-audio-enabled">
+                    <input type="checkbox" data-role="audio-enabled" {{#if this.enabled}}checked{{/if}}>
+                    <span>{{localize "SMOOTHER_FIGHT.Settings.AudioEnabled"}}</span>
+                </label>
+                <select data-role="audio-sound" aria-label="{{this.label}}">
+                    {{#each this.sounds}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+                </select>
+                <button type="button" class="sf-audio-preview" data-action="preview-audio" title="{{localize "SMOOTHER_FIGHT.Settings.AudioPreviewHint"}}">
+                    <i class="fa-solid fa-volume-high"></i><span>{{localize "SMOOTHER_FIGHT.Settings.AudioPreview"}}</span>
+                </button>
+                <div class="sf-audio-custom-source" data-role="audio-custom-source" {{#unless this.customSelected}}hidden{{/unless}}>
+                    <label for="sf-audio-custom-{{this.id}}">{{localize "SMOOTHER_FIGHT.Settings.AudioCustomFile"}}</label>
+                    <file-picker id="sf-audio-custom-{{this.id}}" name="audioCustom-{{this.id}}" type="audio" value="{{this.customSound}}" placeholder="{{localize "SMOOTHER_FIGHT.Settings.AudioCustomPlaceholder"}}" data-role="audio-custom"></file-picker>
+                    <small>{{localize "SMOOTHER_FIGHT.Settings.AudioCustomHint"}}</small>
+                </div>
+            </section>
+        {{/each}}
+    </div>
+
+    <footer class="form-footer">
+        <span class="sf-dirty-indicator" data-role="audio-dirty" hidden><i class="fa-solid fa-circle"></i> {{localize "SMOOTHER_FIGHT.Settings.UnsavedChanges"}}</span>
+        <button type="button" data-action="save-audio"><i class="fa-solid fa-floppy-disk"></i> {{localize "SMOOTHER_FIGHT.Settings.AudioSave"}}</button>
+    </footer>
+</form>
