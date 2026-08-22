@@ -1,0 +1,167 @@
+
+@media (max-width: 1120px) {
+    #splittermond-smoother-fight-hud.sf-hud {
+        --sf-side-panel-width: 136px;
+        --sf-portrait-height: 190px;
+        left: 76px;
+        right: 310px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-shell {
+        grid-template-columns: var(--sf-side-panel-width) minmax(280px, 1fr) var(--sf-side-panel-width);
+    }
+
+    #splittermond-smoother-fight-hud .sf-tracker-buttons .sf-control-label {
+        display: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-defense-check,
+    #splittermond-smoother-fight-hud .sf-offense-check,
+    #splittermond-smoother-fight-hud .sf-damage-check {
+        display: block;
+    }
+
+    #splittermond-smoother-fight-hud .sf-defense-check > .chat-message-header,
+    #splittermond-smoother-fight-hud .sf-offense-check > .sf-promoted-controls,
+    #splittermond-smoother-fight-hud .sf-offense-check > .sf-offense-target,
+    #splittermond-smoother-fight-hud .sf-damage-check > header,
+    #splittermond-smoother-fight-hud .sf-damage-check > .sf-promoted-controls {
+        margin-bottom: 7px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait-image {
+        height: 90px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-action-menu > summary span,
+    #splittermond-smoother-fight-hud .sf-quick-targets > summary span {
+        display: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-prepared-spell-cast {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    #splittermond-smoother-fight-hud .sf-prepared-spell-cast img,
+    #splittermond-smoother-fight-hud .sf-prepared-spell-cast b span {
+        display: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-target-alert span {
+        display: none;
+    }
+}
+
+@media (max-width: 820px) {
+    #splittermond-smoother-fight-hud.sf-hud {
+        --sf-side-panel-width: clamp(96px, 16.5vw, 136px);
+        --sf-portrait-height: 168px;
+        left: 6px;
+        right: 6px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-shell {
+        grid-template-columns: var(--sf-side-panel-width) minmax(230px, 1fr) var(--sf-side-panel-width);
+    }
+
+    #splittermond-smoother-fight-hud .sf-turnline {
+        flex-wrap: wrap;
+        gap: 5px 7px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-turn-target {
+        order: 2;
+        flex: 1 0 calc(100% - 15px);
+        min-width: 0;
+        margin-left: 15px;
+        font-size: var(--sf-font-small);
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait-image {
+        height: 72px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-target-list > .sf-primary-target-panel {
+        order: -1;
+    }
+
+    #splittermond-smoother-fight-hud .sf-secondary-targets {
+        display: block;
+        max-height: none;
+        overflow: visible;
+        padding: 3px 5px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-secondary-targets-heading {
+        padding: 0;
+    }
+
+    #splittermond-smoother-fight-hud .sf-secondary-targets-heading span {
+        max-width: 66px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #splittermond-smoother-fight-hud .sf-secondary-targets-heading b {
+        padding: 1px 4px;
+        border-radius: 999px;
+        color: var(--sf-gold-bright);
+        background: rgba(230, 190, 92, 0.16);
+        font-size: 10px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-secondary-target {
+        display: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-defense-row span {
+        padding-block: 3px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-resources {
+        grid-template-columns: 1fr;
+        gap: 2px;
+        padding: 3px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-resource {
+        height: 17px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-resource small {
+        inset-inline: 3px;
+        gap: 2px;
+        line-height: 17px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait-open {
+        width: 32px;
+        min-width: 32px;
+        height: 32px;
+        min-height: 32px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait-identity {
+        grid-template-columns: minmax(0, 1fr) 32px;
+        min-height: 32px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-portrait-identity .sf-portrait-name {
+        min-height: 32px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-visibility-popover {
+        right: auto;
+        left: 0;
+    }
+
+    #splittermond-smoother-fight-hud .sf-action-popover button.sf-defense-option {
+        gap: 4px;
+        padding: 6px 8px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-action-popover .sf-defense-option-list > small {
+        padding: 2px 5px;
+    }
+}

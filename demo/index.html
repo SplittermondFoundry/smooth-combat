@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Smoother Fight – HUD Preview</title>
+  <link rel="stylesheet" href="../Modul/splittermond-smoother-fight/styles/smoother-fight-0.3.57.css">
+    <style>
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+        body {
+            color: #edf2ee;
+            background:
+                radial-gradient(circle at 38% 32%, rgba(99, 132, 105, .3), transparent 19%),
+                linear-gradient(rgba(3, 11, 10, .46), rgba(3, 11, 10, .72)),
+                repeating-linear-gradient(25deg, #355345 0 22px, #304b40 22px 44px);
+            font: 14px system-ui, sans-serif;
+        }
+        body::before { content:""; position: fixed; inset: 0; background: linear-gradient(90deg, rgba(0,0,0,.35), transparent 20%, transparent 75%, rgba(0,0,0,.48)); }
+        #sidebar-mock { position: fixed; right: 0; top: 0; bottom: 0; width: 300px; background: rgba(8,12,14,.88); border-left: 1px solid #354a4b; }
+        #sidebar-mock h2 { padding: 12px; margin: 0; font-family: serif; color: #d8a85d; border-bottom: 1px solid #354a4b; }
+        #sidebar-mock p { margin: 8px; padding: 12px; background: rgba(255,255,255,.04); color: #aeb8b5; }
+        #splittermond-smoother-fight-hud .sf-chat-message .splittermond { color: var(--sf-text); }
+        #splittermond-smoother-fight-hud .chat-message-header { display:flex; gap:8px; align-items:center; border-bottom:1px solid var(--sf-line); }
+        #splittermond-smoother-fight-hud .chat-message-header h2 { margin:0; font-size:15px; }
+        #splittermond-smoother-fight-hud .roll-summary { text-align:center; font-size:25px; color:var(--sf-gold-bright); padding:5px; }
+        #splittermond-smoother-fight-hud .chat-card-segment { border-top:1px solid var(--sf-line); padding-top:5px; }
+        #splittermond-smoother-fight-hud .chat-card-segment h3 { margin:2px 0; font-size:11px; }
+        #splittermond-smoother-fight-hud .chat-card-segment button { width:100%; padding:5px; margin-top:3px; color:var(--sf-text); background:var(--sf-bg-soft); border:1px solid var(--sf-line); border-radius:3px; }
+        #splittermond-smoother-fight-hud .sf-actor .sf-portrait-image { --sf-token-image: linear-gradient(145deg, #346477, #142630 60%, #9b6e3c); }
+        #splittermond-smoother-fight-hud .sf-target .sf-portrait-image { --sf-token-image: linear-gradient(145deg, #723f38, #281d1b 60%, #8d6748); }
+    </style>
+</head>
+<body>
+    <aside id="sidebar-mock"><h2>Kampfübersicht</h2><p>Farruk · Tick 18</p><p>Rattling · Tick 21</p><p>Liandra · Tick 24</p></aside>
+    <section id="splittermond-smoother-fight-hud" class="sf-hud">
+        <div class="sf-shell is-current-user-turn">
+            <aside class="sf-portrait sf-actor" data-sf-token-uuid="Scene.demo.Token.farruk" aria-label="Gerade aktiv: Farruk">
+                <button type="button" class="sf-portrait-focus" data-sf-action="show-token" data-token-uuid="Scene.demo.Token.farruk" title="Token auf der Karte anzeigen: Farruk"><span class="sf-visually-hidden">Token auf der Karte anzeigen: Farruk</span></button>
+                <div class="sf-portrait-image"><span class="sf-eyebrow">Gerade aktiv</span></div>
+                <div class="sf-portrait-identity"><div class="sf-portrait-name">Farruk (Andi)</div><button type="button" class="sf-portrait-open" title="Akteursbogen öffnen"><span aria-hidden="true">▣</span><span class="sf-visually-hidden">Akteursbogen öffnen: Farruk</span></button></div>
+                <div class="sf-defense-row"><span><small>VTD</small>20</span><span><small>KW</small>18</span><span><small>GW</small>16</span></div>
+                <div class="sf-resources"><div class="sf-resource"><span style="width:74%"></span><small>LP 22/30</small></div><div class="sf-resource sf-resource-focus"><span style="width:62%"></span><small>FO 13/21</small></div></div>
+            </aside>
+            <main class="sf-center">
+                <header class="sf-turnline"><span class="sf-live-dot"></span><strong>Farruk</strong><span>Tick 18</span><span class="sf-your-turn">⚡ Dein Zug</span><span class="sf-turn-target">◎ Primärziel: Rattling-Plünderer</span></header>
+                <section class="sf-combat-controls" aria-label="Kampfsteuerung">
+                    <div class="sf-tick-buttons"><span class="sf-tick-label">Vorrücken</span><button>+1 T</button><button>+2 T</button><button>+3 T</button><button>+4 T</button><button>+5 T</button><button>+6 T</button><button>+7 T</button><button>+8 T</button><button>+10 T</button><button>+X</button>
+                        <details class="sf-tick-action-reference">
+                            <summary title="Vollständige Handlungsübersicht öffnen oder schließen" aria-label="Vollständige Handlungsübersicht öffnen oder schließen"><span aria-hidden="true">▤</span><span>Handlungen</span><span class="sf-chevron" aria-hidden="true">⌄</span></summary>
+                            <div class="sf-tick-action-popover" role="region" aria-label="Vollständige Handlungsübersicht">
+                                <strong>Vollständige Handlungsübersicht</strong>
+                                <table>
+                                    <thead><tr><th>Handlung</th><th>Art</th><th>Dauer</th><th>Besonderheit</th></tr></thead>
+                                    <tbody>
+                                        <tr class="sf-tick-action-category"><th colspan="4">Bewegungshandlungen</th></tr>
+                                        <tr><td><button class="sf-tick-action-link">Aufstehen (liegend)</button><small class="sf-tick-action-source">Quelle: GRW, S. 159</small></td><td>Kontinuierliche Aktion</td><td>6 Ticks</td><td>–</td></tr>
+                                        <tr class="sf-tick-action-category"><th colspan="4">Nahkampfhandlungen</th></tr>
+                                        <tr><td><button class="sf-tick-action-link">Lücke suchen</button><small class="sf-tick-action-source">Quelle: GRW, S. 161</small></td><td>Kontinuierliche Aktion</td><td>2–6 Ticks</td><td>+1 pro 2 Ticks</td></tr>
+                                        <tr class="sf-tick-action-category"><th colspan="4">Befehle und Koordination</th></tr>
+                                        <tr><td><button class="sf-tick-action-link">Einfacher Befehl</button><small class="sf-tick-action-source">Quelle: Die Magie, S. 180</small></td><td>Sofortige Reaktion</td><td>3 Ticks</td><td>Verlängert eigene kontinuierliche Handlung</td></tr>
+                                        <tr><td><button class="sf-tick-action-link">Koordinieren</button><small class="sf-tick-action-source">Quelle: GRW, S. 104</small></td><td>Kontinuierliche Aktion</td><td>10 Ticks</td><td>Anführen gegen 20 + Verbündete; voreingestellt 21</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                    </div>
+                    <div class="sf-pause-buttons"><button>◷ <span>Abwartend</span></button><button>✋ <span>Bereithalten</span></button></div>
+                    <div class="sf-tracker-buttons">
+                        <button class="sf-icon-button" title="Token auf der Karte anzeigen" aria-label="Token auf der Karte anzeigen">◎ <span class="sf-control-label">Fokus</span></button>
+                        <details class="sf-visibility-menu">
+                            <summary class="sf-icon-button" title="Sichtbarkeit" aria-label="Sichtbarkeit">◉ <span class="sf-control-label">Sichtbarkeit</span><span class="sf-chevron">⌄</span></summary>
+                            <div class="sf-visibility-popover"><button>◉ <span>Auf Karte verbergen</span></button><button>☷ <span>In Tickliste verbergen</span></button><button>◉ <span>Auf Karte und Tickliste verbergen</span></button></div>
+                        </details>
+                        <button class="sf-icon-button" title="Als besiegt markieren" aria-label="Als besiegt markieren">☠ <span class="sf-control-label">Besiegt</span></button>
+                        <button class="sf-icon-button is-danger" title="Aus dem Kampf entfernen" aria-label="Aus dem Kampf entfernen">⊖ <span class="sf-control-label">Entfernen</span></button>
+                    </div>
+                </section>
+                <nav class="sf-actions">
+                    <details class="sf-action-menu"><summary title="Fertigkeiten" aria-label="Fertigkeiten">◈ <span>Fertigkeiten</span>⌃</summary><div class="sf-action-popover"><button><span>Akrobatik</span><b>17</b></button><button><span>Heimlichkeit</span><b>12</b></button></div></details>
+                    <details class="sf-action-menu"><summary title="Angriff" aria-label="Angriff">♜ <span>Angriff</span>⌃</summary><div class="sf-action-popover"><button class="is-prepared"><span>Breitschwert<small>Klingenwaffen 19</small></span><b>1W10+4</b></button></div></details>
+                    <details class="sf-action-menu"><summary title="Zauber" aria-label="Zauber">✦ <span>Zauber</span>⌃</summary><div class="sf-action-popover"><button><span>Flammenschild<small>Feuermagie 15</small></span><b>8 T</b></button></div></details>
+                    <details class="sf-action-menu sf-defense-menu"><summary title="Aktive Abwehr" aria-label="Aktive Abwehr">◆ <span>Aktive Abwehr</span>⌃</summary><div class="sf-action-popover"><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>VTD</strong><b>20</b></span><span class="sf-defense-option-list"><small>Akrobatik <b>17</b></small><small>Säbel · Klingenwaffen <b>19</b></small></span></button><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>KW</strong><b>18</b></span><span class="sf-defense-option-list"><small>Zähigkeit <b>14</b></small></span></button><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>GW</strong><b>16</b></span><span class="sf-defense-option-list"><small>Entschlossenheit <b>12</b></small></span></button></div></details>
+                    <div class="sf-defense-pills" aria-label="VTD, KW, GW"><span>VTD<b>20</b></span><span>KW<b>18</b></span><span>GW<b>16</b></span></div>
+                </nav>
+                <section class="sf-events">
+                    <button class="sf-events-heading"><span>▣ Kampfereignisse</span><span>⌄</span></button>
+                    <div class="sf-event-scroller">
+                        <details class="sf-event-group" open>
+                            <summary><span>Farruk</span><span class="sf-event-badge is-defense">◆ Aktive Abwehr</span><span class="sf-event-target">◎ Ziel: Rattling-Plünderer</span><span>⌄</span></summary>
+                            <div class="sf-event-body">
+                                <article class="sf-chat-message message"><div class="message-content"><div class="splittermond attack check success sf-offense-check"><header class="chat-message-header"><div><h2>Breitschwert</h2><small>Standardwurf gegen 24</small></div></header><div class="sf-offense-target"><span>Ausgewähltes Ziel</span><strong>Rattling-Plünderer</strong></div><div class="sf-check-result-grid"><div class="roll-summary"><span class="roll-total">26</span></div><div class="degree-of-success"><strong>1 EG</strong> Gelungen</div></div></div></div></article>
+                            </div>
+                        </details>
+                    </div>
+                </section>
+            </main>
+            <div class="sf-target-column"><div class="sf-target-list"><div class="sf-primary-target-panel">
+                <aside class="sf-portrait sf-target sf-is-primary-target" data-sf-token-uuid="Scene.demo.Token.rattling" aria-label="Primärziel: Rattling-Plünderer">
+                    <button type="button" class="sf-portrait-focus" data-sf-action="show-token" data-token-uuid="Scene.demo.Token.rattling" title="Token auf der Karte anzeigen: Rattling-Plünderer"><span class="sf-visually-hidden">Token auf der Karte anzeigen: Rattling-Plünderer</span></button>
+                    <div class="sf-portrait-image"><span class="sf-eyebrow">Primärziel</span></div>
+                    <div class="sf-portrait-identity"><div class="sf-portrait-name">Rattling-Plünderer</div><button type="button" class="sf-portrait-open" title="Akteursbogen öffnen"><span aria-hidden="true">▣</span><span class="sf-visually-hidden">Akteursbogen öffnen: Rattling-Plünderer</span></button></div>
+                    <div class="sf-defense-row is-concealed"><span>◉̸</span><span>Abwehrwerte verborgen</span></div>
+                </aside>
+                <button type="button" class="sf-primary-target-remove" title="Ziel entfernen" aria-label="Ziel entfernen">×</button>
+            </div></div></div>
+        </div>
+        <details class="sf-gm-targets"><summary>◎ GM: Ziel wechseln⌃</summary><div><button><span>Rattling-Plünderer</span><b>◎</b></button><button><span>Rattling-Späher</span></button></div></details>
+    </section>
+    <script>
+        const hud = document.getElementById("splittermond-smoother-fight-hud");
+        hud?.classList.toggle("sf-theme-light", new URLSearchParams(location.search).get("theme") === "light");
+        hud?.addEventListener("toggle", (event) => {
+            const disclosure = event.target;
+            if (!disclosure.matches?.(".sf-tick-action-reference") || !disclosure.open) return;
+            const controls = disclosure.closest(".sf-combat-controls").getBoundingClientRect();
+            const spaceAbove = Math.max(0, controls.top - 12);
+            const spaceBelow = Math.max(0, innerHeight - controls.bottom - 12);
+            const opensBelow = spaceBelow > spaceAbove;
+            disclosure.classList.toggle("opens-below", opensBelow);
+            disclosure.querySelector(".sf-tick-action-popover").style.maxHeight = `${Math.min(560, opensBelow ? spaceBelow : spaceAbove)}px`;
+        }, true);
+        hud?.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                const disclosure = event.target.closest(".sf-tick-action-reference[open]")
+                    ?? hud.querySelector(".sf-tick-action-reference[open]");
+                if (!disclosure) return;
+                event.preventDefault();
+                disclosure.open = false;
+                disclosure.querySelector(":scope > summary")?.focus();
+                return;
+            }
+            if (event.key !== "Enter" && event.key !== " ") return;
+            const summary = event.target.closest("summary");
+            const disclosure = summary?.parentElement;
+            if (!disclosure?.matches(".sf-tick-action-reference")) return;
+            event.preventDefault();
+            disclosure.open = !disclosure.open;
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Release artifacts are attached to a GitHub Release, never committed.
+/Release/
+*.zip
+
+# Local development files from the main workspace do not belong in this snapshot.
+/ARCHITECTURE.md
+*.lnk
+node_modules/
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,12 @@
+{
+  "name": "splittermond-smoother-fight",
+  "version": "0.3.57",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets:audio": "node tools/generate-audio-assets.mjs",
+    "check": "npm run test && npm run test:rules",
+    "test": "node --test",
+    "test:rules": "node --experimental-test-coverage --test-coverage-lines=95 --test-coverage-branches=75 --test-coverage-functions=100 --test tests/combat-rules.test.mjs"
+  }
+}
