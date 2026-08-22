@@ -1379,7 +1379,22 @@
 }
 
 #splittermond-smoother-fight-hud .sf-quick-target-row.is-primary {
-    box-shadow: inset 2px 0 0 var(--sf-gold);
+    border-radius: 3px;
+    background: linear-gradient(90deg, rgba(230, 190, 92, 0.19), rgba(108, 201, 193, 0.09));
+    box-shadow: inset 3px 0 0 var(--sf-gold), inset 0 0 0 1px rgba(230, 190, 92, 0.2);
+}
+
+#splittermond-smoother-fight-hud .sf-quick-target-row.is-selected:not(.is-primary) {
+    box-shadow: inset 2px 0 0 var(--sf-teal);
+}
+
+#splittermond-smoother-fight-hud .sf-quick-target-row.is-primary button > i {
+    color: var(--sf-gold-bright);
+}
+
+#splittermond-smoother-fight-hud .sf-quick-target-row.is-primary > button.is-current {
+    color: var(--sf-gold-bright);
+    background: rgba(230, 190, 92, 0.16);
 }
 
 #splittermond-smoother-fight-hud .sf-quick-targets > div .sf-quick-target-remove {

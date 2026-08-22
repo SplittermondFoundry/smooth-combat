@@ -72,6 +72,40 @@
         height: 72px;
     }
 
+    #splittermond-smoother-fight-hud .sf-target-list > .sf-primary-target-panel {
+        order: -1;
+    }
+
+    #splittermond-smoother-fight-hud .sf-secondary-targets {
+        display: block;
+        max-height: none;
+        overflow: visible;
+        padding: 3px 5px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-secondary-targets-heading {
+        padding: 0;
+    }
+
+    #splittermond-smoother-fight-hud .sf-secondary-targets-heading span {
+        max-width: 66px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #splittermond-smoother-fight-hud .sf-secondary-targets-heading b {
+        padding: 1px 4px;
+        border-radius: 999px;
+        color: var(--sf-gold-bright);
+        background: rgba(230, 190, 92, 0.16);
+        font-size: 10px;
+    }
+
+    #splittermond-smoother-fight-hud .sf-secondary-target {
+        display: none;
+    }
+
     #splittermond-smoother-fight-hud .sf-actor .sf-defense-row,
     #splittermond-smoother-fight-hud .sf-resources,
     #splittermond-smoother-fight-hud .sf-turn-target {

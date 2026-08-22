@@ -8,6 +8,10 @@ import {
 } from "./context.js";
 
 import {
+    buildQuickTargets,
+} from "./quick-targets.js";
+
+import {
     attackControlSelection,
     attackControlState,
     attackReadiness,
@@ -755,44 +759,4 @@ function defenseButton(actor, type, abbreviation) {
 
 function emptyMenuText() {
     return `<p class="sf-menu-empty">–</p>`;
-}
-
-function buildQuickTargets(context) {
-    const candidates = services.getTargetSceneTokens(context.combat).filter((token) => token.uuid !== context.token?.uuid);
-    const labels = quickTargetLabels(candidates);
-    const selected = new Set(context.targets.map((token) => token.uuid));
-    const primaryTargetUuid = context.target?.uuid;
-    const body = candidates.length
-        ? candidates.map((token) => {
-            const isSelected = selected.has(token.uuid);
-            const isPrimary = token.uuid === primaryTargetUuid;
-            const name = labels.get(token.uuid) ?? token.name;
-            return `<div class="sf-quick-target-row ${isPrimary ? "is-primary" : isSelected ? "is-selected" : ""}">
-                <button type="button" data-sf-action="set-target" data-token-uuid="${escapeAttr(token.uuid)}" class="${isSelected ? "is-current" : ""} ${isPrimary ? "is-primary" : ""}" aria-pressed="${isSelected}" title="${escapeAttr(isPrimary ? t("SMOOTHER_FIGHT.HUD.PrimaryTarget") : t("SMOOTHER_FIGHT.HUD.MakePrimaryTarget", { target: name }))}">
-                    <img src="${escapeAttr(token.texture?.src ?? token.actor?.img ?? "icons/svg/mystery-man.svg")}" alt=""><span><b>${escapeHtml(name)}</b>${isSelected ? `<small>${escapeHtml(t(isPrimary ? "SMOOTHER_FIGHT.HUD.PrimaryTarget" : "SMOOTHER_FIGHT.HUD.AdditionalTarget"))}</small>` : ""}</span>
-                    ${isSelected ? `<i class="fa-solid ${isPrimary ? "fa-bullseye" : "fa-check"}"></i>` : ""}
-                </button>
-                ${isSelected ? `<button type="button" class="sf-quick-target-remove" data-sf-action="remove-target" data-token-uuid="${escapeAttr(token.uuid)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: name }))}" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: name }))}"><i class="fa-solid fa-xmark"></i></button>` : ""}
-            </div>`;
-        }).join("")
-        : `<p>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoCombatants"))}</p>`;
-    const label = t("SMOOTHER_FIGHT.HUD.QuickTarget");
-    return `<details class="sf-quick-targets">
-        <summary title="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
-        <div>${body}</div>
-    </details>`;
-}
-
-function quickTargetLabels(tokens) {
-    const names = new Map(tokens.map((token) => [token.uuid, String(token.name ?? token.actor?.name ?? "–")]));
-    const totals = new Map();
-    for (const name of names.values()) totals.set(name, (totals.get(name) ?? 0) + 1);
-    const occurrences = new Map();
-    return new Map(tokens.map((token) => {
-        const name = names.get(token.uuid);
-        const total = totals.get(name) ?? 1;
-        const occurrence = (occurrences.get(name) ?? 0) + 1;
-        occurrences.set(name, occurrence);
-        return [token.uuid, total > 1 ? `${name} · ${occurrence}/${total}` : name];
-    }));
 }

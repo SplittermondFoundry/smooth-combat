@@ -24,6 +24,10 @@ import {
 } from "./view.js";
 
 import {
+    bindQuickTargetSearch,
+} from "./quick-targets.js";
+
+import {
     scheduleRender,
     setHudMinimized,
     syncMinimizedHudPosition,
@@ -163,6 +167,7 @@ class SmootherFightHud {
         services.enforceChatPermissions(this.element, context);
         services.enforceFumbleActionState(this.element);
         services.bindQuickTargetHover(this.element);
+        bindQuickTargetSearch(this.element);
         bindSpellTooltips(this.element, context);
         restoreHudViewState(this.element, viewState, { forceLatestEvent });
         if (forceLatestEvent) services.clearCombatEventDeletionPending();

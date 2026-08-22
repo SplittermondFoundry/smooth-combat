@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "c5a3e65604c56fff875ffcb70207e38bd1434ef2d86697136d482c1eec8c445d",
+        "e6e186546597279be161461f08104e0e3284a4fb361690454403e5afd9c30c6a",
     );
 });
 
@@ -84,7 +84,7 @@ test("split styles flatten in the verified cascade order", () => {
     const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "96f74bd7b7351d9176f49f0c33d45344366bb8c092d56ba8c4d88309d57ed4e9",
+        "df5417592f48913acae0c0116bb43312ff265eef246c44b44213b0a744cdbbcb",
     );
 });
 
