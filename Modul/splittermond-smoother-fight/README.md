@@ -1,81 +1,76 @@
 # Splittermond Smoother Fight
 
-Smoother Fight ist ein Foundry-VTT-Modul für **Splittermond 14**. Sobald ein Kampf gestartet wird, erscheint ein kompaktes HUD mit dem aktiven Kämpfer links, dessen ausgewähltem Ziel rechts, den aus dem System bekannten Kampfaktionen und den zugehörigen Chatkarten.
+Smoother Fight ist ein Foundry-VTT-Modul für Splittermond. Es ergänzt laufende Kämpfe um ein kompaktes HUD für den aktiven Kämpfer, dessen Ziele, häufige Systemaktionen, Chatkarten und die Aktive Abwehr.
+
+## Voraussetzungen
+
+- Foundry Virtual Tabletop 14
+- Splittermond-System ab Version 14
+
+## Installation
+
+1. In Foundrys Einrichtungsansicht **Add-on-Module** öffnen.
+2. **Modul installieren** wählen.
+3. Diese Manifest-URL eintragen:
+
+   ```text
+   https://github.com/SplittermondFoundry/smooth-combat/releases/latest/download/module.json
+   ```
+
+4. Das Modul installieren und anschließend in der gewünschten Splittermond-Welt aktivieren.
+
+Foundry verwendet dieselbe Manifest-URL auch für spätere Updateprüfungen.
+
+Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github.com/SplittermondFoundry/smooth-combat/releases) heruntergeladen und nach `Data/modules/splittermond-smoother-fight` entpackt werden. Danach Foundry neu starten.
 
 ## Funktionen
 
-- aktiver Combatant mit Tokenbild, VTD/KW/GW sowie Lebens- und Fokusleiste
-- persönlich hervorgehobenes HUD mit gut sichtbarem „Du bist dran“-Hinweis für den zugeordneten aktiven Spieler
-- alle Ziele des dem aktiven Token zugeordneten Spielers; Mehrfachziele lassen sich im Zielmenü einzeln ergänzen und entfernen
-- persönliche Warnmarkierung, wenn der eigene Charakter das aktuelle Ziel ist
-- Lebens- und Fokuswerte nur für Benutzer mit mindestens Observer-Rechten am jeweiligen Akteur; VTD, KW und GW fremder Ziele sind standardmäßig ebenso verborgen und können per Weltoption freigegeben werden
-- dauerhafte Zuordnung von Charakter- und NSC-Bögen zu Benutzern, die auch für neu erstellte und nicht verknüpfte Tokens gilt
-- durchsuchbare, getrennt einklappbare Listen für Spielercharakter- und NSC-Bögen
-- eindeutige Token-Ausnahmen sowie Schnellzuweisung über einen zusätzlichen Button im Token-HUD
-- frei bestimmbarer Haupt-GM für alle Bögen und Tokens ohne eigene Zuordnung
-- Aktionen für Owner und GMs: Fertigkeiten mit bis zu vier Favoriten; ein einzelner Favorit erscheint direkt im Skills-Button, mehrere in einer per Drag & Drop sortierbaren Schnellzugriffsleiste; außerdem Zauber, Angriffe, Ausrüstung und Aktive Abwehr
-- Angriffe sowie Zauber gegen VTD, KW oder GW verlangen erst beim eigentlichen Auslösen ein ausgewähltes Ziel; die Vorbereitung ist ohne Ziel möglich
-- Zauberliste mit Fokuskosten, Beschreibungs-/Verstärkungs-Tooltip und Rechtsklick zum Öffnen des Zauberbogens; Waffen lassen sich ebenso per Rechtsklick öffnen
-- mit Dice So Nice synchronisierte Verarbeitung und HUD-Kartenanzeige nach Abschluss der Würfelanimation
-- korrekte Splittermond-Vorbereitung für Fernkampfangriffe und Zauber
-- höhensparend strukturierte Splittermond-Angriffs- und Zauberkarten mit gespeichertem, zum Anzeigen des Tokens anklickbarem Ziel direkt neben dem Namen der Waffe oder des Zaubers; Aktionen und Ergebnis stehen nebeneinander, die vollständige Würfelzerlegung ist über „Wurfdetails“ erreichbar
-- EG-Optionen, Fokusausgabe, Tickkosten und Splitterpunkte in den HUD-Karten sind nur für GM, Owner des würfelnden Akteurs oder den Nachrichtenautor sichtbar und ausführbar
-- Zauberpatzer mit direkten, nur einmal nutzbaren Buttons für Lebenspunktverlust und die genannten Zustände
-- Gruppierung von Angriff und anschließendem Schaden zu einem Kampfereignis
-- einzeln ein- und ausklappbare Abwehr-, Schadens- und Patzer-Subevents; ein neuer Schadenswurf klappt ältere Abwehrdetails automatisch zu und wird in den sichtbaren Scrollbereich geholt
-- vollbreite, zweispaltige Schadenskarte mit gut umbrechenden Aktionsbuttons sowie prominentem Gesamtergebnis und optionaler Würfelzerlegung
-- „Auf die Ziele des Angreifers anwenden“ verwendet dessen im HUD gespeichertes Ziel und weiterhin den originalen Splittermond-Schadenshandler
-- erfolgreiche Aktive Abwehr erzeugt eine neue Angriffskarte mit neu berechneten EG; die kompakte Abwehrprobe steht davor und zeigt neue VTD/KW/GW direkt im EG-Feld
-- regelgerechte Unterstützung durch die Meisterschaft **Verteidiger**: nur Besitzer der Meisterschaft erhalten innerhalb von 2 m eine Zusatzaktion, ausschließlich passende Nahkampf-Abwehren werden angeboten und der systemeigene −3-Modifikator wird vorausgewählt; verteidigt das Ziel ebenfalls, zählt die höhere neue VTD
-- Ziel-Quickmenü für den GM und den Owner des aktiven Tokens mit allen sichtbaren Szenen-Tokens; Kampfteilnehmer stehen zuerst, gleichnamige Tokens werden nummeriert und beim Überfahren auf der Karte hervorgehoben
-- direkte Tickbuttons für 1, 2, 3, 5, 7 und 10 Ticks, freie Tickeingabe sowie Abwartend/Bereithalten/Reaktivieren; Tickaktionen aus Abwehr- und Schadenskarten werden im HUD gespiegelt und für den zuständigen Benutzer hervorgehoben
-- beschriftete Combat-Reiter-Aktionen für Tokenfokus, Besiegt-Status und Entfernen aus dem Kampf sowie ein kompaktes Sichtbarkeitsmenü für Token, Tickliste oder beides; auf schmalen Ansichten bleiben die platzsparenden Symbole
-- vorbereitete Zauber und Fernkampfangriffe als hervorgehobene Direktaktion mit Auslösen- und Abbrechen-Button; die Zauberaktion zeigt die mit aktuellem Fokus verfügbaren Zauber
-- Dark-/Lightmode-Schalter, abschaltbare Portrait- und Hinweisanimationen sowie je Ereignis separat aktivier- und auswählbare Audiohinweise für Zugbeginn, Aktive Abwehr, Schaden, vollständig abgewehrten Schaden, Zauber und Fernkampf; die Standards sind echte WAV-Dateien, persönliche Signale können eigene Audiodateien verwenden
-- erkennbare Moduldateien für HUD-Hintergründe, Ereignisicons und Sounds sowie eine persönliche, updatesichere Medienkonfiguration für eigene Hintergründe und vollständige Icon-Sets
-- Socket-Synchronisierung, damit das Ziel des zugeordneten Spielers auf allen Clients sichtbar ist
-- standardmäßiges Ausblenden der normalen Splittermond-Aktionsleiste während eines Kampfes; pro Client deaktivierbar
-- minimiertes HUD horizontal zentriert und mit kleinem Abstand direkt oberhalb der sichtbaren Action-Bar
-- konfigurierbare Tastenkürzel: `V` klappt das HUD ein oder aus, `B` blendet es vollständig ein oder aus (sofern die Taste noch frei ist), `X` klappt alle Kampfaktionen ein und `Y` öffnet ausschließlich die neueste Aktion
+- kompaktes Kampf-HUD mit aktivem Combatant, ausgewählten Zielen, VTD/KW/GW sowie Lebens- und Fokusleiste
+- persönliche Zuganzeige, Zielwarnungen und ein- oder ausblendbare Standard-Aktionsleiste
+- Fertigkeiten, Favoriten, Zauber, Angriffe, Ausrüstung und Aktive Abwehr direkt im HUD
+- korrekte Vorbereitung und Auslösung von Fernkampfangriffen und Zaubern
+- übersichtliche Kampfereignisse für Angriff, Abwehr, Schaden und Patzer mit weiter nutzbaren Splittermond-Aktionen
+- Unterstützung der Meisterschaft **Verteidiger** einschließlich Reichweiten- und Abwehrprüfung
+- Ziel-Quickmenü, Mehrfachziele und zwischen Clients synchronisiertes Primärziel
+- Tickbuttons, freie Tickeingabe, Abwartend, Bereithalten und Reaktivieren
+- dauerhafte Zuordnung von Charakteren, NSCs und einzelnen Tokens zu Benutzern
+- Rechteprüfung für Ressourcen, Verteidigungswerte und ausführbare Chatkarten-Aktionen
+- Dark-/Lightmode, anpassbare Hintergründe und Icons sowie optionale Audiohinweise
+- konfigurierbare Tastenkürzel zum Einblenden und Einklappen des HUDs und seiner Ereignisse
+- deutsche und englische Benutzeroberfläche
 
-## Installation zum Entwickeln/Testen
+## Ersteinrichtung
 
-Den gesamten Ordner als `splittermond-smoother-fight` in Foundrys `Data/modules` ablegen oder verlinken. Danach Foundry neu starten, das Modul in der Welt aktivieren und unter **Einstellungen → Moduleinstellungen → Spieler, Bögen und Tokens verknüpfen** die Zuordnungen festlegen. Unter **Darstellung und Medien** können Benutzer eigene Hintergründe, ein eigenes Icon-Verzeichnis und den Bewegungsmodus wählen.
+Nach dem Aktivieren werden die Zuordnungen unter **Einstellungen → Moduleinstellungen → Spieler, Bögen und Tokens verknüpfen** festgelegt. Eine direkte Token-Zuordnung hat Vorrang vor der Zuordnung des Charakter- oder NSC-Bogens. Danach greifen der festgelegte Haupt-GM und zuletzt die normalen Owner-Rechte.
 
-Eine direkte Token-Zuordnung hat Vorrang vor der Zuordnung seines Charakter- oder NSC-Bogens. Danach greift der festgelegte Haupt-GM und zuletzt die normalen Owner-Rechte des Akteurs. Jeder Bogen und jedes Token kann dabei höchstens einem Benutzer zugeordnet sein; ein Benutzer darf weiterhin beliebig viele davon besitzen. Alte Einzelzuordnungen werden automatisch weiterverwendet.
+Unter **Darstellung und Medien** lassen sich Theme, Animationen, Hintergründe und ein eigenes Icon-Verzeichnis konfigurieren. **Audiohinweise** steuert die Signale für Zugbeginn, Aktive Abwehr, Schaden, Zauber und Fernkampf.
 
-## Medien anpassen
+## Eigene Medien
 
-Die mitgelieferten Dateien liegen übersichtlich unter `assets/backgrounds`, `assets/icons` und `assets/audio`. Ihre Namen und die Zuordnung stehen zusätzlich in `assets/README.md`.
+Die mitgelieferten Standards liegen unter `assets/backgrounds`, `assets/icons` und `assets/audio`; alle Dateinamen sind in [`assets/README.md`](https://github.com/SplittermondFoundry/smooth-combat/blob/main/Modul/splittermond-smoother-fight/assets/README.md) beschrieben.
 
-Dateien im installierten Modulordner sollten nicht direkt ersetzt werden, weil ein Modulupdate sie überschreibt. Updatesicher ist es, eigene Medien im Foundry-Datenverzeichnis abzulegen und in **Darstellung und Medien** beziehungsweise **Audiohinweise** auszuwählen. Ein eigenes Icon-Verzeichnis muss dieselben sechs SVG-Dateinamen wie `assets/icons` enthalten. Farben, Hintergrundüberlagerung und Animationsdauer sind als CSS-Variablen in `styles/themes/default.css` zusammengefasst.
+Eigene Medien sollten außerhalb des Modulordners im Foundry-Datenverzeichnis liegen, da Modulupdates den installierten Modulordner ersetzen. Ein eigenes Icon-Verzeichnis benötigt dieselben sechs SVG-Dateinamen wie `assets/icons`.
 
-## Ablauf Aktive Abwehr
+## Entwicklung und Qualitätssicherung
 
-1. Der Angreifer führt den Angriff aus. Smoother Fight merkt sich dessen aktuelles Ziel an der Chatkarte.
-2. Der Owner des Ziels klickt im HUD auf **Aktive Abwehr**. Ein anderer Spieler mit der Meisterschaft **Verteidiger**, einer passenden Nahkampf-Abwehr und höchstens 2 m Abstand kann stattdessen oder zusätzlich **Verteidiger für …** wählen.
-3. Das normale Splittermond-System führt die Abwehrprobe aus.
-4. Bei Erfolg wird der neue Verteidigungswert als `Basis + 1 + EG + Defensiv` berechnet. Bei mehreren Abwehrproben bleibt der höchste Wert bestehen.
-5. Eine neue, voll funktionsfähige Splittermond-Angriffskarte wird mit diesem Wert erzeugt. Trefferstatus, verfügbare EG und Streiftreffer werden neu bestimmt.
-6. Gewürfelter Schaden erscheint als geöffnetes, vollbreites Subevent im selben HUD-Ereignis; ältere Abwehrdetails werden dabei eingeklappt und die originalen Anwenden-Buttons bleiben nutzbar.
+Das [GitHub-Repository](https://github.com/SplittermondFoundry/smooth-combat) enthält neben den Moduldateien auch die automatisierten Tests, eine statische HUD-Demo und das Werkzeug zum reproduzierbaren Erzeugen der mitgelieferten Audiodateien. Diese Entwicklungsdateien sind nicht Bestandteil des installierbaren Release-ZIPs.
 
-## Qualitätssicherung
+Mit einer aktuellen Node.js-LTS-Version können im Stamm des geklonten Repositorys folgende Prüfungen ausgeführt werden:
 
 ```powershell
-npm run assets:audio
 npm test
 npm run check
+npm run assets:audio
 ```
 
-Die Befehle werden aus dem Projektstamm ausgeführt. `assets:audio` erzeugt die sechs mitgelieferten WAV-Signale deterministisch neu. Die Berechnungen sind in `scripts/combat-rules.js` bewusst unabhängig von Foundry gehalten und werden mit Node-Testfällen abgesichert.
+`npm run check` führt die vollständige Testsuite und die zusätzlichen Coverage-Regeln aus. `demo/index.html` dient als statische Vorschau und Test-Fixture für das HUD-Stylesheet.
 
-Die verbindlichen Modulgrenzen und Regeln für künftige Änderungen stehen in `ARCHITECTURE.md` im Projektstamm. `npm run check` kontrolliert diese Grenzen einschließlich Importzyklen, Dateigrößen und der Trennung von Domain- und Foundry-Code automatisch.
+## Probleme und Vorschläge
 
-## Sinnvolle nächste Ausbaustufen
+Fehler und Funktionswünsche können über die [GitHub-Issues](https://github.com/SplittermondFoundry/smooth-combat/issues) gemeldet werden. Bitte dabei Foundry-Version, Splittermond-Systemversion und Modulversion angeben.
 
-- frei verschiebbare HUD-Position pro Client
-- optionale Entfernungsmessung und Reichweitenwarnung zwischen Angreifer und Ziel
-- Zustands- und Wundmalus-Chips direkt an beiden Portraits
-- „Zug abschließen“-Knopf mit häufig verwendeten Tickwerten
-- Zielhistorie (letzte drei Ziele) für schnelle Gegnerwechsel
-- akustischer oder dezenter visueller Hinweis nur für den aktuell handelnden Spieler
+## Lizenz
+
+Veröffentlicht unter der [MIT-Lizenz](LICENSE).
+
+Foundry Virtual Tabletop und Splittermond sind Marken ihrer jeweiligen Rechteinhaber. Dieses Community-Modul ist kein offizielles Produkt der Rechteinhaber.
