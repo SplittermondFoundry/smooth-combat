@@ -107,7 +107,7 @@ export function registerAudioSettingsMenu() {
                     const customSound = String(customPicker?.value ?? "").trim();
                     if (sound === AUDIO_CUSTOM_SOUND && !customSound) {
                         ui.notifications.warn(t("SMOOTHER_FIGHT.Settings.AudioCustomRequired"));
-                        customPicker?.input?.focus?.();
+                        customPicker?.focus?.();
                         return;
                     }
                     profile.events[eventId] = {
