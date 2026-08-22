@@ -12,14 +12,14 @@
 }
 
 #splittermond-smoother-fight-hud .sf-associated-card > summary {
-    min-height: 27px;
+    min-height: 32px;
     display: flex;
     align-items: center;
     gap: 7px;
     padding: 5px 8px;
     color: var(--sf-gold-bright);
     cursor: pointer;
-    font-size: 9px;
+    font-size: var(--sf-font-small);
     font-weight: 800;
     letter-spacing: 0.08em;
     line-height: 1;
@@ -148,7 +148,7 @@
     color: var(--sf-muted);
     box-shadow: none;
     font-family: inherit;
-    font-size: 9px;
+    font-size: var(--sf-font-small);
     font-weight: 800;
     line-height: normal;
     letter-spacing: 0.06em;
@@ -261,7 +261,7 @@
     top: 6px;
     left: 7px;
     color: var(--sf-muted);
-    font-size: 8px;
+    font-size: var(--sf-font-meta);
     font-weight: 800;
     letter-spacing: 0.08em;
     line-height: 1;
@@ -282,7 +282,7 @@
 
 #splittermond-smoother-fight-hud .sf-associated-card.is-damage .sf-promoted-actions button {
     height: auto !important;
-    min-height: 28px;
+    min-height: 32px;
     padding: 4px 8px !important;
     line-height: 1.2;
     white-space: normal;
@@ -454,7 +454,7 @@
     left: 7px;
     color: var(--sf-muted);
     font-family: var(--font-primary, "Signika", sans-serif);
-    font-size: 8px;
+    font-size: var(--sf-font-meta);
     font-weight: 800;
     letter-spacing: 0.08em;
     line-height: 1;
@@ -501,7 +501,7 @@
 
 #splittermond-smoother-fight-hud .sf-collapsible-roll > .sf-roll-toggle {
     width: min(150px, 100%);
-    min-height: 20px;
+    min-height: 32px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -512,7 +512,7 @@
     border-radius: 999px;
     color: var(--sf-muted);
     background: rgba(216, 168, 93, 0.06);
-    font-size: 9px;
+    font-size: var(--sf-font-small);
     line-height: 1;
 }
 
@@ -593,7 +593,7 @@
 
 #splittermond-smoother-fight-hud .sf-defense-damage-action {
     width: 100%;
-    min-height: 28px;
+    min-height: 32px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -603,7 +603,7 @@
     border-radius: 3px;
     color: var(--sf-muted);
     background: rgba(216, 168, 93, 0.07);
-    font-size: 10px;
+    font-size: var(--sf-font-small);
 }
 
 #splittermond-smoother-fight-hud .sf-defense-damage-action.is-own-defense-damage:not(:disabled) {
@@ -654,7 +654,7 @@
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls button {
-    min-height: 24px;
+    min-height: 32px;
     margin-block: 2px;
     padding-block: 2px;
     font-size: 11px;
@@ -937,7 +937,7 @@
 
 .sf-fumble-actions button {
     width: 100%;
-    min-height: 28px;
+    min-height: 32px;
     margin: 0;
 }
 
@@ -1043,7 +1043,7 @@
 
 #splittermond-smoother-fight-hud .sf-quick-target-search input {
     min-width: 0;
-    height: 24px;
+    height: 32px;
     margin: 0;
     padding: 0;
     border: 0;
@@ -1067,7 +1067,7 @@
 
 #splittermond-smoother-fight-hud .sf-quick-targets > div .sf-quick-target-filters > button {
     min-width: 0;
-    min-height: 25px;
+    min-height: 32px;
     flex: 1 1 0;
     display: flex;
     align-items: center;
@@ -1079,7 +1079,7 @@
     color: var(--sf-muted);
     background: rgba(108, 201, 193, 0.05);
     text-align: center;
-    font-size: 9px;
+    font-size: var(--sf-font-small);
 }
 
 #splittermond-smoother-fight-hud .sf-quick-targets > div .sf-quick-target-filters > button:hover:not(:disabled),
@@ -1103,7 +1103,7 @@
 
 #splittermond-smoother-fight-hud .sf-quick-target-filters button > b {
     color: inherit;
-    font-size: 9px;
+    font-size: var(--sf-font-meta);
 }
 
 #splittermond-smoother-fight-hud .sf-quick-target-results {
@@ -1126,7 +1126,7 @@
     margin: 0;
     padding: 3px 7px 4px;
     color: var(--sf-muted);
-    font-size: 9px;
+    font-size: var(--sf-font-meta);
     line-height: 1.2;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -1139,7 +1139,7 @@
     color: var(--sf-text);
     background: rgba(108, 201, 193, 0.12);
     text-align: center;
-    font-size: 9px;
+    font-size: var(--sf-font-meta);
 }
 
 #splittermond-smoother-fight-hud .sf-quick-target-actor-group + .sf-quick-target-actor-group {
@@ -1153,7 +1153,7 @@
     margin: 0;
     padding: 2px 7px;
     color: var(--sf-muted);
-    font-size: 9px;
+    font-size: var(--sf-font-meta);
     font-weight: 600;
     line-height: 1.2;
 }
@@ -1170,7 +1170,7 @@
 #splittermond-smoother-fight-hud .sf-quick-target-actor-group > h5 b {
     order: 2;
     color: var(--sf-muted);
-    font-size: 9px;
+    font-size: var(--sf-font-meta);
 }
 
 #splittermond-smoother-fight-hud [data-sf-quick-target-row][hidden],

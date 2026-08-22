@@ -8,6 +8,12 @@
     --sf-text: #eef4ef;
     --sf-muted: #9caaa5;
     --sf-danger: #c65d55;
+    --sf-font-meta: 10px;
+    --sf-font-small: 11px;
+    --sf-font-control: 12px;
+    --sf-font-value: 13px;
+    --sf-focus-ring: #f2ce87;
+    --sf-focus-halo: rgba(108, 201, 193, 0.42);
     --sf-hud-background-dark: url("../assets/backgrounds/hud-dark.jpg");
     --sf-hud-background-light: url("../assets/backgrounds/hud-light.jpg");
     --sf-hud-background-image: var(--sf-hud-background-dark);
@@ -34,6 +40,8 @@
     --sf-text: #10201d;
     --sf-muted: #40554f;
     --sf-danger: #922f29;
+    --sf-focus-ring: #155f58;
+    --sf-focus-halo: rgba(99, 58, 8, 0.28);
     --sf-hud-background-image: var(--sf-hud-background-light);
     --sf-hud-background-tint: rgba(210, 220, 212, 0.86);
 }

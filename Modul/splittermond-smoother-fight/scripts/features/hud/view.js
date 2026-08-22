@@ -177,19 +177,24 @@ function buildThemeToggle() {
 
 function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false, primary = false, showDefenses = true }) {
     const image = token?.texture?.src ?? actor?.img ?? "icons/svg/mystery-man.svg";
-    const clickable = action ? `data-sf-action="${action}" role="button" tabindex="0"` : "";
     const tokenReference = token?.uuid ? `data-sf-token-uuid="${escapeAttr(token.uuid)}"` : "";
+    const name = token?.name ?? actor?.name ?? "–";
+    const focusLabel = `${t("SMOOTHER_FIGHT.HUD.FocusCombatant")}: ${name}`;
+    const focusButton = token?.uuid ? `<button type="button" class="sf-portrait-focus" data-sf-action="show-token" data-token-uuid="${escapeAttr(token.uuid)}" title="${escapeAttr(focusLabel)}"><span class="sf-visually-hidden">${escapeHtml(focusLabel)}</span></button>` : "";
+    const openSheetLabel = `${t("SMOOTHER_FIGHT.HUD.OpenSheet")}: ${name}`;
+    const sheetButton = action ? `<button type="button" class="sf-portrait-open" data-sf-action="${action}" ${tokenReference} title="${escapeAttr(openSheetLabel)}"><i class="fa-solid fa-address-card" aria-hidden="true"></i><span class="sf-visually-hidden">${escapeHtml(openSheetLabel)}</span></button>` : "";
     const defense = getDerivedValue(actor, "defense");
     const body = getDerivedValue(actor, "bodyresist");
     const mind = getDerivedValue(actor, "mindresist");
     return `
-        <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""} ${primary ? "sf-is-primary-target" : ""}" ${clickable} ${tokenReference}>
+        <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""} ${primary ? "sf-is-primary-target" : ""}" ${tokenReference} aria-label="${escapeAttr(`${eyebrow}: ${name}`)}">
+            ${focusButton}
             <div class="sf-portrait-image" style="--sf-token-image:url('${escapeCssUrl(image)}')">
                 <span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>
                 ${highlighted ? `<span class="sf-target-alert"><i class="fa-solid fa-bullseye"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YouAreTarget"))}</span></span>` : ""}
                 ${services.feedbackMarkup(token, actor)}
             </div>
-            <div class="sf-portrait-name">${escapeHtml(token?.name ?? actor?.name ?? "–")}</div>
+            <div class="sf-portrait-identity"><div class="sf-portrait-name">${escapeHtml(name)}</div>${sheetButton}</div>
             ${showDefenses ? `<div class="sf-defense-row" aria-label="VTD, KW, GW">
                 <span><small>VTD</small>${escapeHtml(defense)}</span>
                 <span><small>KW</small>${escapeHtml(body)}</span>
@@ -281,15 +286,15 @@ function buildCombatControls(context) {
     const gmControls = game.user.isGM ? `
         <details class="sf-visibility-menu ${visibilityHidden ? "is-active" : ""}"><summary class="sf-icon-button" title="${escapeAttr(visibilityLabel)}" aria-label="${escapeAttr(visibilityLabel)}"><i class="fa-solid ${visibilityHidden ? "fa-eye-slash" : "fa-eye"}"></i><span class="sf-control-label">${escapeHtml(visibilityLabel)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
             <div class="sf-visibility-popover" aria-label="${escapeAttr(visibilityLabel)}"><button type="button" data-sf-action="toggle-token-hidden" class="${tokenHidden ? "is-active" : ""}" aria-pressed="${tokenHidden}" title="${escapeAttr(tokenVisibilityLabel)}"><i class="fa-solid ${tokenHidden ? "fa-eye" : "fa-eye-slash"}"></i><span>${escapeHtml(tokenVisibilityLabel)}</span></button><button type="button" data-sf-action="toggle-combatant-hidden" class="${combatantHidden ? "is-active" : ""}" aria-pressed="${combatantHidden}" title="${escapeAttr(combatantVisibilityLabel)}"><i class="fa-solid ${combatantHidden ? "fa-list" : "fa-list-check"}"></i><span>${escapeHtml(combatantVisibilityLabel)}</span></button><button type="button" data-sf-action="toggle-combatant-visibility" class="${visibilityHidden ? "is-active" : ""}" aria-pressed="${visibilityHidden}" title="${escapeAttr(combinedVisibilityLabel)}"><i class="fa-solid ${visibilityHidden ? "fa-eye" : "fa-eye-slash"}"></i><span>${escapeHtml(combinedVisibilityLabel)}</span></button></div></details>
-        <button type="button" data-sf-action="toggle-combatant-defeated" class="sf-icon-button ${context.combatant.isDefeated ? "is-active" : ""}" title="${escapeAttr(defeatedLabel)}"><i class="fa-solid fa-skull"></i><span class="sf-control-label">${escapeHtml(defeatedLabel)}</span></button>
-        <button type="button" data-sf-action="remove-combatant" class="sf-icon-button is-danger" title="${escapeAttr(removeLabel)}"><i class="fa-solid fa-circle-minus"></i><span class="sf-control-label">${escapeHtml(removeLabel)}</span></button>
+        <button type="button" data-sf-action="toggle-combatant-defeated" class="sf-icon-button ${context.combatant.isDefeated ? "is-active" : ""}" title="${escapeAttr(defeatedLabel)}" aria-label="${escapeAttr(defeatedLabel)}"><i class="fa-solid fa-skull"></i><span class="sf-control-label">${escapeHtml(defeatedLabel)}</span></button>
+        <button type="button" data-sf-action="remove-combatant" class="sf-icon-button is-danger" title="${escapeAttr(removeLabel)}" aria-label="${escapeAttr(removeLabel)}"><i class="fa-solid fa-circle-minus"></i><span class="sf-control-label">${escapeHtml(removeLabel)}</span></button>
     ` : "";
 
     return `<section class="sf-combat-controls" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CombatControls"))}">
         ${buildAdvanceButtons(context)}
         <div class="sf-pause-buttons">${pauseButtons}</div>
         <div class="sf-tracker-buttons">
-            <button type="button" data-sf-action="focus-combatant" class="sf-icon-button" title="${escapeAttr(focusLabel)}"><i class="fa-solid fa-bullseye"></i><span class="sf-control-label">${escapeHtml(focusLabel)}</span></button>
+            <button type="button" data-sf-action="focus-combatant" class="sf-icon-button" title="${escapeAttr(focusLabel)}" aria-label="${escapeAttr(focusLabel)}"><i class="fa-solid fa-bullseye"></i><span class="sf-control-label">${escapeHtml(focusLabel)}</span></button>
             ${gmControls}
         </div>
     </section>`;
@@ -613,7 +618,7 @@ function directAttackControl(attack, { menuBody, showMenu, isDefault, readiness,
 function actionMenu(icon, label, body, className = "", menuId = "") {
     const menuAttribute = menuId ? ` data-sf-menu="${escapeAttr(menuId)}"` : "";
     return `<details class="sf-action-menu ${escapeAttr(className)}"${menuAttribute}>
-        <summary><i class="${icon}"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
+        <summary title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="${icon}" aria-hidden="true"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron" aria-hidden="true"></i></summary>
         <div class="sf-action-popover">${body}</div>
     </details>`;
 }

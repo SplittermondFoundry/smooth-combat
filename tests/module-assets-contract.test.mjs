@@ -43,6 +43,7 @@ test("published DOM integration attributes remain available", () => {
     assert.match(assignmentTemplate, /data-overview-token-select/u);
 
     const hudView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "view.js"), "utf8");
+    const hudController = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "controller.js"), "utf8");
     const combatEventView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "combat-events", "view.js"), "utf8");
     assert.match(hudView, /data-sf-context-actor-id/u);
     assert.match(hudView, /sf-is-primary-target/u);
@@ -58,6 +59,14 @@ test("published DOM integration attributes remain available", () => {
     assert.doesNotMatch(hudView, /role="tooltip"[^`]*data-sf-action="share-tick-action"/u);
     assert.match(hudView, /data-sf-action="share-tick-action"/u);
     assert.match(hudView, /class="sf-tick-action-source"/u);
+    assert.match(hudView, /<button type="button" class="sf-portrait-open"/u);
+    assert.match(hudView, /<button type="button" class="sf-portrait-focus" data-sf-action="show-token"/u);
+    assert.match(hudView, /data-token-uuid="\$\{escapeAttr\(token\.uuid\)\}"/u);
+    assert.match(hudView, /class="sf-visually-hidden"/u);
+    assert.match(hudView, /<summary title="\$\{escapeAttr\(label\)\}" aria-label="\$\{escapeAttr\(label\)\}"/u);
+    assert.doesNotMatch(hudView, /role="button" tabindex="0"/u);
+    assert.match(hudController, /closest\("\.sf-portrait\[data-sf-token-uuid\]"\)/u);
+    assert.match(hudController, /case "show-token":\s*services\.showTokenOnCanvas\(services\.resolveToken\(target\.dataset\.tokenUuid\)\)/u);
     assert.equal((hudView.match(/data-sf-action="toggle-token-hidden"/gu) ?? []).length, 1);
     assert.equal((hudView.match(/data-sf-action="toggle-combatant-hidden"/gu) ?? []).length, 1);
     assert.equal((hudView.match(/data-sf-action="toggle-combatant-visibility"/gu) ?? []).length, 1);
@@ -68,6 +77,15 @@ test("published DOM integration attributes remain available", () => {
 test("the local HUD demo loads the manifest stylesheet entry", () => {
     const demo = fs.readFileSync(path.join(projectRoot, "demo", "index.html"), "utf8");
     assert.match(demo, /href="\.\.\/Modul\/splittermond-smoother-fight\/styles\/smoother-fight-0\.3\.57\.css"/u);
+});
+
+test("the compact HUD retains mechanical status and summarizes secondary targets", () => {
+    const hudView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "view.js"), "utf8");
+    const responsive = fs.readFileSync(path.join(moduleRoot, "styles", "responsive.css"), "utf8");
+    assert.match(hudView, /<b>\+\$\{secondaryTargets\.length\}<\/b>/u);
+    assert.doesNotMatch(responsive, /\.sf-actor \.sf-defense-row,\s*#splittermond-smoother-fight-hud \.sf-resources,\s*#splittermond-smoother-fight-hud \.sf-turn-target\s*\{\s*display:\s*none/u);
+    assert.match(responsive, /\.sf-turn-target\s*\{[^}]*font-size:\s*var\(--sf-font-small\)/su);
+    assert.match(responsive, /\.sf-resources\s*\{[^}]*grid-template-columns:\s*1fr/su);
 });
 
 test("the legacy stylesheet URL remains a compatible entry point", () => {
@@ -82,9 +100,17 @@ test("split styles flatten in the verified cascade order", () => {
         .map((match) => match[1]);
     assert.deepEqual(imports, ["themes/default.css", "hud.css", "combat-events.css", "settings.css", "responsive.css"]);
     const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));
+    const flattenedCss = flattened.toString("utf8");
+    assert.match(flattenedCss, /--sf-font-meta:\s*10px/u);
+    assert.match(flattenedCss, /--sf-font-control:\s*12px/u);
+    assert.match(flattenedCss, /\.sf-portrait-open/u);
+    assert.match(flattenedCss, /\.sf-portrait-focus/u);
+    assert.match(flattenedCss, /--sf-side-panel-width:\s*172px/u);
+    assert.match(flattenedCss, /--sf-portrait-height:\s*212px/u);
+    assert.doesNotMatch(flattenedCss, /font-size:\s*[78]px/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "df5417592f48913acae0c0116bb43312ff265eef246c44b44213b0a744cdbbcb",
+        "15b57ed58492d8bc4804a67264bf24c6809cc7b0b50ffd7baf63f486a6c69e08",
     );
 });
 

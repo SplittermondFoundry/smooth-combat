@@ -21,7 +21,7 @@ export function buildQuickTargets(context) {
         : buildFlatTargets(ordered, { labels, selected, primaryTargetUuid });
     const label = t("SMOOTHER_FIGHT.HUD.QuickTarget");
     return `<details class="sf-quick-targets${structured ? " is-structured" : ""}">
-        <summary title="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron"></i></summary>
+        <summary title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs" aria-hidden="true"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron" aria-hidden="true"></i></summary>
         <div class="sf-quick-target-popover">${content}</div>
     </details>`;
 }

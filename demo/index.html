@@ -34,9 +34,10 @@
     <aside id="sidebar-mock"><h2>Kampfübersicht</h2><p>Farruk · Tick 18</p><p>Rattling · Tick 21</p><p>Liandra · Tick 24</p></aside>
     <section id="splittermond-smoother-fight-hud" class="sf-hud">
         <div class="sf-shell is-current-user-turn">
-            <aside class="sf-portrait sf-actor" role="button">
+            <aside class="sf-portrait sf-actor" data-sf-token-uuid="Scene.demo.Token.farruk" aria-label="Gerade aktiv: Farruk">
+                <button type="button" class="sf-portrait-focus" data-sf-action="show-token" data-token-uuid="Scene.demo.Token.farruk" title="Token auf der Karte anzeigen: Farruk"><span class="sf-visually-hidden">Token auf der Karte anzeigen: Farruk</span></button>
                 <div class="sf-portrait-image"><span class="sf-eyebrow">Gerade aktiv</span></div>
-                <div class="sf-portrait-name">Farruk (Andi)</div>
+                <div class="sf-portrait-identity"><div class="sf-portrait-name">Farruk (Andi)</div><button type="button" class="sf-portrait-open" title="Akteursbogen öffnen"><span aria-hidden="true">▣</span><span class="sf-visually-hidden">Akteursbogen öffnen: Farruk</span></button></div>
                 <div class="sf-defense-row"><span><small>VTD</small>20</span><span><small>KW</small>18</span><span><small>GW</small>16</span></div>
                 <div class="sf-resources"><div class="sf-resource"><span style="width:74%"></span><small>LP 22/30</small></div><div class="sf-resource sf-resource-focus"><span style="width:62%"></span><small>FO 13/21</small></div></div>
             </aside>
@@ -65,20 +66,20 @@
                     </div>
                     <div class="sf-pause-buttons"><button>◷ <span>Abwartend</span></button><button>✋ <span>Bereithalten</span></button></div>
                     <div class="sf-tracker-buttons">
-                        <button class="sf-icon-button" title="Token auf der Karte anzeigen">◎ <span class="sf-control-label">Fokus</span></button>
+                        <button class="sf-icon-button" title="Token auf der Karte anzeigen" aria-label="Token auf der Karte anzeigen">◎ <span class="sf-control-label">Fokus</span></button>
                         <details class="sf-visibility-menu">
-                            <summary class="sf-icon-button" title="Sichtbarkeit">◉ <span class="sf-control-label">Sichtbarkeit</span><span class="sf-chevron">⌄</span></summary>
+                            <summary class="sf-icon-button" title="Sichtbarkeit" aria-label="Sichtbarkeit">◉ <span class="sf-control-label">Sichtbarkeit</span><span class="sf-chevron">⌄</span></summary>
                             <div class="sf-visibility-popover"><button>◉ <span>Auf Karte verbergen</span></button><button>☷ <span>In Tickliste verbergen</span></button><button>◉ <span>Auf Karte und Tickliste verbergen</span></button></div>
                         </details>
-                        <button class="sf-icon-button" title="Als besiegt markieren">☠ <span class="sf-control-label">Besiegt</span></button>
-                        <button class="sf-icon-button is-danger" title="Aus dem Kampf entfernen">⊖ <span class="sf-control-label">Entfernen</span></button>
+                        <button class="sf-icon-button" title="Als besiegt markieren" aria-label="Als besiegt markieren">☠ <span class="sf-control-label">Besiegt</span></button>
+                        <button class="sf-icon-button is-danger" title="Aus dem Kampf entfernen" aria-label="Aus dem Kampf entfernen">⊖ <span class="sf-control-label">Entfernen</span></button>
                     </div>
                 </section>
                 <nav class="sf-actions">
-                    <details class="sf-action-menu"><summary>◈ <span>Fertigkeiten</span>⌃</summary><div class="sf-action-popover"><button><span>Akrobatik</span><b>17</b></button><button><span>Heimlichkeit</span><b>12</b></button></div></details>
-                    <details class="sf-action-menu"><summary>♜ <span>Angriff</span>⌃</summary><div class="sf-action-popover"><button class="is-prepared"><span>Breitschwert<small>Klingenwaffen 19</small></span><b>1W10+4</b></button></div></details>
-                    <details class="sf-action-menu"><summary>✦ <span>Zauber</span>⌃</summary><div class="sf-action-popover"><button><span>Flammenschild<small>Feuermagie 15</small></span><b>8 T</b></button></div></details>
-                    <details class="sf-action-menu sf-defense-menu"><summary>◆ <span>Aktive Abwehr</span>⌃</summary><div class="sf-action-popover"><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>VTD</strong><b>20</b></span><span class="sf-defense-option-list"><small>Akrobatik <b>17</b></small><small>Säbel · Klingenwaffen <b>19</b></small></span></button><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>KW</strong><b>18</b></span><span class="sf-defense-option-list"><small>Zähigkeit <b>14</b></small></span></button><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>GW</strong><b>16</b></span><span class="sf-defense-option-list"><small>Entschlossenheit <b>12</b></small></span></button></div></details>
+                    <details class="sf-action-menu"><summary title="Fertigkeiten" aria-label="Fertigkeiten">◈ <span>Fertigkeiten</span>⌃</summary><div class="sf-action-popover"><button><span>Akrobatik</span><b>17</b></button><button><span>Heimlichkeit</span><b>12</b></button></div></details>
+                    <details class="sf-action-menu"><summary title="Angriff" aria-label="Angriff">♜ <span>Angriff</span>⌃</summary><div class="sf-action-popover"><button class="is-prepared"><span>Breitschwert<small>Klingenwaffen 19</small></span><b>1W10+4</b></button></div></details>
+                    <details class="sf-action-menu"><summary title="Zauber" aria-label="Zauber">✦ <span>Zauber</span>⌃</summary><div class="sf-action-popover"><button><span>Flammenschild<small>Feuermagie 15</small></span><b>8 T</b></button></div></details>
+                    <details class="sf-action-menu sf-defense-menu"><summary title="Aktive Abwehr" aria-label="Aktive Abwehr">◆ <span>Aktive Abwehr</span>⌃</summary><div class="sf-action-popover"><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>VTD</strong><b>20</b></span><span class="sf-defense-option-list"><small>Akrobatik <b>17</b></small><small>Säbel · Klingenwaffen <b>19</b></small></span></button><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>KW</strong><b>18</b></span><span class="sf-defense-option-list"><small>Zähigkeit <b>14</b></small></span></button><button class="sf-defense-option"><span class="sf-defense-option-heading"><strong>GW</strong><b>16</b></span><span class="sf-defense-option-list"><small>Entschlossenheit <b>12</b></small></span></button></div></details>
                     <div class="sf-defense-pills" aria-label="VTD, KW, GW"><span>VTD<b>20</b></span><span>KW<b>18</b></span><span>GW<b>16</b></span></div>
                 </nav>
                 <section class="sf-events">
@@ -94,12 +95,13 @@
                 </section>
             </main>
             <div class="sf-target-column"><div class="sf-target-list"><div class="sf-primary-target-panel">
-                <aside class="sf-portrait sf-target sf-is-primary-target">
+                <aside class="sf-portrait sf-target sf-is-primary-target" data-sf-token-uuid="Scene.demo.Token.rattling" aria-label="Primärziel: Rattling-Plünderer">
+                    <button type="button" class="sf-portrait-focus" data-sf-action="show-token" data-token-uuid="Scene.demo.Token.rattling" title="Token auf der Karte anzeigen: Rattling-Plünderer"><span class="sf-visually-hidden">Token auf der Karte anzeigen: Rattling-Plünderer</span></button>
                     <div class="sf-portrait-image"><span class="sf-eyebrow">Primärziel</span></div>
-                    <div class="sf-portrait-name">Rattling-Plünderer</div>
-                    <div class="sf-defense-row"><span><small>VTD</small>24</span><span><small>KW</small>17</span><span><small>GW</small>14</span></div>
-                    <div class="sf-resources"><div class="sf-resource"><span style="width:42%"></span><small>LP 8/19</small></div></div>
+                    <div class="sf-portrait-identity"><div class="sf-portrait-name">Rattling-Plünderer</div><button type="button" class="sf-portrait-open" title="Akteursbogen öffnen"><span aria-hidden="true">▣</span><span class="sf-visually-hidden">Akteursbogen öffnen: Rattling-Plünderer</span></button></div>
+                    <div class="sf-defense-row is-concealed"><span>◉̸</span><span>Abwehrwerte verborgen</span></div>
                 </aside>
+                <button type="button" class="sf-primary-target-remove" title="Ziel entfernen" aria-label="Ziel entfernen">×</button>
             </div></div></div>
         </div>
         <details class="sf-gm-targets"><summary>◎ GM: Ziel wechseln⌃</summary><div><button><span>Rattling-Plünderer</span><b>◎</b></button><button><span>Rattling-Späher</span></button></div></details>
