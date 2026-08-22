@@ -21,9 +21,11 @@ import {
 export async function onCreateChatMessage(message) {
     try {
         if (isOffensiveCombatMessage(message)) await attachCombatContext(message);
+        const defenseMessage = services.isDefenseMessage(message);
+        if (defenseMessage) await services.claimPendingDefenseForMessage(message);
         await waitForDiceSoNice(message);
         if (services.isFumbleTableMessage(message)) await services.attachFumbleActions(message);
-        if (services.isDefenseMessage(message)) await services.processDefenseMessage(message);
+        if (defenseMessage) await services.processDefenseMessage(message);
         services.announceMessageFeedback(message);
     } catch (error) {
         console.error(`${MODULE_ID} | Failed to process chat message`, error);

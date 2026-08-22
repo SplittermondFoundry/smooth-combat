@@ -37,6 +37,32 @@ function primaryTargetActorUuid(context) {
     return context?.primaryTargetActorUuid ?? context?.targetActorUuid ?? null;
 }
 
+const PENDING_DEFENSE_TTL_MS = 10 * 60 * 1000;
+
+function createPendingDefenseId() {
+    return globalThis.crypto?.randomUUID?.()
+        ?? globalThis.foundry?.utils?.randomID?.()
+        ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function clearPendingDefense(pendingDefenseId) {
+    if (!pendingDefenseId) return;
+    const timeoutId = activeDefenseState.pendingDefenseTimers.get(pendingDefenseId);
+    if (timeoutId) clearTimeout(timeoutId);
+    activeDefenseState.pendingDefenseTimers.delete(pendingDefenseId);
+    activeDefenseState.rollingDefenses.delete(pendingDefenseId);
+    if (activeDefenseState.pendingDefense?.pendingDefenseId === pendingDefenseId) {
+        activeDefenseState.pendingDefense = null;
+    }
+}
+
+function schedulePendingDefenseCleanup(pending) {
+    const delay = Math.max(0, pending.expiresAt - Date.now());
+    const timeoutId = setTimeout(() => clearPendingDefense(pending.pendingDefenseId), delay);
+    timeoutId?.unref?.();
+    activeDefenseState.pendingDefenseTimers.set(pending.pendingDefenseId, timeoutId);
+}
+
 function rememberPendingDefense(message, targetOverride = null, options = {}) {
     const context = services.getMessageContext(message);
     const target = targetOverride
@@ -44,7 +70,9 @@ function rememberPendingDefense(message, targetOverride = null, options = {}) {
         ?? getControlledTokenDocument()
         ?? services.getHudContext()?.target;
     const defender = options.defender ?? target;
-    activeDefenseState.pendingDefense = {
+    clearPendingDefense(activeDefenseState.pendingDefense?.pendingDefenseId);
+    const pending = {
+        pendingDefenseId: createPendingDefenseId(),
         attackMessageId: message.id,
         primaryTargetTokenUuid: target?.uuid ?? null,
         primaryTargetActorUuid: target?.actor?.uuid ?? null,
@@ -55,9 +83,12 @@ function rememberPendingDefense(message, targetOverride = null, options = {}) {
         defenseId: options.defense?.id ?? null,
         defenseSkillId: options.defense?.skill?.id ?? null,
         assisted: Boolean(options.assisted),
-        expiresAt: Date.now() + 10 * 60 * 1000,
+        startedAt: Date.now(),
+        expiresAt: Date.now() + PENDING_DEFENSE_TTL_MS,
     };
-    return target;
+    activeDefenseState.pendingDefense = pending;
+    schedulePendingDefenseCleanup(pending);
+    return { pending, target };
 }
 
 export function getControlledTokenDocument() {
@@ -70,6 +101,7 @@ export function normalizePendingDefense(value) {
     const targetTokenUuid = primaryTargetTokenUuid(value);
     const targetActorUuid = primaryTargetActorUuid(value);
     return {
+        pendingDefenseId: typeof value.pendingDefenseId === "string" ? value.pendingDefenseId : null,
         attackMessageId: value.attackMessageId,
         primaryTargetTokenUuid: typeof targetTokenUuid === "string" ? targetTokenUuid : null,
         primaryTargetActorUuid: typeof targetActorUuid === "string" ? targetActorUuid : null,
@@ -80,8 +112,34 @@ export function normalizePendingDefense(value) {
         defenseId: typeof value.defenseId === "string" ? value.defenseId : null,
         defenseSkillId: typeof value.defenseSkillId === "string" ? value.defenseSkillId : null,
         assisted: Boolean(value.assisted),
+        startedAt: Number(value.startedAt) || 0,
         expiresAt: Number(value.expiresAt) || Date.now() + 60 * 1000,
     };
+}
+
+function pendingMatchesDefenseMessage(pending, message) {
+    if (!pending || pending.expiresAt < Date.now()) return false;
+    const target = services.resolveToken(pending.targetTokenUuid);
+    const defender = services.resolveToken(pending.defenderTokenUuid);
+    const expectedActor = pending.assisted ? defender?.actor : target?.actor;
+    return !expectedActor || !message.speaker?.actor || expectedActor.id === message.speaker.actor;
+}
+
+export async function claimPendingDefenseForMessage(message) {
+    const existing = normalizePendingDefense(services.getMessageContext(message));
+    if (existing || !services.isOwnMessage(message)) return existing;
+    const pending = Array.from(activeDefenseState.rollingDefenses.values())
+        .reverse()
+        .find((candidate) => pendingMatchesDefenseMessage(candidate, message));
+    if (!pending) return null;
+
+    activeDefenseState.claimedDefenses.set(message.id, pending);
+    clearPendingDefense(pending.pendingDefenseId);
+    await services.safeSetFlag(message, "context", {
+        ...(services.getMessageContext(message) ?? {}),
+        ...pending,
+    });
+    return pending;
 }
 
 export function getActiveGm() {
@@ -94,6 +152,7 @@ export async function processDefenseMessage(message, pendingOverride = null, { a
     try {
         return await processDefenseMessageOnce(message, pendingOverride, { allowForeign });
     } finally {
+        activeDefenseState.claimedDefenses.delete(message.id);
         activeDefenseState.processingDefenseMessages.delete(message.id);
     }
 }
@@ -103,16 +162,12 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
     const check = services.getDefenseCheck(message);
     if (!check) return;
 
-    let pending = normalizePendingDefense(pendingOverride)
+    const pending = normalizePendingDefense(pendingOverride)
         ?? normalizePendingDefense(services.getMessageContext(message))
-        ?? activeDefenseState.pendingDefense;
-    if (!pending || pending.expiresAt < Date.now()) pending = findPendingOffenseForDefense(message);
-    if (!pending?.attackMessageId) return;
+        ?? normalizePendingDefense(activeDefenseState.claimedDefenses.get(message.id));
+    if (!pending?.attackMessageId || pending.expiresAt < Date.now()) return;
 
-    const target = services.resolveToken(pending.targetTokenUuid);
-    const defender = services.resolveToken(pending.defenderTokenUuid);
-    const expectedActor = pending.assisted ? defender?.actor : target?.actor;
-    if (expectedActor && message.speaker?.actor && expectedActor.id !== message.speaker.actor) return;
+    if (!pendingMatchesDefenseMessage(pending, message)) return;
     if (pending.assisted && !isValidDefenderAttempt(pending, message)) return;
     requestLatestEventForDefense(pending);
 
@@ -123,6 +178,7 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
     const numbingDamage = defensePresentation.numbingDamage;
     await services.safeSetFlag(message, "context", {
         ...existingDefenseContext,
+        pendingDefenseId: pending.pendingDefenseId,
         attackMessageId: pending.attackMessageId,
         primaryTargetTokenUuid: pending.targetTokenUuid,
         primaryTargetActorUuid: pending.targetActorUuid,
@@ -139,7 +195,6 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
 
     if (!game.user.isGM) {
         const gm = getActiveGm();
-        activeDefenseState.pendingDefense = null;
         if (!gm) {
             ui.notifications.warn(localizeSystem("splittermond.chatCard.noGMConnected", "Kein GM verbunden."));
             return;
@@ -154,20 +209,13 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
         return;
     }
 
-    if (!activeDefenseChangesDifficulty(check, defensePresentation.defenseValue)) {
-        await recordDefenseAttempt(pending.attackMessageId, message, pending);
-        activeDefenseState.pendingDefense = null;
-        services.scheduleRender(0);
-        return;
-    }
-
-    const newOffense = await recreateOffenseAfterDefense(
+    const newOffense = await queueDefenseForAttack(
         pending.attackMessageId,
         message,
         check,
-        defensePresentation.defenseValue
+        defensePresentation.defenseValue,
+        pending
     );
-    activeDefenseState.pendingDefense = null;
     if (newOffense) services.scheduleRender(0);
 }
 
@@ -183,56 +231,48 @@ export function isDefenseMessageProcessing(messageId) {
     return activeDefenseState.processingDefenseMessages.has(messageId);
 }
 
-async function recordDefenseAttempt(offenseMessageId, defenseMessage, pending = null) {
-    const offense = game.messages.get(offenseMessageId);
-    if (!offense) return;
-    const context = services.getMessageContext(offense) ?? {};
-    const actorUuid = pending?.defenderActorUuid ?? services.resolveSpeakerActor(defenseMessage)?.uuid ?? null;
-    const attemptedDefenseActorUuids = Array.from(new Set([
-        ...(context.attemptedDefenseActorUuids ?? []),
-        actorUuid,
-    ].filter(Boolean)));
-    const defenseMessageIds = Array.from(new Set([
-        ...(context.defenseMessageIds ?? []),
-        context.defenseMessageId,
-        defenseMessage.id,
-    ].filter(Boolean)));
-    await services.safeSetFlag(offense, "context", {
-        ...context,
-        attemptedDefenseActorUuids,
-        defenseMessageIds,
-    });
+function resolveRootOffenseMessage(offenseMessageId) {
+    let current = game.messages.get(offenseMessageId);
+    const visited = new Set();
+    while (current && isOffensiveCombatMessage(current) && !visited.has(current.id)) {
+        visited.add(current.id);
+        const context = services.getMessageContext(current);
+        const rootId = context?.rootAttackMessageId;
+        const previousId = context?.recalculatedFrom;
+        const previous = game.messages.get(rootId ?? previousId);
+        if (!previous || !isOffensiveCombatMessage(previous)) return current;
+        current = previous;
+    }
+    return current && isOffensiveCombatMessage(current) ? current : null;
 }
 
-function findPendingOffenseForDefense(message) {
-    const messages = Array.from(game.messages?.contents ?? []).filter(isOffensiveCombatMessage).reverse();
-    const defenseActorId = message.speaker?.actor;
-    const offense = messages.find((candidate) => {
-        const context = services.getMessageContext(candidate);
-        const actorUuid = primaryTargetActorUuid(context);
-        if (!actorUuid) return false;
-        const actor = globalThis.fromUuidSync?.(actorUuid);
-        return actor?.id === defenseActorId && !context.supersededBy;
-    });
-    if (!offense) return null;
-    const context = services.getMessageContext(offense);
-    return {
-        attackMessageId: offense.id,
-        primaryTargetTokenUuid: primaryTargetTokenUuid(context),
-        primaryTargetActorUuid: primaryTargetActorUuid(context),
-        targetTokenUuid: primaryTargetTokenUuid(context),
-        targetActorUuid: primaryTargetActorUuid(context),
-        expiresAt: Date.now() + 1000,
-    };
+async function queueDefenseForAttack(offenseMessageId, defenseMessage, defenseCheck, displayedDefenseValue, pending) {
+    const root = resolveRootOffenseMessage(offenseMessageId);
+    if (!root) return null;
+    const previous = activeDefenseState.attackProcessingQueues.get(root.id) ?? Promise.resolve();
+    const operation = previous.catch(() => undefined).then(() => recreateOffenseAfterDefense(
+        root,
+        defenseMessage,
+        defenseCheck,
+        displayedDefenseValue,
+        pending
+    ));
+    activeDefenseState.attackProcessingQueues.set(root.id, operation);
+    try {
+        return await operation;
+    } finally {
+        if (activeDefenseState.attackProcessingQueues.get(root.id) === operation) {
+            activeDefenseState.attackProcessingQueues.delete(root.id);
+        }
+    }
 }
 
-async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, defenseCheck, displayedDefenseValue = null) {
-    const original = game.messages.get(offenseMessageId);
+async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, displayedDefenseValue, pending) {
+    const original = resolveLatestOffenseMessage(root);
     if (!original || !isOffensiveCombatMessage(original)) return null;
 
     const featureValue = findDefensiveFeatureValue(defenseCheck.itemData);
     const originalContext = services.getMessageContext(original) ?? {};
-    if (originalContext.supersededBy) return game.messages.get(originalContext.supersededBy) ?? null;
     const target = services.resolveToken(primaryTargetTokenUuid(originalContext));
     const calculatedBase = await target?.actor?.derivedValues?.[defenseCheck.defenseType]?.value?.calculate?.();
     const candidateDefense = displayedDefenseValue !== null && Number.isFinite(Number(displayedDefenseValue))
@@ -242,7 +282,6 @@ async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, def
             baseDefense: Number.isFinite(Number(calculatedBase)) ? Number(calculatedBase) : defenseCheck.baseDefense,
         }, featureValue);
     const newDefense = bestActiveDefenseValue(originalContext.defenseValue, candidateDefense);
-    const pending = normalizePendingDefense(services.getMessageContext(defenseMessage)) ?? activeDefenseState.pendingDefense;
     const actorUuid = pending?.defenderActorUuid ?? services.resolveSpeakerActor(defenseMessage)?.uuid ?? null;
     const attemptedDefenseActorUuids = Array.from(new Set([
         ...(originalContext.attemptedDefenseActorUuids ?? []),
@@ -256,15 +295,23 @@ async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, def
     await services.safeSetFlag(defenseMessage, "context", {
         ...(services.getMessageContext(defenseMessage) ?? pending ?? {}),
         resultingDefenseValue: candidateDefense,
+        effectiveDefenseValue: newDefense,
         defensiveFeatureValue: featureValue,
     });
 
+    if (originalContext.defenseMessageIds?.includes?.(defenseMessage.id)) return original;
+    const historyContext = {
+        ...originalContext,
+        rootAttackMessageId: root.id,
+        attemptedDefenseActorUuids,
+        defenseMessageIds,
+    };
+    if (!activeDefenseChangesDifficulty(defenseCheck, displayedDefenseValue)) {
+        await setOffenseContext(original, historyContext);
+        return original;
+    }
     if (Number.isFinite(Number(originalContext.defenseValue)) && newDefense <= Number(originalContext.defenseValue)) {
-        await services.safeSetFlag(original, "context", {
-            ...originalContext,
-            attemptedDefenseActorUuids,
-            defenseMessageIds,
-        });
+        await setOffenseContext(original, historyContext);
         return original;
     }
     const systemSource = cloneData(original.system?.toObject?.() ?? original.toObject().system);
@@ -276,13 +323,14 @@ async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, def
         grazingHitBasePenalty: config.grazingHitBasePenalty ?? 2,
     });
     if (!attackOutcomeChanged(previousReport, recalculatedReport)) {
-        await services.safeSetFlag(original, "context", {
-            ...originalContext,
-            defenseMessageIds,
+        const context = {
+            ...historyContext,
+            defenseMessageId: defenseMessage.id,
             defenseValue: newDefense,
             defenseType: defenseCheck.defenseType,
-            attemptedDefenseActorUuids,
-        });
+        };
+        const banner = defenseBanner(systemSource.checkReport, defenseCheck.defenseType, newDefense);
+        await updateOffenseCard(original, context, decorateRecalculatedCard(original.content, banner));
         return original;
     }
     systemSource.checkReport = recalculatedReport;
@@ -304,7 +352,8 @@ async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, def
     source.flags ??= {};
     source.flags[MODULE_ID] = {
         context: {
-            ...originalContext,
+            ...historyContext,
+            supersededBy: null,
             recalculatedFrom: original.id,
             defenseMessageId: defenseMessage.id,
             defenseMessageIds,
@@ -318,19 +367,46 @@ async function recreateOffenseAfterDefense(offenseMessageId, defenseMessage, def
 
     const created = await ChatMessage.create(source);
     if (!created) return null;
-    const rendered = await renderTemplate(created.system.template, created.system.getData());
-    const defenseLabel = localizeSystem(`splittermond.derivedAttribute.${defenseCheck.defenseType}.short`, String(defenseCheck.defenseType).toUpperCase());
-    const hiddenClass = systemSource.checkReport.hideDifficulty ? " gm-only" : "";
-    const banner = `<div class="sf-chat-recalculated${hiddenClass}"><i class="fa-solid fa-shield-halved"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NewDefense", { defense: defenseLabel }))}</span><strong>${escapeHtml(newDefense)}</strong></div>`;
-    const decorated = decorateRecalculatedCard(rendered, banner);
-    await created.update({ content: decorated });
-    await services.safeSetFlag(original, "context", {
-        ...services.getMessageContext(original),
-        attemptedDefenseActorUuids,
-        defenseMessageIds,
-        supersededBy: created.id,
+    try {
+        const rendered = await renderTemplate(created.system.template, created.system.getData());
+        const banner = defenseBanner(systemSource.checkReport, defenseCheck.defenseType, newDefense);
+        await created.update({ content: decorateRecalculatedCard(rendered, banner) });
+        const linked = await services.safeSetFlag(original, "context", {
+            ...(services.getMessageContext(original) ?? historyContext),
+            rootAttackMessageId: root.id,
+            attemptedDefenseActorUuids,
+            defenseMessageIds,
+            supersededBy: created.id,
+        });
+        if (!linked) throw new Error(`Could not link successor ${created.id} to attack ${original.id}`);
+        return created;
+    } catch (error) {
+        try {
+            await created.delete?.();
+        } catch (cleanupError) {
+            console.debug(`${MODULE_ID} | Could not remove incomplete attack successor ${created.id}`, cleanupError);
+        }
+        throw error;
+    }
+}
+
+async function updateOffenseCard(message, context, content) {
+    return message.update({
+        content,
+        [`flags.${MODULE_ID}.context`]: context,
     });
-    return created;
+}
+
+async function setOffenseContext(message, context) {
+    const updated = await services.safeSetFlag(message, "context", context);
+    if (!updated) throw new Error(`Could not update defense history on attack ${message.id}`);
+    return updated;
+}
+
+function defenseBanner(report, defenseType, defenseValue) {
+    const defenseLabel = localizeSystem(`splittermond.derivedAttribute.${defenseType}.short`, String(defenseType).toUpperCase());
+    const hiddenClass = report.hideDifficulty ? " gm-only" : "";
+    return `<div class="sf-chat-recalculated${hiddenClass}"><i class="fa-solid fa-shield-halved"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NewDefense", { defense: defenseLabel }))}</span><strong>${escapeHtml(defenseValue)}</strong></div>`;
 }
 
 function resetOffenseHandlers(systemSource) {
@@ -355,23 +431,122 @@ function resetCheckedOptions(value, visited = new Set()) {
 function decorateRecalculatedCard(content, banner) {
     const template = document.createElement("template");
     template.innerHTML = content;
+    template.content.querySelectorAll(".sf-chat-recalculated").forEach((element) => element.remove());
     template.content.querySelectorAll('[data-localaction="activeDefense" i], [data-local-action="activeDefense" i]').forEach((button) => button.remove());
     const wrapper = document.createElement("div");
     wrapper.append(template.content.cloneNode(true));
     return `${banner}${wrapper.innerHTML}`;
 }
 
+function startPendingDefenseRoll(pending) {
+    if (!pending?.pendingDefenseId || pending.expiresAt < Date.now()) return false;
+    if (activeDefenseState.pendingDefense?.pendingDefenseId !== pending.pendingDefenseId) return false;
+    activeDefenseState.rollingDefenses.set(pending.pendingDefenseId, pending);
+    return true;
+}
+
+function watchPendingDefenseRoll(result, pending) {
+    Promise.resolve(result).then(
+        () => clearPendingDefense(pending.pendingDefenseId),
+        () => clearPendingDefense(pending.pendingDefenseId)
+    );
+}
+
+async function runPendingDefenseRoll(pending, operation) {
+    if (!startPendingDefenseRoll(pending)) return null;
+    try {
+        return await operation();
+    } finally {
+        clearPendingDefense(pending.pendingDefenseId);
+    }
+}
+
+function observeActiveDefenseDialog(dialog, pending) {
+    if (!dialog || typeof dialog.rollDefense !== "function" || typeof dialog.close !== "function") return false;
+    // Splittermond closes this selector while its actor roll is still running, so observe both lifecycles.
+    const originalClose = dialog.close;
+    const originalRollDefense = dialog.rollDefense;
+    let rollStarted = false;
+
+    dialog.close = function (...args) {
+        if (!rollStarted) clearPendingDefense(pending.pendingDefenseId);
+        return originalClose.apply(this, args);
+    };
+    dialog.rollDefense = function (...args) {
+        rollStarted = true;
+        if (!startPendingDefenseRoll(pending)) return originalRollDefense.apply(this, args);
+
+        const actor = dialog.actor;
+        const originalActorRoll = actor?.rollActiveDefense;
+        let actorRollCaptured = false;
+        let actorRollInstalled = false;
+        const restoreActorRoll = () => {
+            if (!actorRollInstalled || actor.rollActiveDefense !== interceptActorRoll) return;
+            delete actor.rollActiveDefense;
+            if (actor.rollActiveDefense !== originalActorRoll) actor.rollActiveDefense = originalActorRoll;
+            actorRollInstalled = false;
+        };
+        const interceptActorRoll = function (...rollArgs) {
+            actorRollCaptured = true;
+            restoreActorRoll();
+            try {
+                const result = originalActorRoll.apply(this, rollArgs);
+                watchPendingDefenseRoll(result, pending);
+                return result;
+            } catch (error) {
+                clearPendingDefense(pending.pendingDefenseId);
+                throw error;
+            }
+        };
+        if (actor && typeof originalActorRoll === "function") {
+            try {
+                actor.rollActiveDefense = interceptActorRoll;
+                actorRollInstalled = actor.rollActiveDefense === interceptActorRoll;
+            } catch {
+                actorRollInstalled = false;
+            }
+        }
+
+        try {
+            const result = originalRollDefense.apply(this, args);
+            restoreActorRoll();
+            if (!actorRollCaptured && result?.then) watchPendingDefenseRoll(result, pending);
+            return result;
+        } catch (error) {
+            restoreActorRoll();
+            clearPendingDefense(pending.pendingDefenseId);
+            throw error;
+        }
+    };
+    return true;
+}
+
+async function launchActorActiveDefense(actor, type, pending) {
+    const normalizedType = String(type ?? "defense").toLocaleLowerCase();
+    if (!["defense", "vtd"].includes(normalizedType)) {
+        return runPendingDefenseRoll(pending, () => actor.activeDefenseDialog(type || undefined));
+    }
+    try {
+        const dialog = await actor.activeDefenseDialog(type || undefined);
+        if (!observeActiveDefenseDialog(dialog, pending)) clearPendingDefense(pending.pendingDefenseId);
+        return dialog;
+    } catch (error) {
+        clearPendingDefense(pending.pendingDefenseId);
+        throw error;
+    }
+}
+
 export async function beginActiveDefense(message) {
     message = resolveLatestOffenseMessage(message);
-    const target = rememberPendingDefense(message);
+    const { pending, target } = rememberPendingDefense(message);
     if (!target?.actor || !(game.user.isGM || target.actor.isOwner)) {
-        activeDefenseState.pendingDefense = null;
+        clearPendingDefense(pending.pendingDefenseId);
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNotAllowed"));
         return;
     }
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.WaitingForDefense", { target: target.name }));
     const type = message.system?.checkReport?.defenseType ?? "defense";
-    await target.actor.activeDefenseDialog(type || undefined);
+    await launchActorActiveDefense(target.actor, type, pending);
 }
 
 export async function beginAdditionalTargetDefense(message) {
@@ -384,10 +559,10 @@ export async function beginAdditionalTargetDefense(message) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNotAllowed"));
         return;
     }
-    rememberPendingDefense(message, target, { defender: target });
+    const { pending } = rememberPendingDefense(message, target, { defender: target });
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.WaitingForDefense", { target: target.name }));
     const type = message.system?.checkReport?.defenseType ?? context?.defenseType ?? "defense";
-    await target.actor.activeDefenseDialog(type || undefined);
+    await launchActorActiveDefense(target.actor, type, pending);
 }
 
 export async function beginDefenderDefense(message) {
@@ -446,7 +621,7 @@ export async function beginDefenderDefense(message) {
         return;
     }
 
-    rememberPendingDefense(message, target, {
+    const { pending } = rememberPendingDefense(message, target, {
         defender: current.token,
         defense: current.defense,
         assisted: true,
@@ -455,26 +630,30 @@ export async function beginDefenderDefense(message) {
         defender: current.token.name ?? current.actor.name,
         target: target.name,
     }));
-    const baseDefense = await target.actor.derivedValues.defense.value.calculate();
-    const difficulty = Number(globalThis.CONFIG?.splittermond?.check?.activeDefenseDifficulty) || 15;
-    const defenderModifier = Array.from(current.defense.skill.selectableModifier ?? [])
-        .find((modifier) => isDefenderMasteryName(modifier?.attributes?.name));
-    const rolled = await current.defense.skill.roll({
-        type: "defense",
-        preSelectedModifier: defenderModifier ? [defenderModifier.attributes.name] : [],
-        difficulty,
-        modifier: defenderModifier ? 0 : -3,
-        title: t("SMOOTHER_FIGHT.HUD.DefenderRollTitle", {
-            defender: current.token.name ?? current.actor.name,
-            target: target.name,
-        }),
-        checkMessageData: {
-            defenseType: "defense",
-            baseDefense,
-            itemData: current.defense,
-        },
-    });
-    if (!rolled) activeDefenseState.pendingDefense = null;
+    try {
+        const baseDefense = await target.actor.derivedValues.defense.value.calculate();
+        const difficulty = Number(globalThis.CONFIG?.splittermond?.check?.activeDefenseDifficulty) || 15;
+        const defenderModifier = Array.from(current.defense.skill.selectableModifier ?? [])
+            .find((modifier) => isDefenderMasteryName(modifier?.attributes?.name));
+        await runPendingDefenseRoll(pending, () => current.defense.skill.roll({
+            type: "defense",
+            preSelectedModifier: defenderModifier ? [defenderModifier.attributes.name] : [],
+            difficulty,
+            modifier: defenderModifier ? 0 : -3,
+            title: t("SMOOTHER_FIGHT.HUD.DefenderRollTitle", {
+                defender: current.token.name ?? current.actor.name,
+                target: target.name,
+            }),
+            checkMessageData: {
+                defenseType: "defense",
+                baseDefense,
+                itemData: current.defense,
+            },
+        }));
+    } catch (error) {
+        clearPendingDefense(pending.pendingDefenseId);
+        throw error;
+    }
 }
 
 export function getEligibleDefenderChoices(message, user) {
@@ -566,11 +745,10 @@ function isValidDefenderAttempt(pending, message) {
     const target = services.resolveToken(pending?.targetTokenUuid);
     const defender = services.resolveToken(pending?.defenderTokenUuid);
     const check = services.getDefenseCheck(message);
-    const offense = game.messages.get(pending?.attackMessageId);
+    const offense = resolveLatestOffenseMessage(game.messages.get(pending?.attackMessageId));
     const offenseContext = services.getMessageContext(offense);
     const attempted = new Set(offenseContext?.attemptedDefenseActorUuids ?? []);
     if (!target?.actor || !defender?.actor || !check || target.actor.id === defender.actor.id) return false;
-    if (offenseContext?.supersededBy) return false;
     if (pending.defenderActorUuid && pending.defenderActorUuid !== defender.actor.uuid) return false;
     if (message.speaker?.actor && message.speaker.actor !== defender.actor.id) return false;
     if (attempted.has(defender.actor.uuid) || !hasDefenderMastery(defender.actor)) return false;
