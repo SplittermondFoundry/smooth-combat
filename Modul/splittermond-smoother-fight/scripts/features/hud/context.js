@@ -41,6 +41,10 @@ export function getPersonalHudCandidates(activeContext = getHudContext()) {
     return Array.from(combat.combatants ?? []).map((combatant) => {
         const actor = combatant.actor;
         const token = combatant.token?.document ?? combatant.token ?? services.resolveCombatantToken(combatant);
+        const owned = Boolean(
+            actor?.isOwner
+            && services.getRuntimeController(combatant)?.id === game.user?.id
+        );
         return {
             id: combatant.id,
             combatant,
@@ -48,9 +52,9 @@ export function getPersonalHudCandidates(activeContext = getHudContext()) {
             token,
             tokenId: token?.id ?? combatant.tokenId ?? null,
             tokenUuid: services.tokenUuid(token),
-            controlled: services.getRuntimeController(combatant)?.id === game.user?.id,
+            owned,
         };
-    }).filter((candidate) => candidate.controlled && candidate.actor);
+    }).filter((candidate) => candidate.owned && candidate.actor);
 }
 
 export function getPersonalHudContext(activeContext = getHudContext()) {

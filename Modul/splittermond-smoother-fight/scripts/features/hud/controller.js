@@ -54,6 +54,43 @@ export function mountHud() {
     hudState.hud.mount();
 }
 
+export function closeTickActionReferenceOnEscape(root, event) {
+    if (event.key !== "Escape") return false;
+    const disclosure = event.target?.closest?.(".sf-tick-action-reference[open]")
+        ?? root?.querySelector?.(".sf-tick-action-reference[open]");
+    if (!disclosure) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    disclosure.open = false;
+    disclosure.querySelector(":scope > summary")?.focus();
+    return true;
+}
+
+export function toggleTickActionReferenceOnKeyboard(root, event) {
+    if (event.key !== "Enter" && event.key !== " ") return false;
+    const summary = event.target?.closest?.("summary");
+    const disclosure = summary?.parentElement;
+    if (!disclosure?.matches?.(".sf-tick-action-reference") || !root?.contains?.(summary)) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    disclosure.open = !disclosure.open;
+    return true;
+}
+
+export function fitTickActionReferencePanel(disclosure, viewportHeight = window.innerHeight) {
+    if (!disclosure?.open) return false;
+    const controls = disclosure.closest(".sf-combat-controls");
+    const panel = disclosure.querySelector(":scope > .sf-tick-action-popover");
+    if (!controls || !panel) return false;
+    const bounds = controls.getBoundingClientRect();
+    const spaceAbove = Math.max(0, bounds.top - 12);
+    const spaceBelow = Math.max(0, viewportHeight - bounds.bottom - 12);
+    const opensBelow = spaceBelow > spaceAbove;
+    disclosure.classList.toggle("opens-below", opensBelow);
+    panel.style.maxHeight = `${Math.min(560, opensBelow ? spaceBelow : spaceAbove)}px`;
+    return true;
+}
+
 export async function renderHud() {
     await hudState.hud.render();
 }
@@ -74,6 +111,12 @@ class SmootherFightHud {
         this.element.setAttribute("aria-live", "polite");
         document.body.append(this.element);
         this.element.addEventListener("click", (event) => void this.onClick(event));
+        this.element.addEventListener("keydown", (event) => {
+            if (!closeTickActionReferenceOnEscape(this.element, event)) {
+                toggleTickActionReferenceOnKeyboard(this.element, event);
+            }
+        });
+        this.element.addEventListener("toggle", (event) => fitTickActionReferencePanel(event.target), true);
         this.element.addEventListener("contextmenu", (event) => this.onContextMenu(event));
         this.element.addEventListener("dragstart", (event) => this.onFavoriteSkillDragStart(event));
         this.element.addEventListener("dragover", (event) => this.onFavoriteSkillDragOver(event));
@@ -228,19 +271,11 @@ class SmootherFightHud {
                     await services.requireOwner(context, () => services.addCombatTicks(context, target.dataset.ticks));
                     break;
                 case "share-tick-action":
-                    await services.requireOwner(context, async () => {
-                        const advanceTicks = target.dataset.tickActionAdvance;
-                        const shouldAdvance = advanceTicks !== "0" && advanceTicks !== "none";
-                        const actualTicks = shouldAdvance
-                            ? await services.addCombatTicks(context, advanceTicks)
-                            : target.dataset.tickActionTicks;
-                        if (shouldAdvance && actualTicks === null) return;
-                        await services.createTickActionChatCard(
-                            context,
-                            target.dataset.tickActionId,
-                            actualTicks
-                        );
-                    });
+                    await services.requireOwner(context, () => services.performTickAction(
+                        context,
+                        target.dataset.tickActionId,
+                        target.dataset.tickActionAdvance
+                    ));
                     break;
                 case "select-personal-combatant":
                     selectPersonalCombatantFromMenu(hudContext, target.dataset.combatantId);

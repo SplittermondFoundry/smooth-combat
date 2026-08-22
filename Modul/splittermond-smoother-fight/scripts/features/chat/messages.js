@@ -18,7 +18,7 @@ import {
     t,
 } from "../../shared/values.js";
 
-export async function createTickActionChatCard(context, actionId, selectedTicks = "custom") {
+export async function createTickActionChatCard(context, actionId, selectedTicks = "custom", options = {}) {
     const action = COMBAT_TICK_ACTIONS.find((candidate) => candidate.id === actionId);
     if (!action || !context?.actor) throw new Error(`Unknown combat tick action: ${actionId}`);
 
@@ -27,10 +27,13 @@ export async function createTickActionChatCard(context, actionId, selectedTicks 
     const actionName = t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Name`);
     const kind = t(`SMOOTHER_FIGHT.HUD.TickActionKinds.${action.kind}`);
     const duration = tickActionCardDuration(action, selectedTicks);
-    const description = t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Description`);
-    const special = action.special
+    const description = options.description ?? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Description`);
+    const special = options.special ?? (action.special
         ? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Special`)
-        : t("SMOOTHER_FIGHT.HUD.TickActionDash");
+        : t("SMOOTHER_FIGHT.HUD.TickActionDash"));
+    const source = action.source
+        ? `<footer class="sf-tick-action-chat-source"><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSource", action.source))}</small></footer>`
+        : "";
     const content = `<section class="sf-tick-action-chat-card">
         <header>
             <i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>
@@ -43,6 +46,7 @@ export async function createTickActionChatCard(context, actionId, selectedTicks 
         </dl>
         <section><h3>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionDescription"))}</h3><p>${escapeHtml(description)}</p></section>
         <section><h3>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSpecial"))}</h3><p>${escapeHtml(special)}</p></section>
+        ${source}
     </section>`;
     const speaker = ChatMessage.getSpeaker({ actor: context.actor, token });
     return ChatMessage.create({
@@ -144,8 +148,10 @@ export async function setOptionalFlag(message, key, value) {
 export async function setRequiredFlag(message, key, value) {
     try {
         const updated = await message.setFlag(MODULE_ID, key, value);
-        if (!updated) throw new Error("The document update returned no result");
-        return updated;
+        if (!updated && !requiredFlagMatches(message, key, value)) {
+            throw new Error("The document update returned no result and the stored value does not match");
+        }
+        return updated || message;
     } catch (cause) {
         const error = new Error(`Could not persist required ${key} flag on chat message ${message?.id ?? "unknown"}`, {
             cause,
@@ -154,6 +160,27 @@ export async function setRequiredFlag(message, key, value) {
         ui.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.RequiredFlagFailed", { flag: key }));
         throw error;
     }
+}
+
+function requiredFlagMatches(message, key, expected) {
+    const stored = message?.getFlag?.(MODULE_ID, key) ?? message?.flags?.[MODULE_ID]?.[key];
+    return flagValuesEqual(stored, expected);
+}
+
+function flagValuesEqual(left, right) {
+    if (Object.is(left, right)) return true;
+    if (Array.isArray(left) || Array.isArray(right)) {
+        return Array.isArray(left)
+            && Array.isArray(right)
+            && left.length === right.length
+            && left.every((value, index) => flagValuesEqual(value, right[index]));
+    }
+    if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    return leftKeys.length === rightKeys.length
+        && leftKeys.every((key) => Object.hasOwn(right, key) && flagValuesEqual(left[key], right[key]));
 }
 
 // Backwards-compatible name for explicitly best-effort metadata.

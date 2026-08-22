@@ -296,7 +296,7 @@ function buildAdvanceButtons(context, includeActorName = false) {
     const label = includeActorName
         ? `${t("SMOOTHER_FIGHT.HUD.Advance")} · ${context.actor.name}`
         : t("SMOOTHER_FIGHT.HUD.Advance");
-    return `<div class="sf-tick-buttons"><span class="sf-tick-label">${escapeHtml(label)}</span>${tickButtons}${buildAdvanceButton("custom")}</div>`;
+    return `<div class="sf-tick-buttons"><span class="sf-tick-label">${escapeHtml(label)}</span>${tickButtons}${buildAdvanceButton("custom")}${buildTickActionReference()}</div>`;
 }
 
 function buildAdvanceButton(ticks) {
@@ -304,51 +304,50 @@ function buildAdvanceButton(ticks) {
     const label = custom
         ? t("SMOOTHER_FIGHT.HUD.CustomTicks")
         : t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks });
-    return `<span class="sf-tick-action-control${custom ? " is-complete" : ""}">
-        <button type="button" data-sf-action="add-ticks" data-ticks="${escapeAttr(ticks)}" aria-label="${escapeAttr(label)}">${custom ? "+X" : `+${escapeHtml(ticks)} T`}</button>
-        ${buildTickActionReference(ticks)}
-    </span>`;
+    return `<button type="button" data-sf-action="add-ticks" data-ticks="${escapeAttr(ticks)}" aria-label="${escapeAttr(label)}">${custom ? "+X" : `+${escapeHtml(ticks)} T`}</button>`;
 }
-
-function buildTickActionReference(ticks) {
-    const complete = ticks === "custom";
-    const actions = combatTickActionsFor(ticks);
-    const columnCount = complete ? 4 : 3;
-    const heading = complete
-        ? t("SMOOTHER_FIGHT.HUD.TickActionReferenceAll")
-        : t("SMOOTHER_FIGHT.HUD.TickActionReference", { ticks });
+function buildTickActionReference() {
+    const actions = combatTickActionsFor("custom");
+    const columnCount = 4;
+    const heading = t("SMOOTHER_FIGHT.HUD.TickActionReferenceAll");
+    const triggerLabel = t("SMOOTHER_FIGHT.HUD.TickActionReferenceOpen");
     let currentCategory = null;
     const rows = actions.map((action) => {
         const category = action.category === currentCategory ? "" : `
             <tr class="sf-tick-action-category"><th colspan="${columnCount}">${escapeHtml(t(`SMOOTHER_FIGHT.HUD.TickActionCategories.${action.category}`))}</th></tr>`;
         currentCategory = action.category;
-        const duration = complete ? `<td>${escapeHtml(tickActionDuration(action))}</td>` : "";
+        const duration = `<td>${escapeHtml(tickActionDuration(action))}</td>`;
         const special = action.special
             ? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Special`)
             : t("SMOOTHER_FIGHT.HUD.TickActionDash");
         const actionName = t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Name`);
         const shareLabel = t("SMOOTHER_FIGHT.HUD.TickActionShare", { action: actionName });
-        const advanceTicks = tickActionAdvanceValue(action, ticks);
+        const advanceTicks = tickActionAdvanceValue(action, "custom");
+        const actionControl = action.actionable === false ? `<span class="sf-tick-action-name">${escapeHtml(actionName)}</span>` : `<button type="button" class="sf-tick-action-link" data-sf-action="share-tick-action" data-tick-action-id="${escapeAttr(action.id)}" data-tick-action-ticks="custom" data-tick-action-advance="${escapeAttr(advanceTicks)}" title="${escapeAttr(shareLabel)}" aria-label="${escapeAttr(shareLabel)}">${escapeHtml(actionName)}</button>`;
+        const source = action.source ? `<small class="sf-tick-action-source">${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSource", action.source))}</small>` : "";
         return `${category}<tr>
-            <td><button type="button" class="sf-tick-action-link" data-sf-action="share-tick-action" data-tick-action-id="${escapeAttr(action.id)}" data-tick-action-ticks="${escapeAttr(ticks)}" data-tick-action-advance="${escapeAttr(advanceTicks)}" title="${escapeAttr(shareLabel)}" aria-label="${escapeAttr(shareLabel)}">${escapeHtml(actionName)}</button></td>
+            <td>${actionControl}${source}</td>
             <td>${escapeHtml(t(`SMOOTHER_FIGHT.HUD.TickActionKinds.${action.kind}`))}</td>
             ${duration}
             <td>${escapeHtml(special)}</td>
         </tr>`;
     }).join("");
-    const body = rows || `<tr><td colspan="${columnCount}" class="sf-tick-action-empty">${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionEmpty", { ticks }))}</td></tr>`;
-    return `<div class="sf-tick-action-tooltip" role="tooltip">
-        <strong>${escapeHtml(heading)}</strong>
-        <table>
-            <thead><tr>
-                <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionName"))}</th>
-                <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionType"))}</th>
-                ${complete ? `<th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionDurationHeading"))}</th>` : ""}
-                <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSpecial"))}</th>
-            </tr></thead>
-            <tbody>${body}</tbody>
-        </table>
-    </div>`;
+    const body = rows || `<tr><td colspan="${columnCount}" class="sf-tick-action-empty">${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionEmpty", { ticks: "–" }))}</td></tr>`;
+    return `<details class="sf-tick-action-reference">
+        <summary title="${escapeAttr(triggerLabel)}" aria-label="${escapeAttr(triggerLabel)}"><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionReferenceButton"))}</span><i class="fa-solid fa-chevron-down sf-chevron" aria-hidden="true"></i></summary>
+        <div class="sf-tick-action-popover" role="region" aria-label="${escapeAttr(heading)}">
+            <strong>${escapeHtml(heading)}</strong>
+            <table>
+                <thead><tr>
+                    <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionName"))}</th>
+                    <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionType"))}</th>
+                    <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionDurationHeading"))}</th>
+                    <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSpecial"))}</th>
+                </tr></thead>
+                <tbody>${body}</tbody>
+            </table>
+        </div>
+    </details>`;
 }
 
 function tickActionAdvanceValue(action, selectedTicks) {

@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "23a98cd71d87caf282f78db90b61818bdb6145df75915740aeda30047b641e62",
+        "c5a3e65604c56fff875ffcb70207e38bd1434ef2d86697136d482c1eec8c445d",
     );
 });
 
@@ -51,6 +51,13 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /\$\{buildSecondaryTargets\(context\)\}<div class="sf-primary-target-panel">/u);
     assert.match(hudView, /<details class="sf-visibility-menu/u);
     assert.match(hudView, /SMOOTHER_FIGHT\.HUD\.Visibility/u);
+    assert.match(hudView, /<details class="sf-tick-action-reference">/u);
+    assert.match(hudView, /<summary title="\$\{escapeAttr\(triggerLabel\)\}"/u);
+    assert.match(hudView, /class="sf-tick-action-popover" role="region"/u);
+    assert.doesNotMatch(hudView, /sf-tick-action-tooltip/u);
+    assert.doesNotMatch(hudView, /role="tooltip"[^`]*data-sf-action="share-tick-action"/u);
+    assert.match(hudView, /data-sf-action="share-tick-action"/u);
+    assert.match(hudView, /class="sf-tick-action-source"/u);
     assert.equal((hudView.match(/data-sf-action="toggle-token-hidden"/gu) ?? []).length, 1);
     assert.equal((hudView.match(/data-sf-action="toggle-combatant-hidden"/gu) ?? []).length, 1);
     assert.equal((hudView.match(/data-sf-action="toggle-combatant-visibility"/gu) ?? []).length, 1);
@@ -77,7 +84,7 @@ test("split styles flatten in the verified cascade order", () => {
     const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "423f7d1e696a4aed26e429296b368f75143a6135b8705c2b7d099f000ccec8c6",
+        "96f74bd7b7351d9176f49f0c33d45344366bb8c092d56ba8c4d88309d57ed4e9",
     );
 });
 

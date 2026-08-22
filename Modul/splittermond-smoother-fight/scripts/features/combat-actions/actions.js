@@ -24,17 +24,18 @@ import {
     t,
 } from "../../shared/values.js";
 
-export async function performAttack(context, attackId) {
+export async function performAttack(context, attackId, rollOptions = {}) {
     context = liveRuntimeActionContext(context);
-    if (!context) return;
+    if (!context) return false;
     const attack = context.actor.attacks?.find((candidate) => candidate.id === attackId);
-    if (!attack) return;
+    if (!attack) return false;
     const preparedAttackId = context.actor.getFlag?.("splittermond", "preparedAttack");
     const readiness = attackReadiness(isRangedAttack(attack), attack.id, preparedAttackId);
     if (actionRequiresTarget(readiness.ready) && !context.target) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
-        return;
+        return false;
     }
+    let completed = false;
     if (readiness.ready) {
         combatActionState.pendingOffenseKinds.set(context.actor.id, {
             kind: isRangedAttack(attack) ? "ranged" : "attack",
@@ -42,8 +43,12 @@ export async function performAttack(context, attackId) {
             ...snapshotTargetContext(context),
         });
         try {
-            const success = await services.withTemporarySystemTargets([context.target], () => context.actor.rollAttack(attackId));
+            const success = await services.withTemporarySystemTargets(
+                [context.target],
+                () => context.actor.rollAttack(attackId, rollOptions)
+            );
             if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
+            completed = Boolean(success);
         } catch (error) {
             combatActionState.pendingOffenseKinds.delete(context.actor.id);
             throw error;
@@ -51,8 +56,10 @@ export async function performAttack(context, attackId) {
     } else {
         await context.actor.addTicks(await getAttackSpeed(attack), `${localizeSystem("splittermond.attack", "Angriff")}: ${attack.name}`);
         await context.actor.setFlag("splittermond", "preparedAttack", attackId);
+        completed = true;
     }
     services.scheduleRender();
+    return completed;
 }
 
 export async function cancelPreparedAttack(context) {

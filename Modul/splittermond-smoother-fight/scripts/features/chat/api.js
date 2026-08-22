@@ -11,6 +11,7 @@ export {
     prepareRenderedChatMessage,
     waitForChatMessage,
     waitForDefenseProcessing,
+    waitForDiceSoNice,
 } from "./lifecycle.js";
 
 export {

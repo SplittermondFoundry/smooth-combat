@@ -26,7 +26,14 @@ function clone(value) {
 }
 
 class TestMessage {
-    constructor(id, { actor = null, context = null, fumble = null, rejectCalls = [] } = {}) {
+    constructor(id, {
+        actor = null,
+        context = null,
+        fumble = null,
+        noResultCalls = [],
+        rejectCalls = [],
+        skipPersistenceCalls = [],
+    } = {}) {
         this.id = id;
         this.actor = actor;
         this.author = { id: "gm" };
@@ -35,7 +42,9 @@ class TestMessage {
         this.flags = { [MODULE_ID]: {} };
         if (context) this.flags[MODULE_ID].context = clone(context);
         if (fumble) this.flags[MODULE_ID].fumble = clone(fumble);
+        this.noResultCalls = new Set(noResultCalls);
         this.rejectCalls = new Set(rejectCalls);
+        this.skipPersistenceCalls = new Set(skipPersistenceCalls);
         this.setFlagCalls = 0;
         this.system = {
             handleGenericAction: async () => undefined,
@@ -52,9 +61,11 @@ class TestMessage {
         if (this.rejectCalls.has(this.setFlagCalls)) {
             throw new Error(`Injected setFlag rejection ${this.id}#${this.setFlagCalls}`);
         }
-        this.flags[scope] ??= {};
-        this.flags[scope][key] = clone(value);
-        return this;
+        if (!this.skipPersistenceCalls.has(this.setFlagCalls)) {
+            this.flags[scope] ??= {};
+            this.flags[scope][key] = clone(value);
+        }
+        return this.noResultCalls.has(this.setFlagCalls) ? undefined : this;
     }
 }
 
@@ -206,6 +217,31 @@ test("optional flag writes absorb setFlag rejection while required writes notify
     await assert.rejects(setRequiredFlag(required, "context", {}), /Could not persist required context flag/u);
     assert.equal(harness.errors.length, 1);
     assert.match(harness.errors[0], /context/u);
+});
+
+test("required flag writes accept an empty Foundry result only after a matching read-back", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    const expected = {
+        attackMessageId: "attack",
+        defenseMessageIds: ["defense"],
+        nested: { completed: true },
+    };
+    const persisted = new TestMessage("persisted", { noResultCalls: [1] });
+
+    assert.equal(await setRequiredFlag(persisted, "context", expected), persisted);
+    assert.deepEqual(persisted.getFlag(MODULE_ID, "context"), expected);
+    assert.equal(harness.errors.length, 0);
+
+    const missing = new TestMessage("missing", {
+        noResultCalls: [1],
+        skipPersistenceCalls: [1],
+    });
+    await assert.rejects(
+        setRequiredFlag(missing, "context", expected),
+        /Could not persist required context flag/u
+    );
+    assert.equal(harness.errors.length, 1);
 });
 
 test("a rejected fumble write before the effect prevents the mechanical application", async (t) => {

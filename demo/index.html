@@ -43,7 +43,26 @@
             <main class="sf-center">
                 <header class="sf-turnline"><span class="sf-live-dot"></span><strong>Farruk</strong><span>Tick 18</span><span class="sf-your-turn">⚡ Dein Zug</span><span class="sf-turn-target">◎ Primärziel: Rattling-Plünderer</span></header>
                 <section class="sf-combat-controls" aria-label="Kampfsteuerung">
-                    <div class="sf-tick-buttons"><span class="sf-tick-label">Vorrücken</span><button>+1 T</button><button>+2 T</button><button>+3 T</button><button>+5 T</button><button>+7 T</button><button>+10 T</button><button>+X</button></div>
+                    <div class="sf-tick-buttons"><span class="sf-tick-label">Vorrücken</span><button>+1 T</button><button>+2 T</button><button>+3 T</button><button>+4 T</button><button>+5 T</button><button>+6 T</button><button>+7 T</button><button>+8 T</button><button>+10 T</button><button>+X</button>
+                        <details class="sf-tick-action-reference">
+                            <summary title="Vollständige Handlungsübersicht öffnen oder schließen" aria-label="Vollständige Handlungsübersicht öffnen oder schließen"><span aria-hidden="true">▤</span><span>Handlungen</span><span class="sf-chevron" aria-hidden="true">⌄</span></summary>
+                            <div class="sf-tick-action-popover" role="region" aria-label="Vollständige Handlungsübersicht">
+                                <strong>Vollständige Handlungsübersicht</strong>
+                                <table>
+                                    <thead><tr><th>Handlung</th><th>Art</th><th>Dauer</th><th>Besonderheit</th></tr></thead>
+                                    <tbody>
+                                        <tr class="sf-tick-action-category"><th colspan="4">Bewegungshandlungen</th></tr>
+                                        <tr><td><button class="sf-tick-action-link">Aufstehen (liegend)</button><small class="sf-tick-action-source">Quelle: GRW, S. 159</small></td><td>Kontinuierliche Aktion</td><td>6 Ticks</td><td>–</td></tr>
+                                        <tr class="sf-tick-action-category"><th colspan="4">Nahkampfhandlungen</th></tr>
+                                        <tr><td><button class="sf-tick-action-link">Lücke suchen</button><small class="sf-tick-action-source">Quelle: GRW, S. 161</small></td><td>Kontinuierliche Aktion</td><td>2–6 Ticks</td><td>+1 pro 2 Ticks</td></tr>
+                                        <tr class="sf-tick-action-category"><th colspan="4">Befehle und Koordination</th></tr>
+                                        <tr><td><button class="sf-tick-action-link">Einfacher Befehl</button><small class="sf-tick-action-source">Quelle: Die Magie, S. 180</small></td><td>Sofortige Reaktion</td><td>3 Ticks</td><td>Verlängert eigene kontinuierliche Handlung</td></tr>
+                                        <tr><td><button class="sf-tick-action-link">Koordinieren</button><small class="sf-tick-action-source">Quelle: GRW, S. 104</small></td><td>Kontinuierliche Aktion</td><td>10 Ticks</td><td>Anführen gegen 20 + Verbündete; voreingestellt 21</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                    </div>
                     <div class="sf-pause-buttons"><button>◷ <span>Abwartend</span></button><button>✋ <span>Bereithalten</span></button></div>
                     <div class="sf-tracker-buttons">
                         <button class="sf-icon-button" title="Token auf der Karte anzeigen">◎ <span class="sf-control-label">Fokus</span></button>
@@ -86,8 +105,35 @@
         <details class="sf-gm-targets"><summary>◎ GM: Ziel wechseln⌃</summary><div><button><span>Rattling-Plünderer</span><b>◎</b></button><button><span>Rattling-Späher</span></button></div></details>
     </section>
     <script>
-        document.getElementById("splittermond-smoother-fight-hud")
-            ?.classList.toggle("sf-theme-light", new URLSearchParams(location.search).get("theme") === "light");
+        const hud = document.getElementById("splittermond-smoother-fight-hud");
+        hud?.classList.toggle("sf-theme-light", new URLSearchParams(location.search).get("theme") === "light");
+        hud?.addEventListener("toggle", (event) => {
+            const disclosure = event.target;
+            if (!disclosure.matches?.(".sf-tick-action-reference") || !disclosure.open) return;
+            const controls = disclosure.closest(".sf-combat-controls").getBoundingClientRect();
+            const spaceAbove = Math.max(0, controls.top - 12);
+            const spaceBelow = Math.max(0, innerHeight - controls.bottom - 12);
+            const opensBelow = spaceBelow > spaceAbove;
+            disclosure.classList.toggle("opens-below", opensBelow);
+            disclosure.querySelector(".sf-tick-action-popover").style.maxHeight = `${Math.min(560, opensBelow ? spaceBelow : spaceAbove)}px`;
+        }, true);
+        hud?.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                const disclosure = event.target.closest(".sf-tick-action-reference[open]")
+                    ?? hud.querySelector(".sf-tick-action-reference[open]");
+                if (!disclosure) return;
+                event.preventDefault();
+                disclosure.open = false;
+                disclosure.querySelector(":scope > summary")?.focus();
+                return;
+            }
+            if (event.key !== "Enter" && event.key !== " ") return;
+            const summary = event.target.closest("summary");
+            const disclosure = summary?.parentElement;
+            if (!disclosure?.matches(".sf-tick-action-reference")) return;
+            event.preventDefault();
+            disclosure.open = !disclosure.open;
+        });
     </script>
 </body>
 </html>

@@ -165,6 +165,8 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
 
     if (!pendingMatchesDefenseMessage(pending, message)) return;
     if (pending.assisted && !isValidDefenderAttempt(pending, message)) return;
+    const processedOffense = resolveProcessedDefenseOffense(pending.attackMessageId, message.id);
+    if (processedOffense) return processedOffense;
     requestLatestEventForDefense(pending);
 
     const existingDefenseContext = services.getMessageContext(message) ?? {};
@@ -240,6 +242,13 @@ function resolveRootOffenseMessage(offenseMessageId) {
         current = previous;
     }
     return current && isOffensiveCombatMessage(current) ? current : null;
+}
+
+function resolveProcessedDefenseOffense(offenseMessageId, defenseMessageId) {
+    const root = resolveRootOffenseMessage(offenseMessageId);
+    const latest = resolveLatestOffenseMessage(root);
+    const defenseMessageIds = services.getMessageContext(latest)?.defenseMessageIds;
+    return defenseMessageIds?.includes?.(defenseMessageId) ? latest : null;
 }
 
 async function queueDefenseForAttack(offenseMessageId, defenseMessage, defenseCheck, displayedDefenseValue, pending) {

@@ -77,7 +77,7 @@ export async function waitForDefenseProcessing(messageId, attempts = 20) {
     }
 }
 
-async function waitForDiceSoNice(message) {
+export async function waitForDiceSoNice(message) {
     if (!game.modules?.get?.("dice-so-nice")?.active) return;
     await Promise.resolve();
     if (!isDiceAnimationPending(message)) return;

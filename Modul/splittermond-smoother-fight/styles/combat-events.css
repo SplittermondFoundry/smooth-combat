@@ -394,6 +394,18 @@
     line-height: 1.35;
 }
 
+.chat-message .sf-tick-action-chat-source {
+    display: block;
+    padding: 6px 12px 8px;
+    border-top: 1px solid rgba(42, 105, 107, 0.18);
+    color: var(--color-text-subtle, #5b655f);
+    line-height: 1.2;
+}
+
+.chat-message .sf-tick-action-chat-source small {
+    font-size: 9px;
+}
+
 #splittermond-smoother-fight-hud .sf-check-result-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

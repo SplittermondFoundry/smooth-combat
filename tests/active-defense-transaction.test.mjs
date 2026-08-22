@@ -33,6 +33,7 @@ class TestMessage {
         this.content = source.content ?? "";
         this.flags = clone(source.flags ?? {});
         this._systemSource = clone(source.system ?? {});
+        this.setFlagCalls = 0;
         this.refreshSystem();
     }
 
@@ -47,6 +48,7 @@ class TestMessage {
     }
 
     async setFlag(scope, key, value) {
+        this.setFlagCalls += 1;
         await Promise.resolve();
         if (harness.rejectSetFlag?.({ message: this, scope, key, value })) {
             throw new Error(`Injected setFlag rejection for ${this.id}.${key}`);
@@ -280,6 +282,28 @@ test("parallel defenses against one root attack form one complete canonical succ
     assert.equal(lowerDefense.flags[MODULE_ID].context.resultingDefenseValue, 24);
     assert.equal(lowerDefense.flags[MODULE_ID].context.effectiveDefenseValue, 27);
     assert.equal(higherDefense.flags[MODULE_ID].context.resultingDefenseValue, 27);
+});
+
+test("a sequential duplicate defense exits before rewriting its persisted context", async () => {
+    resetHarness();
+    const root = createAttack("attack-duplicate");
+    const defense = createDefense("defense-duplicate", 27, "defender-duplicate");
+    const pending = pendingFor(root, defense, 1);
+
+    await processDefenseMessage(defense, pending);
+    const setFlagCallsAfterFirstPass = defense.setFlagCalls;
+    const offensesAfterFirstPass = Array.from(harness.messages.values())
+        .filter((message) => message.type === "attackRollMessage").length;
+    harness.rejectSetFlag = ({ message, key }) => message.id === defense.id && key === "context";
+
+    const duplicateResult = await processDefenseMessage(defense, pending);
+
+    assert.ok(duplicateResult?.flags?.[MODULE_ID]?.context?.defenseMessageIds?.includes(defense.id));
+    assert.equal(defense.setFlagCalls, setFlagCallsAfterFirstPass);
+    assert.equal(
+        Array.from(harness.messages.values()).filter((message) => message.type === "attackRollMessage").length,
+        offensesAfterFirstPass
+    );
 });
 
 test("an improved defense remains visible when the attack outcome does not change", async () => {

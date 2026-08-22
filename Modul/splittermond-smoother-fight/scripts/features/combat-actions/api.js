@@ -24,3 +24,7 @@ export {
     toggleFavoriteSkill,
     toggleTokenHidden,
 } from "./actions.js";
+
+export {
+    performTickAction,
+} from "./tick-actions.js";

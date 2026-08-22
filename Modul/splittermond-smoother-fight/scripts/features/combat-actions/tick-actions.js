@@ -1,0 +1,404 @@
+import { services } from "../../core/services.js";
+
+import {
+    COMBAT_TICK_ACTIONS,
+} from "../../combat-rules.js";
+
+import {
+    MODULE_ID,
+} from "../../core/constants.js";
+
+import {
+    displayLabel,
+    displayValue,
+    escapeAttr,
+    escapeHtml,
+    numericValue,
+    t,
+} from "../../shared/values.js";
+
+const SELECTABLE_DURATION_ACTIONS = new Set(["aim", "searchOpening"]);
+
+export async function performTickAction(context, actionId, requestedTicks = "custom") {
+    const action = COMBAT_TICK_ACTIONS.find((candidate) => candidate.id === actionId);
+    if (!action || action.actionable === false) return false;
+    context = liveTickActionContext(context);
+    if (!context) return false;
+
+    if (SELECTABLE_DURATION_ACTIONS.has(action.id)) return performTimedPreparation(context, action);
+    switch (action.id) {
+        case "disengage":
+            return performDisengage(context, action);
+        case "shieldBash":
+            return performShieldBash(context, action);
+        case "evasiveLeap":
+            return performEvasiveLeap(context, action);
+        case "escapeGrapple":
+            return performEscapeGrapple(context, action);
+        case "coordinate":
+            return performCoordinate(context, action);
+        default:
+            return performReferenceAction(context, action, requestedTicks);
+    }
+}
+
+function liveTickActionContext(context) {
+    const runtimeController = services.getRuntimeController(context.combatant ?? context.actor);
+    if (!runtimeController) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable"));
+        return null;
+    }
+    return {
+        ...context,
+        runtimeController,
+        ...services.getTargetSelectionForUser(runtimeController),
+    };
+}
+
+async function performTimedPreparation(context, action) {
+    const choice = await chooseTickActionDuration({
+        id: `${MODULE_ID}-${action.id}-duration`,
+        title: actionName(action),
+        label: t("SMOOTHER_FIGHT.HUD.TickActionChooseDuration"),
+        options: action.ticks.map((ticks) => ({
+            value: String(ticks),
+            label: t("SMOOTHER_FIGHT.HUD.TickActionDuration", { ticks }),
+        })),
+    });
+    if (!choice) return false;
+    const ticks = Number(choice.value);
+    const bonus = Math.floor(ticks / 2);
+    return advanceThenCreateCard(context, action.id, ticks, {
+        description: t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.ChatDescription`, { ticks }),
+        special: t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.ChatSpecial`, { bonus }),
+    });
+}
+
+async function performDisengage(context, action) {
+    if (!requireTarget(context)) return false;
+    const choices = disengageSkillChoices(context.actor);
+    const choice = choices.length > 1
+        ? await chooseTickActionOption({
+            id: `${MODULE_ID}-disengage-skill`,
+            title: actionName(action),
+            label: t("SMOOTHER_FIGHT.HUD.TickActionChooseSkill"),
+            options: choices,
+        })
+        : choices[0];
+    if (!choice) return false;
+    const rollMessage = await rollSkill(context, choice.value, {
+        difficulty: "GW",
+        title: actionName(action),
+        subtitle: t("SMOOTHER_FIGHT.HUD.TickActionAgainstTarget", { target: targetName(context) }),
+    }, context.target);
+    if (!rollMessage) return false;
+    return createCardThenAdvance(context, action.id, action.ticks, {
+        special: t("SMOOTHER_FIGHT.HUD.TickActionDisengageChat", {
+            skill: choice.label,
+            target: targetName(context),
+        }),
+    });
+}
+
+async function performShieldBash(context, action) {
+    if (!requireTarget(context)) return false;
+    const shieldAttacks = Array.from(context.actor.attacks ?? []).filter((attack) => (
+        attack?.item?.type === "shield" && attack.item.system?.equipped !== false
+    ));
+    if (!shieldAttacks.length) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.TickActionShieldRequired"));
+        return false;
+    }
+    const options = shieldAttacks.map((attack) => ({ value: attack.id, label: attack.name }));
+    const choice = options.length > 1
+        ? await chooseTickActionOption({
+            id: `${MODULE_ID}-shield-bash-shield`,
+            title: actionName(action),
+            label: t("SMOOTHER_FIGHT.HUD.TickActionChooseShield"),
+            options,
+        })
+        : options[0];
+    if (!choice) return false;
+    const attack = shieldAttacks.find((candidate) => candidate.id === choice.value);
+    return services.performAttack(context, attack.id);
+}
+
+async function performEvasiveLeap(context, action) {
+    const skill = actorSkill(context.actor, "acrobatics");
+    if (!skill) return false;
+    const rollMessage = await rollSkill(context, skill.id, {
+        difficulty: 15,
+        title: actionName(action),
+    });
+    if (!rollMessage) return false;
+    const outcome = skillCheckOutcome(rollMessage);
+    const special = outcome.succeeded
+        ? t("SMOOTHER_FIGHT.HUD.TickActionEvasiveLeapSuccess", { reduction: outcome.reduction })
+        : t("SMOOTHER_FIGHT.HUD.TickActionEvasiveLeapFailure");
+    return createCardThenAdvance(context, action.id, action.ticks, { special });
+}
+
+async function performEscapeGrapple(context, action) {
+    const options = ["acrobatics", "athletics"].flatMap((skillId) => {
+        const skill = actorSkill(context.actor, skillId);
+        return skill ? [{
+            value: skill.id,
+            label: skillLabel(context.actor, skill.id),
+            skillValue: displayValue(skill.value, "–"),
+        }] : [];
+    });
+    const choice = await chooseEscapeGrappleSkill({
+        id: `${MODULE_ID}-escape-grapple-skill`,
+        title: actionName(action),
+        options,
+    });
+    if (!choice) return false;
+    const rollMessage = await rollSkill(context, choice.value, {
+        difficulty: choice.difficulty,
+        title: actionName(action),
+        subtitle: t("SMOOTHER_FIGHT.HUD.TickActionComparativeCheck"),
+    });
+    if (!rollMessage) return false;
+    return createCardThenAdvance(context, action.id, action.ticks, {
+        special: t("SMOOTHER_FIGHT.HUD.TickActionEscapeGrappleChat", {
+            difficulty: choice.difficulty,
+            skill: choice.label,
+        }),
+    });
+}
+
+async function performCoordinate(context, action) {
+    const skill = actorSkill(context.actor, "leadership");
+    if (!skill) return false;
+    const rollMessage = await rollSkill(context, skill.id, {
+        difficulty: 21,
+        preSelectedModifier: [actionName(action)],
+        title: actionName(action),
+    });
+    if (!rollMessage) return false;
+    return createCardThenAdvance(context, action.id, action.ticks);
+}
+
+async function performReferenceAction(context, action, requestedTicks) {
+    const shouldAdvance = requestedTicks !== "0" && requestedTicks !== "none";
+    const actualTicks = shouldAdvance
+        ? await services.addCombatTicks(context, requestedTicks)
+        : "custom";
+    if (shouldAdvance && actualTicks === null) return false;
+    return Boolean(await services.createTickActionChatCard(context, action.id, actualTicks));
+}
+
+async function advanceThenCreateCard(context, actionId, ticks, options) {
+    const actualTicks = await services.addCombatTicks(context, ticks);
+    if (actualTicks === null) return false;
+    return Boolean(await services.createTickActionChatCard(context, actionId, actualTicks, options));
+}
+
+async function createCardThenAdvance(context, actionId, ticks, options) {
+    const card = await services.createTickActionChatCard(context, actionId, ticks, options);
+    if (!card) return false;
+    return await services.addCombatTicks(context, ticks) !== null;
+}
+
+async function rollSkill(context, skillId, options, target = null) {
+    const operation = () => context.actor.rollSkill(skillId, options);
+    const message = await (target
+        ? services.withTemporarySystemTargets([target], operation)
+        : operation());
+    if (message) await services.waitForDiceSoNice(message);
+    return message;
+}
+
+function requireTarget(context) {
+    if (context.target) return true;
+    ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
+    return false;
+}
+
+function actionName(action) {
+    return t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Name`);
+}
+
+function targetName(context) {
+    return context.target?.name ?? context.target?.actor?.name ?? "–";
+}
+
+function actorSkill(actor, skillId) {
+    return actor.skills?.[skillId]
+        ?? Object.values(actor.skills ?? {}).find((skill) => skill.id === skillId)
+        ?? null;
+}
+
+function skillLabel(actor, skillId) {
+    const skill = actorSkill(actor, skillId);
+    return displayLabel(skill?.label, skill?.id ?? skillId);
+}
+
+function disengageSkillChoices(actor) {
+    const acrobatics = actorSkill(actor, "acrobatics");
+    const choices = acrobatics
+        ? [{ value: acrobatics.id, label: skillLabel(actor, acrobatics.id) }]
+        : [];
+    const fightingSkills = new Set(globalThis.CONFIG?.splittermond?.skillGroups?.fighting ?? [
+        "melee", "slashing", "chains", "blades", "staffs",
+    ]);
+    const wieldedWeaponSkills = new Set(Array.from(actor.attacks ?? []).flatMap((attack) => (
+        attack?.item?.type === "weapon"
+        && attack.item.system?.equipped !== false
+        && attack.skill?.id
+            ? [attack.skill.id]
+            : []
+    )));
+    const masterySkills = Array.from(actor.items ?? []).flatMap((item) => {
+        const id = String(item.system?.id ?? "").toLocaleLowerCase("de-DE");
+        const name = String(item.name ?? "").normalize("NFKC");
+        const skillId = item.system?.skill;
+        const matches = item.type === "mastery"
+            && (id === "rueckzugsgefecht" || /^rückzugsgefecht(?:\s*\([^)]*\))?$/iu.test(name));
+        return matches && fightingSkills.has(skillId) && wieldedWeaponSkills.has(skillId) ? [skillId] : [];
+    });
+    for (const skillId of new Set(masterySkills)) {
+        const skill = actorSkill(actor, skillId);
+        if (skill) choices.push({ value: skill.id, label: skillLabel(actor, skill.id) });
+    }
+    return choices;
+}
+
+function skillCheckData(message) {
+    return message?.flags?.splittermond?.check
+        ?? message?.getFlag?.("splittermond", "check")
+        ?? message?.system?.checkReport
+        ?? null;
+}
+
+function skillCheckOutcome(message) {
+    const check = skillCheckData(message) ?? {};
+    const degree = typeof check.degreeOfSuccess === "object"
+        ? numericValue(check.degreeOfSuccess.fromRoll) + numericValue(check.degreeOfSuccess.modification)
+        : numericValue(check.degreeOfSuccess);
+    const succeeded = Boolean(check.succeeded);
+    return {
+        succeeded,
+        reduction: succeeded ? 1 + Math.max(0, degree) : 0,
+    };
+}
+
+async function chooseTickActionDuration({ id, title, label, options }) {
+    if (!options.length) return null;
+    const icons = [
+        "fa-solid fa-hourglass-start",
+        "fa-solid fa-hourglass-half",
+        "fa-solid fa-hourglass-end",
+    ];
+    const result = await globalThis.foundry?.applications?.api?.DialogV2?.wait?.({
+        id,
+        window: { title },
+        position: { width: 420 },
+        content: `<p class="sf-tick-action-duration-prompt">${escapeHtml(label)}</p>`,
+        buttons: options.map((option, index) => ({
+            action: `ticks-${option.value}`,
+            label: option.label,
+            icon: icons[index] ?? "fa-solid fa-clock",
+            callback: () => option.value,
+            default: index === 0,
+        })),
+        close: () => null,
+        modal: true,
+    });
+    return options.find((option) => option.value === result) ?? null;
+}
+
+async function chooseTickActionOption({ id, title, label, options }) {
+    if (!options.length) return null;
+    if (options.length === 1) return options[0];
+    const choices = options.map((option) => (
+        `<option value="${escapeAttr(option.value)}">${escapeHtml(option.label)}</option>`
+    )).join("");
+    const result = await globalThis.foundry?.applications?.api?.DialogV2?.wait?.({
+        id,
+        window: { title },
+        position: { width: 420 },
+        content: `<form class="sf-tick-action-dialog"><div class="form-group"><label>${escapeHtml(label)}</label><select name="choice">${choices}</select></div></form>`,
+        buttons: [
+            {
+                action: "choose",
+                label: t("SMOOTHER_FIGHT.HUD.TickActionExecute"),
+                icon: "fa-solid fa-check",
+                callback: (_event, button) => button.form.elements.choice.value,
+                default: true,
+            },
+            {
+                action: "cancel",
+                label: t("SMOOTHER_FIGHT.Settings.Cancel"),
+                icon: "fa-solid fa-xmark",
+                callback: () => null,
+            },
+        ],
+        close: () => null,
+        modal: true,
+    });
+    return options.find((option) => option.value === result) ?? null;
+}
+
+async function chooseEscapeGrappleSkill({ id, title, options }) {
+    if (!options.length) return null;
+    const difficultyId = `${id}-difficulty`;
+    const icons = {
+        acrobatics: "fa-solid fa-person-running",
+        athletics: "fa-solid fa-dumbbell",
+    };
+    const result = await globalThis.foundry?.applications?.api?.DialogV2?.wait?.({
+        id,
+        window: { title },
+        position: { width: 460 },
+        content: `<div class="sf-tick-action-dialog">
+            <div class="form-group stacked">
+                <label for="${escapeAttr(difficultyId)}">${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionOpponentSkillDifficulty"))}</label>
+                <input id="${escapeAttr(difficultyId)}" name="difficulty" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" required autofocus>
+            </div>
+        </div>`,
+        buttons: options.map((option, index) => ({
+            action: `skill-${option.value}`,
+            label: t("SMOOTHER_FIGHT.HUD.TickActionSkillWithValue", {
+                skill: option.label,
+                value: option.skillValue,
+            }),
+            icon: icons[option.value] ?? "fa-solid fa-dice-d20",
+            callback: (_event, button) => escapeGrappleSelection(button, option.value),
+            default: index === 0,
+        })),
+        render: (_event, dialog) => installEscapeGrappleDifficultyGuard(dialog?.element),
+        close: () => null,
+        modal: true,
+    });
+    const option = options.find((candidate) => candidate.value === result?.skillId);
+    return option ? { ...option, difficulty: result.difficulty } : null;
+}
+
+function escapeGrappleSelection(button, skillId) {
+    const input = button?.form?.elements?.difficulty;
+    const difficulty = escapeGrappleDifficulty(input);
+    if (difficulty === null) return null;
+    return { skillId, difficulty };
+}
+
+function installEscapeGrappleDifficultyGuard(root) {
+    if (!root?.addEventListener) return;
+    root.addEventListener("click", (event) => {
+        const button = event.target?.closest?.('button[data-action^="skill-"]');
+        if (!button || (root.contains && !root.contains(button))) return;
+        const input = root.querySelector?.('[name="difficulty"]');
+        if (escapeGrappleDifficulty(input) !== null) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.TickActionDifficultyRequiredWarning"));
+        input?.focus?.();
+        input?.reportValidity?.();
+    }, { capture: true });
+}
+
+function escapeGrappleDifficulty(input) {
+    const raw = String(input?.value ?? "").trim();
+    const difficulty = Number(input?.valueAsNumber ?? raw);
+    return raw && Number.isFinite(difficulty) && difficulty >= 0 ? difficulty : null;
+}
