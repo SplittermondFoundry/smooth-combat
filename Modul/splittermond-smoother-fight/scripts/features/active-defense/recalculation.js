@@ -168,9 +168,13 @@ export function recreateOffenseAfterSplinterpoint(root, original, { actorUuid, k
     const originalContext = services.getMessageContext(original) ?? {};
     const previousBonus = Math.max(0, finiteNumber(originalContext.vtdSplinterpointBonus) ?? 0);
     const bonus = kind === "resonance" ? 2 : 3;
+    const appliedResonanceActorUuids = Array.from(new Set(
+        originalContext.vtdSplinterpointResonanceActorUuids ?? []
+    ));
+    if (kind === "resonance" && appliedResonanceActorUuids.length > 0) return null;
     const resonanceActorUuids = kind === "resonance"
-        ? Array.from(new Set([...(originalContext.vtdSplinterpointResonanceActorUuids ?? []), actorUuid]))
-        : Array.from(new Set(originalContext.vtdSplinterpointResonanceActorUuids ?? []));
+        ? [...appliedResonanceActorUuids, actorUuid]
+        : appliedResonanceActorUuids;
     const baseDefense = finiteNumber(originalContext.baseDefenseValue)
         ?? finiteNumber(root.system?.checkReport?.difficulty)
         ?? finiteNumber(original.system?.checkReport?.difficulty)

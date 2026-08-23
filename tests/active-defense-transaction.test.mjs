@@ -11,6 +11,7 @@ import {
     applyDefenseSplinterpointForUser,
     getDefenseSplinterpointActions,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/splinterpoints.js";
+import { recreateOffenseAfterSplinterpoint } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/recalculation.js";
 import { activeDefenseState } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/state.js";
 import { setRequiredFlag } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 
@@ -601,8 +602,10 @@ test("resonance is offered only to another owned hero-level-three combatant", ()
     resetHarness();
     const targetOwner = { id: "target-owner", isGM: false };
     const resonanceOwner = { id: "resonance-owner", isGM: false };
+    const otherOwner = { id: "other-owner", isGM: false };
     const target = createSplinterpointActor("target-actions", { owners: [targetOwner.id] });
     const eligible = createSplinterpointActor("eligible-actions", { heroLevel: 3, owners: [resonanceOwner.id] });
+    const otherEligible = createSplinterpointActor("other-eligible-actions", { heroLevel: 3, owners: [otherOwner.id] });
     const tooLow = createSplinterpointActor("low-actions", { heroLevel: 2, owners: [resonanceOwner.id] });
     const samePlayer = createSplinterpointActor("same-player-actions", { heroLevel: 3, owners: [targetOwner.id] });
     harness.tokens.set("Token.target-actions", { uuid: "Token.target-actions", name: "XYZ", actor: target });
@@ -611,6 +614,7 @@ test("resonance is offered only to another owned hero-level-three combatant", ()
             { actor: target, token: { uuid: "Token.target-actions", actor: target }, assignedUser: targetOwner, runtimeController: targetOwner },
             { actor: samePlayer, token: { actor: samePlayer }, assignedUser: targetOwner, runtimeController: targetOwner },
             { actor: eligible, token: { actor: eligible }, assignedUser: resonanceOwner, runtimeController: resonanceOwner },
+            { actor: otherEligible, token: { actor: otherEligible }, assignedUser: otherOwner, runtimeController: otherOwner },
             { actor: tooLow, token: { actor: tooLow }, assignedUser: resonanceOwner, runtimeController: resonanceOwner },
         ],
     };
@@ -632,6 +636,59 @@ test("resonance is offered only to another owned hero-level-three combatant", ()
         { kind: "resonance", actorUuid: eligible.uuid },
     ]);
     assert.deepEqual(getDefenseSplinterpointActions(attack, targetOwner), []);
+
+    attack.flags[MODULE_ID].context = {
+        ...attack.flags[MODULE_ID].context,
+        vtdSplinterpointBonus: 5,
+        vtdSplinterpointResonanceActorUuids: [eligible.uuid],
+    };
+    assert.deepEqual(getDefenseSplinterpointActions(attack, resonanceOwner), []);
+    assert.deepEqual(getDefenseSplinterpointActions(attack, otherOwner), []);
+});
+
+test("only the first of two concurrent resonance attempts can affect an attack", async () => {
+    resetHarness();
+    const target = createSplinterpointActor("target-single-resonance", { points: 2 });
+    const firstResonator = createSplinterpointActor("first-resonator", { heroLevel: 3, points: 2 });
+    const secondResonator = createSplinterpointActor("second-resonator", { heroLevel: 3, points: 2 });
+    const targetTokenUuid = "Token.target-single-resonance";
+    harness.tokens.set(targetTokenUuid, {
+        uuid: targetTokenUuid,
+        name: "Single resonance target",
+        actor: target,
+    });
+    game.combat = {
+        combatants: [firstResonator, secondResonator].map((actor) => ({
+            actor,
+            token: { uuid: `Token.${actor.id}`, actor },
+            runtimeController: game.user,
+        })),
+    };
+    const root = createAttack("attack-single-resonance", attackReport(), {
+        primaryTargetTokenUuid: targetTokenUuid,
+    });
+    root.content = '<button data-localaction="activeDefense">Abwehr</button>';
+
+    await applyDefenseSplinterpointForUser(root, target.uuid, game.user);
+    const resonanceSource = latestOffense(root);
+    const [firstResult, secondResult] = await Promise.all([
+        applyDefenseSplinterpointForUser(resonanceSource, firstResonator.uuid, game.user),
+        applyDefenseSplinterpointForUser(resonanceSource, secondResonator.uuid, game.user),
+    ]);
+
+    assert.ok(firstResult);
+    assert.equal(secondResult, null);
+    const latest = latestOffense(root);
+    assert.equal(latest.flags[MODULE_ID].context.vtdSplinterpointBonus, 5);
+    assert.deepEqual(latest.flags[MODULE_ID].context.vtdSplinterpointResonanceActorUuids, [firstResonator.uuid]);
+    assert.equal(target.splinterpoints.value, 1);
+    assert.equal(firstResonator.splinterpoints.value, 1);
+    assert.equal(secondResonator.splinterpoints.value, 2);
+    assert.deepEqual(harness.splinterpointCards.map(({ kind }) => kind), ["primary", "resonance"]);
+    assert.equal(recreateOffenseAfterSplinterpoint(root, latest, {
+        actorUuid: secondResonator.uuid,
+        kind: "resonance",
+    }), null);
 });
 
 test("a failed attack-card transaction refunds the spent VTD splinterpoint", async (t) => {

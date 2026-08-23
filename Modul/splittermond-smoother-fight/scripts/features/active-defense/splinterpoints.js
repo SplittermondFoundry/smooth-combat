@@ -75,6 +75,7 @@ export function getDefenseSplinterpointActions(message, user = game.user) {
     }
 
     const appliedResonances = new Set(context.vtdSplinterpointResonanceActorUuids ?? []);
+    if (appliedResonances.size > 0) return [];
     const combatants = Array.from(game.combat?.combatants ?? []);
     const targetCombatant = combatants.find((combatant) => {
         const token = combatantToken(combatant);
