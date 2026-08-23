@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "2083223557664c3467f37175f62f8574fa2a0f1b1b9c4f7d31ed21828c4d65d3",
+        "61c2ed1b75512be09c21eb7593615517f389bb4765f599fd1b3a816b094a30c8",
     );
 });
 
@@ -61,6 +61,9 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /<details class="sf-tick-action-reference">/u);
     assert.match(hudView, /<summary title="\$\{escapeAttr\(triggerLabel\)\}"/u);
     assert.match(hudView, /class="sf-tick-action-popover" role="region"/u);
+    assert.match(hudView, /data-sf-tick-action-filter/u);
+    assert.match(hudView, /data-sf-tick-action-row/u);
+    assert.match(hudController, /bindTickActionReferenceFilters/u);
     assert.doesNotMatch(hudView, /sf-tick-action-tooltip/u);
     assert.doesNotMatch(hudView, /role="tooltip"[^`]*data-sf-action="share-tick-action"/u);
     assert.match(hudView, /data-sf-action="share-tick-action"/u);
@@ -130,7 +133,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.doesNotMatch(flattenedCss, /font-size:\s*[78]px/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "45816d699fdac521148cb7302fc6ef12ed0b13351ac662d0221f6bc833f010a3",
+        "5b0ab74d94a26671cb2dd232db222e22b0722f5e1f619b27052824e842cad7b4",
     );
 });
 

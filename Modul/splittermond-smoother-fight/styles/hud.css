@@ -699,6 +699,50 @@
     text-transform: uppercase;
 }
 
+#splittermond-smoother-fight-hud .sf-tick-action-filter {
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0 0 8px;
+    padding: 0 8px;
+    border: 1px solid var(--sf-line);
+    border-radius: 5px;
+    color: var(--sf-muted);
+    background: rgba(2, 10, 12, 0.32);
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-filter:focus-within {
+    border-color: rgba(242, 206, 135, 0.72);
+    color: var(--sf-gold-bright);
+    box-shadow: 0 0 0 1px rgba(242, 206, 135, 0.18);
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-filter > i {
+    flex: none;
+    font-size: 11px;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-filter > input {
+    width: 100%;
+    min-width: 0;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    color: var(--sf-text);
+    background: transparent;
+    box-shadow: none;
+    font: inherit;
+    font-size: 11px;
+    outline: 0;
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-filter > input::placeholder {
+    color: var(--sf-muted);
+    opacity: 0.9;
+}
+
 #splittermond-smoother-fight-hud .sf-tick-action-popover table {
     width: 100%;
     margin: 0;

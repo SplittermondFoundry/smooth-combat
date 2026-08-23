@@ -331,21 +331,26 @@ function buildTickActionReference() {
     const triggerLabel = t("SMOOTHER_FIGHT.HUD.TickActionReferenceOpen");
     let currentCategory = null;
     const rows = actions.map((action) => {
+        const categoryLabel = t(`SMOOTHER_FIGHT.HUD.TickActionCategories.${action.category}`);
         const category = action.category === currentCategory ? "" : `
-            <tr class="sf-tick-action-category"><th colspan="${columnCount}">${escapeHtml(t(`SMOOTHER_FIGHT.HUD.TickActionCategories.${action.category}`))}</th></tr>`;
+            <tr class="sf-tick-action-category" data-sf-tick-action-category="${escapeAttr(action.category)}"><th colspan="${columnCount}">${escapeHtml(categoryLabel)}</th></tr>`;
         currentCategory = action.category;
-        const duration = `<td>${escapeHtml(tickActionDuration(action))}</td>`;
+        const durationLabel = tickActionDuration(action);
+        const duration = `<td>${escapeHtml(durationLabel)}</td>`;
         const special = action.special
             ? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Special`)
             : t("SMOOTHER_FIGHT.HUD.TickActionDash");
+        const kindLabel = t(`SMOOTHER_FIGHT.HUD.TickActionKinds.${action.kind}`);
         const actionName = t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Name`);
         const shareLabel = t("SMOOTHER_FIGHT.HUD.TickActionShare", { action: actionName });
         const advanceTicks = tickActionAdvanceValue(action, "custom");
         const actionControl = action.actionable === false ? `<span class="sf-tick-action-name">${escapeHtml(actionName)}</span>` : `<button type="button" class="sf-tick-action-link" data-sf-action="share-tick-action" data-tick-action-id="${escapeAttr(action.id)}" data-tick-action-ticks="custom" data-tick-action-advance="${escapeAttr(advanceTicks)}" title="${escapeAttr(shareLabel)}" aria-label="${escapeAttr(shareLabel)}">${escapeHtml(actionName)}</button>`;
-        const source = action.source ? `<small class="sf-tick-action-source">${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSource", action.source))}</small>` : "";
-        return `${category}<tr>
+        const sourceLabel = action.source ? t("SMOOTHER_FIGHT.HUD.TickActionSource", action.source) : "";
+        const source = sourceLabel ? `<small class="sf-tick-action-source">${escapeHtml(sourceLabel)}</small>` : "";
+        const searchValue = [actionName, categoryLabel, kindLabel, durationLabel, special, sourceLabel].join(" ");
+        return `${category}<tr data-sf-tick-action-row data-sf-tick-action-category="${escapeAttr(action.category)}" data-sf-search="${escapeAttr(searchValue)}">
             <td>${actionControl}${source}</td>
-            <td>${escapeHtml(t(`SMOOTHER_FIGHT.HUD.TickActionKinds.${action.kind}`))}</td>
+            <td>${escapeHtml(kindLabel)}</td>
             ${duration}
             <td>${escapeHtml(special)}</td>
         </tr>`;
@@ -355,6 +360,10 @@ function buildTickActionReference() {
         <summary title="${escapeAttr(triggerLabel)}" aria-label="${escapeAttr(triggerLabel)}"><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionReferenceButton"))}</span><i class="fa-solid fa-chevron-down sf-chevron" aria-hidden="true"></i></summary>
         <div class="sf-tick-action-popover" role="region" aria-label="${escapeAttr(heading)}">
             <strong>${escapeHtml(heading)}</strong>
+            <label class="sf-tick-action-filter">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input type="search" data-sf-tick-action-filter autocomplete="off" spellcheck="false" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.TickActionFilter"))}" placeholder="${escapeAttr(t("SMOOTHER_FIGHT.HUD.TickActionFilterPlaceholder"))}">
+            </label>
             <table>
                 <thead><tr>
                     <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionName"))}</th>
@@ -362,7 +371,7 @@ function buildTickActionReference() {
                     <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionDurationHeading"))}</th>
                     <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSpecial"))}</th>
                 </tr></thead>
-                <tbody>${body}</tbody>
+                <tbody>${body}<tr data-sf-tick-action-filter-empty hidden><td colspan="${columnCount}" class="sf-tick-action-empty" aria-live="polite">${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionFilterEmpty"))}</td></tr></tbody>
             </table>
         </div>
     </details>`;

@@ -95,6 +95,42 @@ export function fitTickActionReferencePanel(disclosure, viewportHeight = window.
     return true;
 }
 
+export function bindTickActionReferenceFilters(root) {
+    for (const input of root.querySelectorAll("[data-sf-tick-action-filter]")) {
+        const popover = input.closest(".sf-tick-action-popover");
+        const rows = Array.from(popover?.querySelectorAll("[data-sf-tick-action-row]") ?? []);
+        const categories = Array.from(popover?.querySelectorAll(".sf-tick-action-category[data-sf-tick-action-category]") ?? []);
+        const empty = popover?.querySelector("[data-sf-tick-action-filter-empty]");
+        const applyFilter = () => {
+            const terms = normalizeTickActionSearchText(input.value).split(/\s+/u).filter(Boolean);
+            const visibleCategories = new Set();
+            let visibleCount = 0;
+            for (const row of rows) {
+                const searchable = normalizeTickActionSearchText(row.dataset.sfSearch);
+                const visible = terms.every((term) => searchable.includes(term));
+                row.hidden = !visible;
+                if (!visible) continue;
+                visibleCount += 1;
+                visibleCategories.add(row.dataset.sfTickActionCategory);
+            }
+            for (const category of categories) {
+                category.hidden = !visibleCategories.has(category.dataset.sfTickActionCategory);
+            }
+            if (empty) empty.hidden = visibleCount > 0 || terms.length === 0;
+        };
+        input.addEventListener("input", applyFilter);
+    }
+}
+
+function normalizeTickActionSearchText(value) {
+    return String(value ?? "")
+        .normalize("NFKD")
+        .replace(/\p{M}/gu, "")
+        .trim()
+        .toLocaleLowerCase()
+        .replaceAll("ß", "ss");
+}
+
 export async function renderHud() {
     await hudState.hud.render();
 }
@@ -168,6 +204,7 @@ class SmootherFightHud {
         services.enforceFumbleActionState(this.element);
         services.bindQuickTargetHover(this.element);
         bindQuickTargetSearch(this.element);
+        bindTickActionReferenceFilters(this.element);
         bindSpellTooltips(this.element, context);
         restoreHudViewState(this.element, viewState, { forceLatestEvent });
         if (forceLatestEvent) services.clearCombatEventDeletionPending();

@@ -5,6 +5,7 @@ import fs from "node:fs";
 import { createTickActionChatCard } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 import { COMBAT_TICK_ACTIONS } from "../Modul/splittermond-smoother-fight/scripts/domain/combat/ticks.js";
 import {
+    bindTickActionReferenceFilters,
     closeTickActionReferenceOnEscape,
     fitTickActionReferencePanel,
     toggleTickActionReferenceOnKeyboard,
@@ -126,6 +127,48 @@ test("Enter and Space toggle the focused tick action disclosure", () => {
     assert.equal(disclosure.open, false);
     assert.equal(prevented, 2);
     assert.equal(stopped, 2);
+});
+
+test("the tick action search filters all row fields and hides empty categories", () => {
+    const rows = [
+        { dataset: { sfSearch: "Aufstehen Bewegungshandlungen Kontinuierliche Aktion 6 Ticks Quelle GRW", sfTickActionCategory: "movement" }, hidden: false },
+        { dataset: { sfSearch: "Aus dem Kampf lösen Nahkampfhandlungen Sofortige Aktion 5 Ticks Akrobatik", sfTickActionCategory: "melee" }, hidden: false },
+    ];
+    const categories = ["movement", "melee"].map((category) => ({
+        dataset: { sfTickActionCategory: category },
+        hidden: false,
+    }));
+    const empty = { hidden: true };
+    const popover = {
+        querySelectorAll: (selector) => ({
+            "[data-sf-tick-action-row]": rows,
+            ".sf-tick-action-category[data-sf-tick-action-category]": categories,
+        })[selector] ?? [],
+        querySelector: () => empty,
+    };
+    let onInput = null;
+    const input = {
+        value: "",
+        closest: () => popover,
+        addEventListener: (_event, listener) => { onInput = listener; },
+    };
+    bindTickActionReferenceFilters({ querySelectorAll: () => [input] });
+
+    input.value = "losen akrobatik";
+    onInput();
+    assert.deepEqual(rows.map((row) => row.hidden), [true, false]);
+    assert.deepEqual(categories.map((category) => category.hidden), [true, false]);
+    assert.equal(empty.hidden, true);
+
+    input.value = "Zauber";
+    onInput();
+    assert.deepEqual(rows.map((row) => row.hidden), [true, true]);
+    assert.deepEqual(categories.map((category) => category.hidden), [true, true]);
+    assert.equal(empty.hidden, false);
+
+    input.value = "";
+    onInput();
+    assert.deepEqual(rows.map((row) => row.hidden), [false, false]);
 });
 
 test("aiming and searching for an opening choose 2, 4, or 6 ticks and scale the chat bonus", async () => {
