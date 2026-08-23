@@ -21,7 +21,6 @@ import {
     attackReadiness,
     combatTickActionsFor,
     isPlayersTurn,
-    mayViewActorResources,
     mayViewTargetDefenses,
     mayViewTargetResources,
     normalizeFavoriteSkillIds,
@@ -97,7 +96,10 @@ export async function buildHud(context) {
 
     return `
         <div class="${shellClass}">
-            ${portraitPanel({ side: "actor", token, actor, eyebrow: t("SMOOTHER_FIGHT.HUD.Active"), action: "open-sheet" })}
+            ${portraitPanel({
+                side: "actor", token, actor, eyebrow: t("SMOOTHER_FIGHT.HUD.Active"), action: "open-sheet",
+                showDefenses: canViewDefenseValues(actor),
+            })}
             <main class="sf-center">
                 <header class="sf-turnline">
                     <span class="sf-live-dot"></span>
@@ -124,7 +126,7 @@ export async function buildHud(context) {
                     action: "open-token-sheet",
                     highlighted: services.isCurrentUserTarget(target),
                     primary: true,
-                    showDefenses: canViewTargetDefenseValues(target.actor),
+                    showDefenses: canViewDefenseValues(target.actor),
                 })}${services.canChooseTarget(context) ? `<button type="button" class="sf-primary-target-remove" data-sf-action="remove-target" data-token-uuid="${escapeAttr(target.uuid)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName }))}" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName }))}"><i class="fa-solid fa-xmark"></i></button>` : ""}</div></div>` : noTargetPanel()}
             </div>
         </div>
@@ -206,12 +208,12 @@ function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted =
                 <span><small>KW</small>${escapeHtml(body)}</span>
                 <span><small>GW</small>${escapeHtml(mind)}</span>
             </div>` : `<div class="sf-defense-row is-concealed"><i class="fa-solid fa-eye-slash"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefensesHidden"))}</span></div>`}
-            ${canViewResources(actor, side === "target") ? resourceBars(actor) : ""}
+            ${canViewResources(actor) ? resourceBars(actor) : ""}
         </aside>
     `;
 }
 
-function canViewTargetDefenseValues(actor) {
+function canViewDefenseValues(actor) {
     const observer = Boolean(actor?.testUserPermission?.(game.user, "OBSERVER"));
     return mayViewTargetDefenses(getSetting("revealTargetDefenses", false), game.user?.isGM, observer);
 }
@@ -257,12 +259,9 @@ function resourceBars(actor) {
     </div>`;
 }
 
-function canViewResources(actor, isTarget = false) {
+function canViewResources(actor) {
     const observer = Boolean(actor?.testUserPermission?.(game.user, "OBSERVER"));
-    if (isTarget) {
-        return mayViewTargetResources(getSetting("revealTargetResources", false), game.user?.isGM, observer);
-    }
-    return mayViewActorResources(game.user?.isGM, observer);
+    return mayViewTargetResources(getSetting("revealTargetResources", false), game.user?.isGM, observer);
 }
 
 function resourceBar(type, label, resource) {

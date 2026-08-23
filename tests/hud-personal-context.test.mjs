@@ -15,6 +15,7 @@ const harness = {
     controlledToken: null,
     movementTracking: true,
     player: null,
+    revealTargetDefenses: false,
     revealTargetResources: false,
     renderCalls: 0,
     targetSelection: {
@@ -74,6 +75,7 @@ function installFixture() {
     resetPersonalCombatantSelection();
     harness.controlledToken = null;
     harness.movementTracking = true;
+    harness.revealTargetDefenses = false;
     harness.revealTargetResources = false;
     harness.renderCalls = 0;
     harness.targetSelection = {
@@ -107,7 +109,7 @@ function installFixture() {
             get: (_moduleId, key) => ({
                 minimized: false,
                 movementTracking: harness.movementTracking,
-                revealTargetDefenses: false,
+                revealTargetDefenses: harness.revealTargetDefenses,
                 revealTargetResources: harness.revealTargetResources,
                 showCards: false,
                 theme: "dark",
@@ -218,4 +220,33 @@ test("the world option reveals a foreign target's health and focus", async () =>
     const revealed = await buildHud(getHudContext());
     assert.match(revealed, /7\/13/u);
     assert.match(revealed, /5\/11/u);
+});
+
+test("the active combatant's defenses and resources follow the foreign-stat world options", async () => {
+    const { active } = installFixture();
+    active.actor.derivedValues = {
+        defense: { value: 21 },
+        bodyresist: { value: 18 },
+        mindresist: { value: 16 },
+    };
+    active.actor.system = {
+        healthBar: { value: 12, max: 17 },
+        focusBar: { value: 9, max: 14 },
+    };
+    active.actor.testUserPermission = () => false;
+
+    const concealed = await buildHud(getHudContext());
+    assert.match(concealed, /SMOOTHER_FIGHT\.HUD\.DefensesHidden/u);
+    assert.doesNotMatch(concealed, /<small>VTD<\/small>21/u);
+    assert.doesNotMatch(concealed, /12\/17/u);
+    assert.doesNotMatch(concealed, /9\/14/u);
+
+    harness.revealTargetDefenses = true;
+    harness.revealTargetResources = true;
+    const revealed = await buildHud(getHudContext());
+    assert.match(revealed, /<small>VTD<\/small>21/u);
+    assert.match(revealed, /<small>KW<\/small>18/u);
+    assert.match(revealed, /<small>GW<\/small>16/u);
+    assert.match(revealed, /12\/17/u);
+    assert.match(revealed, /9\/14/u);
 });
