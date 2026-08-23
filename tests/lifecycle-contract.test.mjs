@@ -121,6 +121,7 @@ const serviceStubs = {
     },
     waitForDefenseProcessing: async (...args) => record("waitForDefenseProcessing", args),
     processDefenseMessage: async (...args) => record("processDefenseMessage", args),
+    applyDefenseSplinterpointForUser: async (...args) => record("applyDefenseSplinterpointForUser", args),
 };
 
 function resetHarness(gameStub) {
@@ -457,5 +458,36 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         await socketHandler(payload);
         assert.deepEqual(callsOf("canUserSubmitDefense"), []);
         assert.deepEqual(callsOf("processDefenseMessage"), [[defenseMessage, pending, { allowForeign: true }]]);
+    });
+
+    await t.test("defense splinterpoints are routed only by their recipient GM", async () => {
+        resetHarness(gameStub);
+        const sender = { id: "splinter-sender", isGM: false };
+        const message = { id: "splinter-attack", type: "attackRollMessage" };
+        gameStub.users.set(sender.id, sender);
+        gameStub.messages.set(message.id, message);
+        const payload = {
+            type: "apply-defense-splinterpoint",
+            senderId: sender.id,
+            recipientId: gameStub.user.id,
+            messageId: message.id,
+            spenderActorUuid: "Actor.resonator",
+        };
+
+        await socketHandler(payload);
+        assert.deepEqual(callsOf("applyDefenseSplinterpointForUser"), []);
+
+        gameStub.user.isGM = true;
+        await socketHandler(payload);
+        assert.deepEqual(callsOf("applyDefenseSplinterpointForUser"), [[
+            message,
+            payload.spenderActorUuid,
+            sender,
+        ]]);
+
+        callLog.length = 0;
+        await socketHandler({ ...payload, recipientId: "different-gm" });
+        await socketHandler({ ...payload, senderId: "unknown" });
+        assert.deepEqual(callsOf("applyDefenseSplinterpointForUser"), []);
     });
 });

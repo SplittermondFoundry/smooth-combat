@@ -7,4 +7,5 @@ export const activeDefenseState = {
     claimedDefenses: new Map(),
     processingDefenseMessages: new Set(),
     attackProcessingQueues: new Map(),
+    splinterpointActorLocks: new Set(),
 };

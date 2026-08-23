@@ -671,6 +671,16 @@
     color: var(--sf-gold-bright);
 }
 
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls .sf-splinterpoint-defense-action {
+    border-color: rgba(216, 168, 93, 0.64);
+    color: #fff4d8;
+    background: linear-gradient(135deg, rgba(122, 83, 30, 0.62), rgba(52, 112, 106, 0.38));
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls .sf-splinterpoint-defense-action i {
+    color: var(--sf-gold-bright);
+}
+
 #splittermond-smoother-fight-hud .sf-chat-message .sf-tick-advance-action.is-own-action-ticks,
 #splittermond-smoother-fight-hud .sf-chat-message .sf-tick-advance-action.is-own-defense-ticks,
 #splittermond-smoother-fight-hud .sf-chat-message .sf-tick-advance-action.is-damage-ticks,
@@ -678,7 +688,8 @@
 #splittermond-smoother-fight-hud .sf-chat-message .is-next-damage-roll,
 #splittermond-smoother-fight-hud .sf-chat-message .is-own-fumble-roll,
 #splittermond-smoother-fight-hud .sf-chat-message .is-gm-target-application,
-#splittermond-smoother-fight-hud .sf-chat-message .is-self-target {
+#splittermond-smoother-fight-hud .sf-chat-message .is-self-target,
+#splittermond-smoother-fight-hud .sf-chat-message .sf-splinterpoint-resonance-action {
     border: 1px solid rgba(242, 206, 135, 0.82) !important;
     color: #fff7d6 !important;
     background: linear-gradient(135deg, rgba(169, 112, 31, 0.76), rgba(32, 112, 106, 0.82)) !important;
@@ -849,7 +860,8 @@
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-next-damage-roll,
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-own-fumble-roll,
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-gm-target-application,
-    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-self-target {
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-self-target,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .sf-splinterpoint-resonance-action {
         animation: none;
     }
 }
@@ -866,7 +878,8 @@
 #splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-next-damage-roll,
 #splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-own-fumble-roll,
 #splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-gm-target-application,
-#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-self-target {
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-self-target,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .sf-splinterpoint-resonance-action {
     animation: none;
 }
 

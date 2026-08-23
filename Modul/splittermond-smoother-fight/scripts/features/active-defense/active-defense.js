@@ -12,22 +12,20 @@ import {
     registerPendingDefenseCleanup,
 } from "./pending.js";
 
+import {
+    queueDefenseForAttack,
+    resolveLatestOffenseMessage,
+    resolveProcessedDefenseOffense,
+} from "./recalculation.js";
+
 export { normalizePendingDefense };
 
 import { services } from "../../core/services.js";
-import { persistMissingDefensiveFeature } from "./system-compatibility.js";
-
 import {
-    activeDefenseChangesDifficulty,
-    attackOutcomeChanged,
-    bestActiveDefenseValue,
     isDefenderMasteryName,
     isOffensiveCombatMessage,
     parseActiveDefenseDescription,
-    recalculateAttackReport,
-    resolveActiveDefenseResult,
     tokenDocumentCenter,
-    totalDegreesOfSuccess,
 } from "../../combat-rules.js";
 
 import {
@@ -36,7 +34,6 @@ import {
 } from "../../core/constants.js";
 
 import {
-    cloneData,
     escapeHtml,
     getSetting,
     localizeSystem,
@@ -216,241 +213,6 @@ function requestLatestEventForDefense(pending) {
 
 export function isDefenseMessageProcessing(messageId) {
     return activeDefenseState.processingDefenseMessages.has(messageId);
-}
-
-function resolveRootOffenseMessage(offenseMessageId) {
-    let current = game.messages.get(offenseMessageId);
-    const visited = new Set();
-    while (current && isOffensiveCombatMessage(current) && !visited.has(current.id)) {
-        visited.add(current.id);
-        const context = services.getMessageContext(current);
-        const rootId = context?.rootAttackMessageId;
-        const previousId = context?.recalculatedFrom;
-        const previous = game.messages.get(rootId ?? previousId);
-        if (!previous || !isOffensiveCombatMessage(previous)) return current;
-        current = previous;
-    }
-    return current && isOffensiveCombatMessage(current) ? current : null;
-}
-
-function resolveProcessedDefenseOffense(offenseMessageId, defenseMessageId) {
-    const root = resolveRootOffenseMessage(offenseMessageId);
-    const latest = resolveLatestOffenseMessage(root);
-    const defenseMessageIds = services.getMessageContext(latest)?.defenseMessageIds;
-    return defenseMessageIds?.includes?.(defenseMessageId) ? latest : null;
-}
-
-async function queueDefenseForAttack(offenseMessageId, defenseMessage, defenseCheck, displayedDefenseValue, pending) {
-    const root = resolveRootOffenseMessage(offenseMessageId);
-    if (!root) return null;
-    const previous = activeDefenseState.attackProcessingQueues.get(root.id) ?? Promise.resolve();
-    const operation = previous.catch(() => undefined).then(() => recreateOffenseAfterDefense(
-        root,
-        defenseMessage,
-        defenseCheck,
-        displayedDefenseValue,
-        pending
-    ));
-    activeDefenseState.attackProcessingQueues.set(root.id, operation);
-    try {
-        return await operation;
-    } finally {
-        if (activeDefenseState.attackProcessingQueues.get(root.id) === operation) {
-            activeDefenseState.attackProcessingQueues.delete(root.id);
-        }
-    }
-}
-
-async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, displayedDefenseValue, pending) {
-    const original = resolveLatestOffenseMessage(root);
-    if (!original || !isOffensiveCombatMessage(original)) return null;
-
-    const originalContext = services.getMessageContext(original) ?? {};
-    const existingDefenseContext = services.getMessageContext(defenseMessage) ?? pending ?? {};
-    const target = services.resolveToken(primaryTargetTokenUuid(originalContext));
-    const calculatedBase = await target?.actor?.derivedValues?.[defenseCheck.defenseType]?.value?.calculate?.();
-    const resolvedDefense = resolveActiveDefenseResult(defenseCheck, displayedDefenseValue, {
-        knownDefensiveFeature: existingDefenseContext.defensiveFeatureValue,
-        fallbackBaseDefense: calculatedBase,
-    });
-    const candidateDefense = resolvedDefense.defenseValue;
-    const featureValue = resolvedDefense.defensiveFeatureValue;
-    await persistMissingDefensiveFeature(defenseMessage, featureValue);
-    const previousCandidate = existingDefenseContext.resultingDefenseValue;
-    const hasPreviousCandidate = previousCandidate !== null
-        && previousCandidate !== undefined
-        && previousCandidate !== ""
-        && Number.isFinite(Number(previousCandidate));
-    const alreadyProcessed = originalContext.defenseMessageIds?.includes?.(defenseMessage.id);
-    if (alreadyProcessed && (!hasPreviousCandidate || candidateDefense <= Number(previousCandidate))) return original;
-
-    const newDefense = bestActiveDefenseValue(originalContext.defenseValue, candidateDefense);
-    const actorUuid = pending?.defenderActorUuid ?? services.resolveSpeakerActor(defenseMessage)?.uuid ?? null;
-    const attemptedDefenseActorUuids = Array.from(new Set([
-        ...(originalContext.attemptedDefenseActorUuids ?? []),
-        actorUuid,
-    ].filter(Boolean)));
-    const defenseMessageIds = Array.from(new Set([
-        ...(originalContext.defenseMessageIds ?? []),
-        originalContext.defenseMessageId,
-        defenseMessage.id,
-    ].filter(Boolean)));
-    await services.setRequiredFlag(defenseMessage, "context", {
-        ...existingDefenseContext,
-        resultingDefenseValue: candidateDefense,
-        effectiveDefenseValue: newDefense,
-        defensiveFeatureValue: featureValue,
-    });
-
-    const historyContext = {
-        ...originalContext,
-        rootAttackMessageId: root.id,
-        attemptedDefenseActorUuids,
-        defenseMessageIds,
-    };
-    if (!activeDefenseChangesDifficulty(defenseCheck, displayedDefenseValue)) {
-        await setOffenseContext(original, historyContext);
-        return original;
-    }
-    if (Number.isFinite(Number(originalContext.defenseValue)) && newDefense <= Number(originalContext.defenseValue)) {
-        await setOffenseContext(original, historyContext);
-        return original;
-    }
-    const systemSource = cloneData(original.system?.toObject?.() ?? original.toObject().system);
-    const previousReport = systemSource.checkReport;
-    const config = globalThis.CONFIG?.splittermond ?? {};
-    const recalculatedReport = recalculateAttackReport(previousReport, newDefense, {
-        triumphBonus: config.check?.degreeOfSuccess?.triumphBonus ?? 3,
-        fumblePenalty: config.check?.degreeOfSuccess?.fumblePenalty ?? -3,
-        grazingHitBasePenalty: config.grazingHitBasePenalty ?? 2,
-    });
-    if (!attackOutcomeChanged(previousReport, recalculatedReport)) {
-        const context = {
-            ...historyContext,
-            defenseMessageId: defenseMessage.id,
-            defenseValue: newDefense,
-            defenseType: defenseCheck.defenseType,
-        };
-        const banner = defenseBanner(systemSource.checkReport, defenseCheck.defenseType, newDefense);
-        await updateOffenseCard(original, context, decorateRecalculatedCard(original.content, banner));
-        return original;
-    }
-    systemSource.checkReport = recalculatedReport;
-    systemSource.checkReport.degreeOfSuccessMessage = services.checkResultMessage(systemSource.checkReport);
-    systemSource.openDegreesOfSuccess = Math.max(
-        0,
-        totalDegreesOfSuccess(systemSource.checkReport) - (systemSource.checkReport.maneuvers?.length ?? 0)
-    );
-    resetOffenseHandlers(systemSource);
-
-    const source = cloneData(original.toObject());
-    delete source._id;
-    delete source._stats;
-    delete source.timestamp;
-    source.user = game.user.id;
-    source.sound = null;
-    source.system = systemSource;
-    source.content = original.content;
-    source.flags ??= {};
-    source.flags[MODULE_ID] = {
-        context: {
-            ...historyContext,
-            supersededBy: null,
-            recalculatedFrom: original.id,
-            defenseMessageId: defenseMessage.id,
-            defenseMessageIds,
-            defenseValue: newDefense,
-            defenseType: defenseCheck.defenseType,
-            attemptedDefenseActorUuids,
-            createdAt: Date.now(),
-        },
-    };
-    if (source.flags.splittermond?.chatCard) source.flags.splittermond.chatCard.messageId = null;
-
-    let created = null;
-    try {
-        created = await ChatMessage.create(source);
-        if (!created) throw new Error("ChatMessage.create returned no successor");
-    } catch (error) {
-        notifyRequiredContextFailure(error, original.id);
-        throw error;
-    }
-    try {
-        const rendered = await renderTemplate(created.system.template, created.system.getData());
-        const banner = defenseBanner(systemSource.checkReport, defenseCheck.defenseType, newDefense);
-        await created.update({ content: decorateRecalculatedCard(rendered, banner) });
-        await services.setRequiredFlag(original, "context", {
-            ...(services.getMessageContext(original) ?? historyContext),
-            rootAttackMessageId: root.id,
-            attemptedDefenseActorUuids,
-            defenseMessageIds,
-            supersededBy: created.id,
-        });
-        return created;
-    } catch (error) {
-        try {
-            await created.delete?.();
-        } catch (cleanupError) {
-            console.debug(`${MODULE_ID} | Could not remove incomplete attack successor ${created.id}`, cleanupError);
-        }
-        throw error;
-    }
-}
-
-async function updateOffenseCard(message, context, content) {
-    try {
-        return await message.update({
-            content,
-            [`flags.${MODULE_ID}.context`]: context,
-        });
-    } catch (error) {
-        notifyRequiredContextFailure(error, message.id);
-        throw error;
-    }
-}
-
-async function setOffenseContext(message, context) {
-    return services.setRequiredFlag(message, "context", context);
-}
-
-function notifyRequiredContextFailure(error, messageId) {
-    console.error(`${MODULE_ID} | Could not persist required attack context on chat message ${messageId}`, error);
-    ui.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.RequiredFlagFailed", { flag: "context" }));
-}
-
-function defenseBanner(report, defenseType, defenseValue) {
-    const defenseLabel = localizeSystem(`splittermond.derivedAttribute.${defenseType}.short`, String(defenseType).toUpperCase());
-    const hiddenClass = report.hideDifficulty ? " gm-only" : "";
-    return `<div class="sf-chat-recalculated${hiddenClass}"><i class="fa-solid fa-shield-halved"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NewDefense", { defense: defenseLabel }))}</span><strong>${escapeHtml(defenseValue)}</strong></div>`;
-}
-
-function resetOffenseHandlers(systemSource) {
-    if (systemSource.damageHandler) {
-        systemSource.damageHandler.damageUsed = false;
-        systemSource.damageHandler.penaltyUsed = false;
-        systemSource.damageHandler.damageAddition = 0;
-        systemSource.damageHandler.consumedGrazingHitCost = false;
-        systemSource.damageHandler.convertedToNumbingDamage = false;
-    }
-    resetCheckedOptions(systemSource.damageHandler?.options);
-    resetCheckedOptions(systemSource.noActionOptionsHandler);
-}
-
-function resetCheckedOptions(value, visited = new Set()) {
-    if (!value || typeof value !== "object" || visited.has(value)) return;
-    visited.add(value);
-    if (Object.hasOwn(value, "checked") && typeof value.checked === "boolean") value.checked = false;
-    for (const nested of Object.values(value)) resetCheckedOptions(nested, visited);
-}
-
-function decorateRecalculatedCard(content, banner) {
-    const template = document.createElement("template");
-    template.innerHTML = content;
-    template.content.querySelectorAll(".sf-chat-recalculated").forEach((element) => element.remove());
-    template.content.querySelectorAll('[data-localaction="activeDefense" i], [data-local-action="activeDefense" i]').forEach((button) => button.remove());
-    const wrapper = document.createElement("div");
-    wrapper.append(template.content.cloneNode(true));
-    return `${banner}${wrapper.innerHTML}`;
 }
 
 function startPendingDefenseRoll(pending) {
@@ -679,7 +441,7 @@ export async function beginDefenderDefense(message) {
 export function getEligibleDefenderChoices(message, user) {
     if (!message || !user || !isOffensiveCombatMessage(message)) return [];
     const context = services.getMessageContext(message);
-    if (context?.supersededBy || !message.system?.checkReport?.succeeded) return [];
+    if (context?.supersededBy || (!message.system?.checkReport?.succeeded && !context?.recalculatedFrom)) return [];
     if (!services.messageOffersActiveDefense(message) && !context?.recalculatedFrom) return [];
     const defenseType = String(message.system?.checkReport?.defenseType ?? context?.defenseType ?? "defense").toLocaleLowerCase();
     if (defenseType !== "defense" && defenseType !== "vtd") return [];
@@ -696,19 +458,6 @@ export function getEligibleDefenderChoices(message, user) {
         for (const defense of getCombatDefenseOptions(actor, { requireDefenderMastery: true })) choices.push({ token, actor, defense });
     }
     return choices;
-}
-
-function resolveLatestOffenseMessage(message) {
-    let current = message;
-    const visited = new Set();
-    while (current && !visited.has(current.id)) {
-        visited.add(current.id);
-        const nextId = services.getMessageContext(current)?.supersededBy;
-        const next = nextId ? game.messages.get(nextId) : null;
-        if (!next || !isOffensiveCombatMessage(next)) break;
-        current = next;
-    }
-    return current;
 }
 
 function getCombatDefenseOptions(actor, { requireDefenderMastery = false } = {}) {

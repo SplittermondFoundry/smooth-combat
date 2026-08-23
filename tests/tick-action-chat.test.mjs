@@ -2,7 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-import { createTickActionChatCard } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
+import {
+    createDefenseSplinterpointChatCard,
+    createTickActionChatCard,
+} from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 import { COMBAT_TICK_ACTIONS } from "../Modul/splittermond-smoother-fight/scripts/domain/combat/ticks.js";
 import {
     bindTickActionReferenceFilters,
@@ -607,6 +610,63 @@ test("clickable tick actions create a public chat card for the acting token", as
         id: "searchOpening",
         ticks: "4",
         tokenUuid: "Scene.scene-1.Token.token-1",
+    });
+});
+
+test("VTD splinterpoints and resonance report their reason and new defense in chat", async () => {
+    const created = [];
+    const actor = { id: "actor-splinter", uuid: "Actor.actor-splinter", name: "Arrou" };
+    const token = { id: "token-splinter", uuid: "Scene.scene.Token.token-splinter", name: "Arrou" };
+    globalThis.game = {
+        i18n: {
+            localize: translation,
+            format: (key, data) => Object.entries(data).reduce(
+                (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+                translation(key)
+            ),
+        },
+    };
+    globalThis.ChatMessage = {
+        getSpeaker: (options) => ({ actor: options.actor.id, token: options.token.id }),
+        create: async (data) => {
+            created.push(data);
+            return { id: `message-${created.length}`, ...data };
+        },
+    };
+
+    await createDefenseSplinterpointChatCard({
+        actor,
+        token,
+        targetName: "XYZ",
+        targetTokenUuid: "Scene.scene.Token.xyz",
+        defenseValue: 27,
+        kind: "primary",
+        attackMessageId: "attack-1",
+    });
+    await createDefenseSplinterpointChatCard({
+        actor,
+        token,
+        targetName: "XYZ",
+        targetTokenUuid: "Scene.scene.Token.xyz",
+        defenseValue: 29,
+        kind: "resonance",
+        attackMessageId: "attack-1",
+    });
+
+    assert.equal(created.length, 2);
+    assert.deepEqual(created[0].speaker, { actor: actor.id, token: token.id });
+    assert.match(created[0].content, /Grund/u);
+    assert.match(created[0].content, /Splitterpunkt: \+3 VTD/u);
+    assert.match(created[0].content, /Neue VTD/u);
+    assert.match(created[0].content, />27</u);
+    assert.match(created[1].content, /Splitterpunkt-Resonanz: weitere \+2 VTD/u);
+    assert.match(created[1].content, />29</u);
+    assert.deepEqual(created[1].flags["splittermond-smoother-fight"].defenseSplinterpoint, {
+        attackMessageId: "attack-1",
+        actorUuid: actor.uuid,
+        targetTokenUuid: "Scene.scene.Token.xyz",
+        kind: "resonance",
+        defenseValue: 29,
     });
 });
 

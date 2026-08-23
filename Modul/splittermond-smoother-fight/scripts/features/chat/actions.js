@@ -386,8 +386,9 @@ function resolveDamageApplicationTarget(message) {
 }
 
 function addEventDefenseActions(element, message) {
-    if (!isOffensiveCombatMessage(message) || !message.system?.checkReport?.succeeded) return;
+    if (!isOffensiveCombatMessage(message)) return;
     const context = services.getMessageContext(message);
+    if (!message.system?.checkReport?.succeeded && !context?.recalculatedFrom) return;
     if (context?.supersededBy) return;
     const target = services.resolveToken(primaryTargetTokenUuid(context));
     if (!target?.actor) return;
@@ -398,7 +399,8 @@ function addEventDefenseActions(element, message) {
         && (game.user.isGM || target.actor.isOwner)
     );
     const mayDefendOther = services.getEligibleDefenderChoices(message, game.user).length > 0;
-    if (!mayDefendTarget && !mayDefendOther) return;
+    const splinterpointActions = services.getDefenseSplinterpointActions(message, game.user);
+    if (!mayDefendTarget && !mayDefendOther && !splinterpointActions.length) return;
 
     let actions = element.querySelector(".sf-promoted-actions");
     if (!actions) {
@@ -434,6 +436,19 @@ function addEventDefenseActions(element, message) {
         button.dataset.sfAction = "defend-other";
         button.dataset.messageId = message.id;
         button.innerHTML = `<i class="fa-solid fa-shield-heart"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenderAction", { target: target.name }))}`;
+        actions.append(button);
+    }
+    for (const action of splinterpointActions) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `splittermond-chat-action sf-splinterpoint-defense-action ${action.kind === "resonance" ? "sf-splinterpoint-resonance-action" : ""}`.trim();
+        button.dataset.sfAction = "use-defense-splinterpoint";
+        button.dataset.messageId = message.id;
+        button.dataset.splinterpointActorUuid = action.actorUuid;
+        const label = action.kind === "resonance"
+            ? t("SMOOTHER_FIGHT.HUD.DefenseSplinterpointResonance", { target: target.name ?? target.actor.name })
+            : t("SMOOTHER_FIGHT.HUD.DefenseSplinterpoint");
+        button.innerHTML = `<i class="fa-solid fa-star"></i>${escapeHtml(label)}`;
         actions.append(button);
     }
 }

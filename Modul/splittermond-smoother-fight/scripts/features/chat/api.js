@@ -16,6 +16,7 @@ export {
 
 export {
     checkResultMessage,
+    createDefenseSplinterpointChatCard,
     createTickActionChatCard,
     getDefenseCheck,
     getMessageContext,

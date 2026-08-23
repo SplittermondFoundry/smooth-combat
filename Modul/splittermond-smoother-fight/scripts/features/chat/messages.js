@@ -25,6 +25,50 @@ import {
 
 const MOVEMENT_ACTIONS = new Set(["walk", "sprint"]);
 
+export function createDefenseSplinterpointChatCard({
+    actor,
+    token = null,
+    targetName,
+    targetTokenUuid = null,
+    defenseValue,
+    kind,
+    attackMessageId,
+}) {
+    if (!actor || !["primary", "resonance"].includes(kind) || !Number.isFinite(Number(defenseValue))) {
+        throw new Error("Invalid defense splinterpoint chat data");
+    }
+    const reason = t(kind === "resonance"
+        ? "SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatResonanceReason"
+        : "SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatPrimaryReason");
+    const content = `<section class="sf-tick-action-chat-card sf-defense-splinterpoint-chat-card">
+        <header>
+            <i class="fa-solid fa-star" aria-hidden="true"></i>
+            <div><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatEyebrow"))}</small><h2>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatTitle"))}</h2></div>
+        </header>
+        <dl>
+            ${tickActionCardField(t("SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatActor"), actor.name ?? "–")}
+            ${tickActionCardField(t("SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatTarget"), targetName ?? "–")}
+            ${tickActionCardField(t("SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatReason"), reason)}
+            ${tickActionCardField(t("SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatNewDefense"), defenseValue)}
+        </dl>
+    </section>`;
+    return ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor, token: token?.document ?? token }),
+        content,
+        flags: {
+            [MODULE_ID]: {
+                defenseSplinterpoint: {
+                    attackMessageId,
+                    actorUuid: actor.uuid ?? null,
+                    targetTokenUuid,
+                    kind,
+                    defenseValue: Number(defenseValue),
+                },
+            },
+        },
+    });
+}
+
 export async function createTickActionChatCard(context, actionId, selectedTicks = "custom", options = {}) {
     const action = COMBAT_TICK_ACTIONS.find((candidate) => candidate.id === actionId);
     if (!action || !context?.actor) throw new Error(`Unknown combat tick action: ${actionId}`);

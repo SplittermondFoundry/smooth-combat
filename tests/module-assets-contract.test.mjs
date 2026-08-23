@@ -33,7 +33,18 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "61c2ed1b75512be09c21eb7593615517f389bb4765f599fd1b3a816b094a30c8",
+        "9bc16ba59d5612de1afc219296f111cbfe11fa8c68e662038a05cc2f9e513ef0",
+    );
+    const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
+    assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
+    assert.equal(
+        german.SMOOTHER_FIGHT.HUD.DefenseSplinterpointResonance,
+        "Splitterpunkt (Resonanz: weitere VTD +2 für {target})",
+    );
+    assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatPrimaryReason, "Splitterpunkt: +3 VTD");
+    assert.equal(
+        german.SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatResonanceReason,
+        "Splitterpunkt-Resonanz: weitere +2 VTD",
     );
 });
 
@@ -88,6 +99,8 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /filter\(\(attack\) => !meleeOnly \|\| !services\.isRangedAttack\(attack\)\)/u);
     assert.match(chatActions, /if \(!mayRollFumble\) removeCombatFumbleRollControls\(element\)/u);
     assert.match(chatActions, /isMessageSpeakerAssignedToCurrentUser\(message\)/u);
+    assert.match(chatActions, /dataset\.sfAction = "use-defense-splinterpoint"/u);
+    assert.match(chatActions, /sf-splinterpoint-resonance-action/u);
 });
 
 test("the local HUD demo loads the manifest stylesheet entry", () => {
@@ -131,9 +144,10 @@ test("split styles flatten in the verified cascade order", () => {
     );
     assert.match(flattenedCss, /\.sf-movement-section::before\s*\{[^}]*width:\s*var\(--sf-movement-fill, 0%\)/su);
     assert.doesNotMatch(flattenedCss, /font-size:\s*[78]px/u);
+    assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "5b0ab74d94a26671cb2dd232db222e22b0722f5e1f619b27052824e842cad7b4",
+        "abb237efdc474eaa2fe26e694c4d2e528a8988d2cc86a7b78310d3c9c6cd2d95",
     );
 });
 

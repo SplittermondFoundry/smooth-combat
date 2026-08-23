@@ -10,3 +10,9 @@ export {
     normalizePendingDefense,
     processDefenseMessage,
 } from "./active-defense.js";
+
+export {
+    applyDefenseSplinterpointForUser,
+    getDefenseSplinterpointActions,
+    requestDefenseSplinterpoint,
+} from "./splinterpoints.js";

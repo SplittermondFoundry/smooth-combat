@@ -7,13 +7,19 @@ import {
     claimPendingDefenseForMessage,
     processDefenseMessage,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/active-defense.js";
+import {
+    applyDefenseSplinterpointForUser,
+    getDefenseSplinterpointActions,
+} from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/splinterpoints.js";
 import { activeDefenseState } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/state.js";
 import { setRequiredFlag } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 
 const MODULE_ID = "splittermond-smoother-fight";
 const harness = {
     checks: new Map(),
+    actors: new Map(),
     messages: new Map(),
+    splinterpointCards: [],
     tokens: new Map(),
     nextMessageId: 1,
     rejectSetFlag: null,
@@ -168,11 +174,21 @@ function installGlobals() {
 
 configureServices({
     checkResultMessage: (report) => report.succeeded ? "Erfolg" : "Fehlschlag",
+    createDefenseSplinterpointChatCard: async (data) => {
+        harness.splinterpointCards.push(data);
+        return { id: `splinterpoint-card-${harness.splinterpointCards.length}` };
+    },
     getDefenseCheck: (message) => harness.checks.get(message.id) ?? null,
+    getDefenseSplinterpointActions,
+    getAssignedUser: (combatant) => combatant?.assignedUser ?? null,
     getHudContext: () => null,
     getMessageContext: (message) => message?.flags?.[MODULE_ID]?.context ?? null,
+    getRuntimeController: (combatant) => combatant.runtimeController ?? null,
     isOwnMessage: (message) => (message.author?.id ?? message.user) === game.user.id,
     messageBelongsToCombatant: () => false,
+    messageOffersActiveDefense: (message) => /data-localaction=["']activeDefense["']/iu.test(message?.content ?? ""),
+    resolveActorUuid: (uuid) => harness.actors.get(uuid) ?? null,
+    resolveCombatantToken: (combatant) => combatant.token ?? null,
     resolveSpeakerActor: (message) => ({ uuid: `Actor.${message.speaker?.actor ?? "unknown"}` }),
     resolveToken: (uuid) => harness.tokens.get(uuid) ?? null,
     setRequiredFlag,
@@ -192,8 +208,11 @@ function resetHarness() {
     activeDefenseState.claimedDefenses.clear();
     activeDefenseState.processingDefenseMessages.clear();
     activeDefenseState.attackProcessingQueues.clear();
+    activeDefenseState.splinterpointActorLocks.clear();
+    harness.actors.clear();
     harness.checks.clear();
     harness.messages.clear();
+    harness.splinterpointCards.length = 0;
     harness.tokens.clear();
     harness.nextMessageId = 1;
     harness.rejectSetFlag = null;
@@ -257,6 +276,39 @@ function pendingFor(attack, defense, index) {
         startedAt: Date.now(),
         expiresAt: Date.now() + 60_000,
     };
+}
+
+function createSplinterpointActor(id, { heroLevel = 2, points = 2, owners = [] } = {}) {
+    const actor = {
+        id,
+        uuid: `Actor.${id}`,
+        isOwner: true,
+        splinterpoints: { value: points, max: 3 },
+        system: {
+            experience: { heroLevel },
+            splinterpoints: { value: points, max: 3 },
+        },
+        derivedValues: {
+            defense: { value: { calculate: async () => 20 } },
+        },
+        testUserPermission: (user) => user?.isGM || owners.includes(user?.id),
+        async update(changes) {
+            const next = Number(changes["system.splinterpoints.value"]);
+            this.system.splinterpoints.value = next;
+            this.splinterpoints.value = next;
+            return this;
+        },
+    };
+    harness.actors.set(actor.uuid, actor);
+    return actor;
+}
+
+function latestOffense(root) {
+    let latest = root;
+    while (latest.flags[MODULE_ID]?.context?.supersededBy) {
+        latest = harness.messages.get(latest.flags[MODULE_ID].context.supersededBy);
+    }
+    return latest;
 }
 
 test("parallel defenses against one root attack form one complete canonical successor chain", async () => {
@@ -478,6 +530,138 @@ test("a rejected supersededBy write removes the unlinked successor and rejects t
     );
     assert.equal(root.flags[MODULE_ID].context.supersededBy, undefined);
     assert.equal(activeDefenseState.attackProcessingQueues.size, 0);
+});
+
+test("VTD splinterpoints, resonance, and active defense remain additive in every requested order", async () => {
+    const orders = [
+        ["defense", "defense-splinterpoint", "vtd", "resonance"],
+        ["defense", "vtd", "defense-splinterpoint", "resonance"],
+        ["vtd", "defense", "defense-splinterpoint", "resonance"],
+    ];
+
+    for (const [index, order] of orders.entries()) {
+        resetHarness();
+        const target = createSplinterpointActor(`target-${index}`, { points: 2 });
+        const resonator = createSplinterpointActor(`resonator-${index}`, { heroLevel: 3, points: 2 });
+        const targetTokenUuid = `Token.target-${index}`;
+        harness.tokens.set(targetTokenUuid, { uuid: targetTokenUuid, name: `Target ${index}`, actor: target });
+        game.combat = {
+            combatants: [{
+                actor: resonator,
+                token: { uuid: `Token.resonator-${index}`, actor: resonator },
+                runtimeController: game.user,
+            }],
+        };
+        const root = createAttack(`attack-order-${index}`, attackReport({
+            roll: { total: 21 },
+            degreeOfSuccess: { fromRoll: 0, modification: 0 },
+        }), { primaryTargetTokenUuid: targetTokenUuid });
+        root.content = '<article class="splittermond check attack"><button data-localaction="activeDefense">Abwehr</button></article>';
+        const defense = createDefense(`defense-order-${index}`, 24, `defender-${index}`);
+        const pending = pendingFor(root, defense, index);
+
+        for (const step of order) {
+            if (step === "defense") await processDefenseMessage(defense, pending);
+            if (step === "defense-splinterpoint") {
+                defense.content = "VTD: 25";
+                harness.checks.get(defense.id).degreeOfSuccess.fromRoll = 4;
+                await processDefenseMessage(defense, pending);
+            }
+            if (step === "vtd") {
+                await applyDefenseSplinterpointForUser(latestOffense(root), target.uuid, game.user);
+            }
+            if (step === "resonance") {
+                await applyDefenseSplinterpointForUser(latestOffense(root), resonator.uuid, game.user);
+            }
+        }
+
+        const latest = latestOffense(root);
+        const context = latest.flags[MODULE_ID].context;
+        assert.equal(context.baseDefenseValue, 20, `order ${index + 1} retains the base VTD`);
+        assert.equal(context.activeDefenseValue, 25, `order ${index + 1} retains the improved active defense`);
+        assert.equal(context.vtdSplinterpointBonus, 5, `order ${index + 1} adds +3 and +2`);
+        assert.equal(context.defenseValue, 30, `order ${index + 1} uses the full effective VTD`);
+        assert.deepEqual(context.vtdSplinterpointResonanceActorUuids, [resonator.uuid]);
+        assert.equal(latest.system.checkReport.difficulty, 30);
+        assert.equal(latest.system.checkReport.succeeded, false);
+        assert.equal(target.splinterpoints.value, 1);
+        assert.equal(resonator.splinterpoints.value, 1);
+        assert.deepEqual(harness.splinterpointCards.map(({ kind, defenseValue, targetName }) => ({
+            kind,
+            defenseValue,
+            targetName,
+        })), [
+            { kind: "primary", defenseValue: [28, 27, 23][index], targetName: `Target ${index}` },
+            { kind: "resonance", defenseValue: 30, targetName: `Target ${index}` },
+        ]);
+    }
+});
+
+test("resonance is offered only to another owned hero-level-three combatant", () => {
+    resetHarness();
+    const targetOwner = { id: "target-owner", isGM: false };
+    const resonanceOwner = { id: "resonance-owner", isGM: false };
+    const target = createSplinterpointActor("target-actions", { owners: [targetOwner.id] });
+    const eligible = createSplinterpointActor("eligible-actions", { heroLevel: 3, owners: [resonanceOwner.id] });
+    const tooLow = createSplinterpointActor("low-actions", { heroLevel: 2, owners: [resonanceOwner.id] });
+    const samePlayer = createSplinterpointActor("same-player-actions", { heroLevel: 3, owners: [targetOwner.id] });
+    harness.tokens.set("Token.target-actions", { uuid: "Token.target-actions", name: "XYZ", actor: target });
+    game.combat = {
+        combatants: [
+            { actor: target, token: { uuid: "Token.target-actions", actor: target }, assignedUser: targetOwner, runtimeController: targetOwner },
+            { actor: samePlayer, token: { actor: samePlayer }, assignedUser: targetOwner, runtimeController: targetOwner },
+            { actor: eligible, token: { actor: eligible }, assignedUser: resonanceOwner, runtimeController: resonanceOwner },
+            { actor: tooLow, token: { actor: tooLow }, assignedUser: resonanceOwner, runtimeController: resonanceOwner },
+        ],
+    };
+    const attack = createAttack("attack-actions", attackReport(), {
+        primaryTargetTokenUuid: "Token.target-actions",
+    });
+    attack.content = '<button data-localaction="activeDefense">Abwehr</button>';
+
+    assert.deepEqual(getDefenseSplinterpointActions(attack, targetOwner), [
+        { kind: "primary", actorUuid: target.uuid },
+    ]);
+
+    attack.flags[MODULE_ID].context = {
+        ...attack.flags[MODULE_ID].context,
+        vtdSplinterpointActorUuid: target.uuid,
+        vtdSplinterpointBonus: 3,
+    };
+    assert.deepEqual(getDefenseSplinterpointActions(attack, resonanceOwner), [
+        { kind: "resonance", actorUuid: eligible.uuid },
+    ]);
+    assert.deepEqual(getDefenseSplinterpointActions(attack, targetOwner), []);
+});
+
+test("a failed attack-card transaction refunds the spent VTD splinterpoint", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    const target = createSplinterpointActor("target-refund", { points: 2 });
+    harness.tokens.set("Token.target-refund", { uuid: "Token.target-refund", name: "Target", actor: target });
+    game.combat = { combatants: [] };
+    const root = createAttack("attack-refund", attackReport(), {
+        primaryTargetTokenUuid: "Token.target-refund",
+    });
+    root.content = '<button data-localaction="activeDefense">Abwehr</button>';
+    harness.rejectSetFlag = ({ message, key, value }) => Boolean(
+        message.id === root.id && key === "context" && value?.supersededBy
+    );
+
+    await assert.rejects(
+        applyDefenseSplinterpointForUser(root, target.uuid, game.user),
+        /Could not persist required context flag/u
+    );
+
+    assert.equal(target.splinterpoints.value, 2);
+    assert.equal(harness.splinterpointCards.length, 0);
+    assert.equal(root.flags[MODULE_ID].context.vtdSplinterpointActorUuid, undefined);
+    assert.deepEqual(
+        Array.from(harness.messages.values())
+            .filter((message) => message.type === "attackRollMessage")
+            .map((message) => message.id),
+        [root.id]
+    );
 });
 
 test("dialog nonces isolate stale and cancelled active-defense workflows", async () => {

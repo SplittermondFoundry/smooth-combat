@@ -362,6 +362,13 @@ class SmootherFightHud {
                 case "defend-target":
                     await services.beginAdditionalTargetDefense(game.messages.get(target.dataset.messageId));
                     break;
+                case "use-defense-splinterpoint":
+                    target.disabled = true;
+                    if (!await services.requestDefenseSplinterpoint(
+                        game.messages.get(target.dataset.messageId),
+                        target.dataset.splinterpointActorUuid
+                    ) && target.isConnected) target.disabled = false;
+                    break;
                 case "toggle-equipped":
                     await services.requireOwner(context, () => {
                         requestActionMenuExpansion(context, target, "attacks");

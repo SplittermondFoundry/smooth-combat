@@ -157,6 +157,14 @@ export function registerSocket() {
 
             await services.waitForDefenseProcessing(message.id);
             await services.processDefenseMessage(message, pending, { allowForeign: true });
+            return;
+        }
+
+        if (payload.type === "apply-defense-splinterpoint" && payload.recipientId === game.user.id && game.user.isGM) {
+            const sender = game.users.get(payload.senderId);
+            const message = game.messages.get(payload.messageId);
+            if (!sender || !message || typeof payload.spenderActorUuid !== "string") return;
+            await services.applyDefenseSplinterpointForUser(message, payload.spenderActorUuid, sender);
         }
     });
 }
