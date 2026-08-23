@@ -101,38 +101,45 @@ export function tokenUuid(tokenOrObject) {
     return tokenOrObject?.document?.uuid ?? tokenOrObject?.uuid ?? null;
 }
 
-export async function setTargetFromQuickMenu(context, uuid) {
+export async function setTargetFromQuickMenu(context, uuid, { additive = false, replaceSelection = !additive } = {}) {
     const recipient = runtimeControllerFor(context);
     if (!recipient) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable"));
-        return;
+        return false;
     }
-    if (!canChooseTarget(context, recipient)) return;
+    if (!canChooseTarget(context, recipient)) return false;
     const token = resolveToken(uuid);
-    if (!token) return;
+    if (!token) return false;
     const liveContext = recipient.id === context.runtimeController?.id
         ? context
         : services.getTargetSelectionForUser(recipient);
     const current = new Set(liveContext.targets.map((candidate) => candidate.uuid));
     const alreadySelected = current.has(token.uuid);
+    if (additive && alreadySelected) return false;
     const existingPrimaryTargetUuid = liveContext.target?.uuid
         ?? targetingState.primaryTargetByUser.get(recipient.id)
         ?? null;
-    current.add(token.uuid);
-    const primaryTargetTokenUuid = alreadySelected
-        ? token.uuid
-        : existingPrimaryTargetUuid ?? token.uuid;
+    if (replaceSelection) {
+        current.clear();
+        current.add(token.uuid);
+    }
+    else current.add(token.uuid);
+    const primaryTargetTokenUuid = additive
+        ? existingPrimaryTargetUuid ?? token.uuid
+        : token.uuid;
     const selection = rememberTargetReferences(recipient.id, current, primaryTargetTokenUuid);
+    const releaseOthers = replaceSelection;
 
     if (recipient.id === game.user.id) {
-        if (!alreadySelected) setLocalTarget(token, true, false);
+        setLocalTarget(token, true, releaseOthers);
         publishOwnTarget(selection.targetTokenUuids, selection.primaryTargetTokenUuid);
     } else {
-        if (!alreadySelected) emitRemoteSetTarget(recipient.id, token, true, selection);
+        emitRemoteSetTarget(recipient.id, token, true, selection, releaseOthers);
         emitTargetUpdate(recipient.id, selection);
     }
-    ui.notifications.info(t(alreadySelected ? "SMOOTHER_FIGHT.HUD.PrimaryTargetChanged" : "SMOOTHER_FIGHT.HUD.TargetAdded", { target: token.name }));
+    ui.notifications.info(t(additive ? "SMOOTHER_FIGHT.HUD.TargetAdded" : "SMOOTHER_FIGHT.HUD.PrimaryTargetChanged", { target: token.name }));
     services.scheduleRender();
+    return true;
 }
 
 export async function removeTargetFromQuickMenu(context, uuid) {
@@ -162,14 +169,14 @@ export async function removeTargetFromQuickMenu(context, uuid) {
     services.scheduleRender();
 }
 
-function emitRemoteSetTarget(recipientId, token, targeted, selection) {
+function emitRemoteSetTarget(recipientId, token, targeted, selection, releaseOthers = false) {
     game.socket.emit(SOCKET, {
         type: "set-target",
         senderId: game.user.id,
         recipientId,
         tokenUuid: token.uuid,
         targeted,
-        releaseOthers: false,
+        releaseOthers,
         targetUuids: selection.targetTokenUuids,
         primaryTargetTokenUuid: selection.primaryTargetTokenUuid,
         primaryTargetActorUuid: resolveToken(selection.primaryTargetTokenUuid)?.actor?.uuid ?? null,

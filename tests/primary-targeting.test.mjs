@@ -20,7 +20,7 @@ function createToken(id) {
     };
     token.object = {
         document: token,
-        setTarget: (targeted) => targetingHarness.targetCalls.push([token.uuid, targeted]),
+        setTarget: (targeted, options) => targetingHarness.targetCalls.push([token.uuid, targeted, options?.releaseOthers ?? false]),
     };
     return token;
 }
@@ -30,7 +30,7 @@ const targetingHarness = {
     socketPayloads: [],
 };
 
-test("quick targeting promotes, adds, and removes targets without collapsing the target set", async () => {
+test("quick targeting selects a primary target normally and adds secondary targets with Shift", async () => {
     const targetA = createToken("a");
     const targetB = createToken("b");
     const targetC = createToken("c");
@@ -66,25 +66,36 @@ test("quick targeting promotes, adds, and removes targets without collapsing the
 
     const context = { actor: { isOwner: true }, runtimeController: user, target: targetB, targets: [targetA, targetB] };
     await setTargetFromQuickMenu(context, targetA.uuid);
-    assert.deepEqual(targetingHarness.targetCalls, []);
-    assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetTokenUuids, [targetA.uuid, targetB.uuid]);
+    assert.deepEqual(targetingHarness.targetCalls, [[targetA.uuid, true, true]]);
+    assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetTokenUuids, [targetA.uuid]);
     assert.equal(targetingHarness.socketPayloads.at(-1).primaryTargetTokenUuid, targetA.uuid);
     assert.equal(targetingHarness.socketPayloads.at(-1).primaryTargetActorUuid, targetA.actor.uuid);
     assert.equal(targetingHarness.socketPayloads.at(-1).targetTokenUuid, targetA.uuid);
-    assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetActorUuids, [targetA.actor.uuid, targetB.actor.uuid]);
+    assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetActorUuids, [targetA.actor.uuid]);
 
     targetingHarness.socketPayloads.length = 0;
-    await setTargetFromQuickMenu({ ...context, target: targetA }, targetC.uuid);
-    assert.deepEqual(targetingHarness.targetCalls, [[targetC.uuid, true]]);
-    assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetTokenUuids, [targetA.uuid, targetB.uuid, targetC.uuid]);
+    await setTargetFromQuickMenu({ ...context, target: targetA, targets: [targetA] }, targetC.uuid, { additive: true });
+    assert.deepEqual(targetingHarness.targetCalls.at(-1), [targetC.uuid, true, false]);
+    assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetTokenUuids, [targetA.uuid, targetC.uuid]);
     assert.equal(targetingHarness.socketPayloads.at(-1).primaryTargetTokenUuid, targetA.uuid);
 
     targetingHarness.targetCalls.length = 0;
     targetingHarness.socketPayloads.length = 0;
-    await removeTargetFromQuickMenu({ ...context, target: targetA }, targetA.uuid);
-    assert.deepEqual(targetingHarness.targetCalls, [[targetA.uuid, false]]);
-    assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetTokenUuids, [targetB.uuid]);
-    assert.equal(targetingHarness.socketPayloads.at(-1).primaryTargetTokenUuid, targetB.uuid);
+    await setTargetFromQuickMenu(
+        { ...context, target: targetA, targets: [targetA, targetC] },
+        targetC.uuid,
+        { replaceSelection: false }
+    );
+    assert.deepEqual(targetingHarness.targetCalls, [[targetC.uuid, true, false]]);
+    assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetTokenUuids, [targetA.uuid, targetC.uuid]);
+    assert.equal(targetingHarness.socketPayloads.at(-1).primaryTargetTokenUuid, targetC.uuid);
+
+    targetingHarness.targetCalls.length = 0;
+    targetingHarness.socketPayloads.length = 0;
+    await removeTargetFromQuickMenu({ ...context, target: targetC, targets: [targetA, targetC] }, targetA.uuid);
+    assert.deepEqual(targetingHarness.targetCalls, [[targetA.uuid, false, false]]);
+    assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetTokenUuids, [targetC.uuid]);
+    assert.equal(targetingHarness.socketPayloads.at(-1).primaryTargetTokenUuid, targetC.uuid);
 });
 
 test("an active GM substitutes locally without sending target operations to an offline player", async () => {
@@ -115,7 +126,7 @@ test("an active GM substitutes locally without sending target operations to an o
         targets: [],
     }, target.uuid);
 
-    assert.deepEqual(targetingHarness.targetCalls, [[target.uuid, true]]);
+    assert.deepEqual(targetingHarness.targetCalls, [[target.uuid, true, true]]);
     assert.ok(targetingHarness.socketPayloads.every((payload) => payload.recipientId !== offlinePlayer.id));
     assert.equal(targetingHarness.socketPayloads.at(-1).userId, gm.id);
 });

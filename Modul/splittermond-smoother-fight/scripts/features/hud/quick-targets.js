@@ -29,32 +29,9 @@ export function buildQuickTargets(context) {
 export function bindQuickTargetSearch(root) {
     for (const input of root.querySelectorAll("[data-sf-quick-target-search]")) {
         const popover = input.closest(".sf-quick-target-popover");
-        const rows = Array.from(popover?.querySelectorAll("[data-sf-quick-target-row]") ?? []);
-        const actorGroups = Array.from(popover?.querySelectorAll("[data-sf-quick-target-actor-group]") ?? []);
-        const groups = Array.from(popover?.querySelectorAll("[data-sf-quick-target-group]") ?? []);
         const filters = Array.from(popover?.querySelectorAll("[data-sf-quick-target-filter]") ?? []);
-        const empty = popover?.querySelector("[data-sf-quick-target-empty]");
-        let actorKind = "all";
-        const applyFilters = () => {
-            const query = String(input.value ?? "").trim().toLocaleLowerCase();
-            let visibleCount = 0;
-            for (const row of rows) {
-                const matchesSearch = !query || String(row.dataset.sfSearch ?? "").includes(query);
-                const matchesKind = actorKind === "all" || row.dataset.sfActorKind === actorKind;
-                const visible = matchesSearch && matchesKind;
-                row.hidden = !visible;
-                if (visible) visibleCount += 1;
-            }
-            for (const group of actorGroups) {
-                group.hidden = !Array.from(group.querySelectorAll("[data-sf-quick-target-row]"))
-                    .some((row) => !row.hidden);
-            }
-            for (const group of groups) {
-                group.hidden = !Array.from(group.querySelectorAll("[data-sf-quick-target-row]"))
-                    .some((row) => !row.hidden);
-            }
-            if (empty) empty.hidden = visibleCount > 0;
-        };
+        let actorKind = selectedQuickTargetActorKind(filters);
+        const applyFilters = () => applyQuickTargetFilters(popover, input.value, actorKind);
         input.addEventListener("input", applyFilters);
         for (const filter of filters) {
             filter.addEventListener("click", () => {
@@ -64,6 +41,73 @@ export function bindQuickTargetSearch(root) {
             });
         }
     }
+}
+
+export function captureQuickTargetViewState(trigger) {
+    const menu = trigger?.closest?.(".sf-quick-targets");
+    if (!menu?.open) return null;
+    const popover = menu.querySelector(".sf-quick-target-popover");
+    const results = popover?.querySelector(".sf-quick-target-results");
+    const filters = Array.from(popover?.querySelectorAll("[data-sf-quick-target-filter]") ?? []);
+    return {
+        actorKind: selectedQuickTargetActorKind(filters),
+        query: popover?.querySelector("[data-sf-quick-target-search]")?.value ?? "",
+        popoverScrollTop: popover?.scrollTop ?? 0,
+        resultsScrollTop: results?.scrollTop ?? 0,
+    };
+}
+
+export function restoreQuickTargetViewState(root, state) {
+    if (!state) return;
+    const menu = root?.querySelector?.(".sf-quick-targets");
+    if (!menu) return;
+    menu.open = true;
+    const popover = menu.querySelector(".sf-quick-target-popover");
+    const input = popover?.querySelector("[data-sf-quick-target-search]");
+    const results = popover?.querySelector(".sf-quick-target-results");
+    const filters = Array.from(popover?.querySelectorAll("[data-sf-quick-target-filter]") ?? []);
+    if (input) input.value = state.query ?? "";
+    filters.forEach((filter) => {
+        filter.setAttribute("aria-pressed", String(filter.dataset.sfQuickTargetFilter === state.actorKind));
+    });
+    applyQuickTargetFilters(popover, input?.value, state.actorKind);
+
+    const restoreScroll = () => {
+        if (popover) popover.scrollTop = state.popoverScrollTop ?? 0;
+        if (results) results.scrollTop = state.resultsScrollTop ?? 0;
+    };
+    restoreScroll();
+    globalThis.requestAnimationFrame?.(restoreScroll);
+}
+
+function selectedQuickTargetActorKind(filters) {
+    return filters.find((filter) => filter.getAttribute?.("aria-pressed") === "true")
+        ?.dataset.sfQuickTargetFilter ?? "all";
+}
+
+function applyQuickTargetFilters(popover, search, actorKind = "all") {
+    const rows = Array.from(popover?.querySelectorAll("[data-sf-quick-target-row]") ?? []);
+    const actorGroups = Array.from(popover?.querySelectorAll("[data-sf-quick-target-actor-group]") ?? []);
+    const groups = Array.from(popover?.querySelectorAll("[data-sf-quick-target-group]") ?? []);
+    const empty = popover?.querySelector("[data-sf-quick-target-empty]");
+    const query = String(search ?? "").trim().toLocaleLowerCase();
+    let visibleCount = 0;
+    for (const row of rows) {
+        const matchesSearch = !query || String(row.dataset.sfSearch ?? "").includes(query);
+        const matchesKind = actorKind === "all" || row.dataset.sfActorKind === actorKind;
+        const visible = matchesSearch && matchesKind;
+        row.hidden = !visible;
+        if (visible) visibleCount += 1;
+    }
+    for (const group of actorGroups) {
+        group.hidden = !Array.from(group.querySelectorAll("[data-sf-quick-target-row]"))
+            .some((row) => !row.hidden);
+    }
+    for (const group of groups) {
+        group.hidden = !Array.from(group.querySelectorAll("[data-sf-quick-target-row]"))
+            .some((row) => !row.hidden);
+    }
+    if (empty) empty.hidden = visibleCount > 0;
 }
 
 export function quickTargetLabels(tokens) {

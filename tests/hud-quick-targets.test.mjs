@@ -7,10 +7,12 @@ import {
     QUICK_TARGET_STRUCTURE_THRESHOLD,
     bindQuickTargetSearch,
     buildQuickTargets,
+    captureQuickTargetViewState,
     orderQuickTargetCandidates,
     quickTargetActorKind,
     quickTargetLabels,
     quickTargetSearchValue,
+    restoreQuickTargetViewState,
 } from "../Modul/splittermond-smoother-fight/scripts/features/hud/quick-targets.js";
 
 test("quick targets stay flat through eight candidates and gain structure above the threshold", (context) => {
@@ -107,6 +109,63 @@ test("quick target search filters case-insensitively and hides empty groups", ()
     onInput();
     assert.equal(groups[0].hidden, true);
     assert.equal(empty.hidden, false);
+});
+
+test("quick target view state reopens the menu after adding a secondary target", () => {
+    const rows = [
+        { dataset: { sfSearch: "hero", sfActorKind: "character" }, hidden: false },
+        { dataset: { sfSearch: "wolf", sfActorKind: "npc" }, hidden: false },
+    ];
+    const actorGroups = rows.map((row) => ({ hidden: false, querySelectorAll: () => [row] }));
+    const groups = [{ hidden: false, querySelectorAll: () => rows }];
+    const empty = { hidden: true };
+    const input = { value: "wolf" };
+    const filters = ["all", "character", "npc"].map((kind) => ({
+        dataset: { sfQuickTargetFilter: kind },
+        pressed: kind === "npc" ? "true" : "false",
+        getAttribute: () => filters.find((filter) => filter.dataset.sfQuickTargetFilter === kind).pressed,
+        setAttribute: (_name, value) => { filters.find((filter) => filter.dataset.sfQuickTargetFilter === kind).pressed = value; },
+    }));
+    const results = { scrollTop: 73 };
+    const popover = {
+        scrollTop: 19,
+        querySelectorAll: (selector) => ({
+            "[data-sf-quick-target-row]": rows,
+            "[data-sf-quick-target-actor-group]": actorGroups,
+            "[data-sf-quick-target-group]": groups,
+            "[data-sf-quick-target-filter]": filters,
+        })[selector] ?? [],
+        querySelector: (selector) => ({
+            "[data-sf-quick-target-search]": input,
+            ".sf-quick-target-results": results,
+            "[data-sf-quick-target-empty]": empty,
+        })[selector] ?? null,
+    };
+    const menu = {
+        open: true,
+        querySelector: (selector) => selector === ".sf-quick-target-popover" ? popover : null,
+    };
+    const state = captureQuickTargetViewState({ closest: () => menu });
+    assert.deepEqual(state, {
+        actorKind: "npc",
+        query: "wolf",
+        popoverScrollTop: 19,
+        resultsScrollTop: 73,
+    });
+
+    menu.open = false;
+    input.value = "";
+    popover.scrollTop = 0;
+    results.scrollTop = 0;
+    filters.forEach((filter, index) => { filter.pressed = index === 0 ? "true" : "false"; });
+    restoreQuickTargetViewState({ querySelector: () => menu }, state);
+
+    assert.equal(menu.open, true);
+    assert.equal(input.value, "wolf");
+    assert.deepEqual(filters.map((filter) => filter.pressed), ["false", "false", "true"]);
+    assert.deepEqual(rows.map((row) => row.hidden), [true, false]);
+    assert.equal(popover.scrollTop, 19);
+    assert.equal(results.scrollTop, 73);
 });
 
 test("quick target helpers prioritize selections, number duplicate token names, and search actor names", () => {

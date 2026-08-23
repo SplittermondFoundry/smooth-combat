@@ -25,6 +25,8 @@ import {
 
 import {
     bindQuickTargetSearch,
+    captureQuickTargetViewState,
+    restoreQuickTargetViewState,
 } from "./quick-targets.js";
 
 import {
@@ -141,6 +143,7 @@ class SmootherFightHud {
         this.renderGeneration = 0;
         this.draggedFavoriteSkillId = null;
         this.favoriteSkillClickBlockedUntil = 0;
+        this.quickTargetViewStateRequest = null;
     }
 
     mount() {
@@ -203,6 +206,8 @@ class SmootherFightHud {
         services.enforceChatPermissions(this.element, context);
         services.enforceFumbleActionState(this.element);
         services.bindQuickTargetHover(this.element);
+        restoreQuickTargetViewState(this.element, this.quickTargetViewStateRequest);
+        this.quickTargetViewStateRequest = null;
         bindQuickTargetSearch(this.element);
         bindTickActionReferenceFilters(this.element);
         bindSpellTooltips(this.element, context);
@@ -375,9 +380,20 @@ class SmootherFightHud {
                         return services.toggleEquipped(context.actor, target.dataset.itemId);
                     });
                     break;
-                case "set-target":
-                    await services.setTargetFromQuickMenu(context, target.dataset.tokenUuid);
+                case "set-target": {
+                    const quickTargetViewState = event.shiftKey
+                        ? captureQuickTargetViewState(target)
+                        : null;
+                    this.quickTargetViewStateRequest = quickTargetViewState;
+                    const changed = await services.setTargetFromQuickMenu(context, target.dataset.tokenUuid, {
+                        additive: event.shiftKey,
+                        replaceSelection: Boolean(target.closest(".sf-quick-targets")) && !event.shiftKey,
+                    });
+                    if (!changed && this.quickTargetViewStateRequest === quickTargetViewState) {
+                        this.quickTargetViewStateRequest = null;
+                    }
                     break;
+                }
                 case "remove-target":
                     await services.removeTargetFromQuickMenu(context, target.dataset.tokenUuid);
                     break;
