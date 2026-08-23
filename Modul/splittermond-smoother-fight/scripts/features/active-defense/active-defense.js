@@ -1,5 +1,19 @@
 import { activeDefenseState } from "./state.js";
 
+import {
+    activeDefenseDifficultyForOffense,
+    invokeActiveDefenseRoll,
+    launchDirectActiveDefense,
+} from "./difficulty.js";
+
+import {
+    clearPendingDefense,
+    normalizePendingDefense,
+    registerPendingDefenseCleanup,
+} from "./pending.js";
+
+export { normalizePendingDefense };
+
 import { services } from "../../core/services.js";
 
 import {
@@ -45,17 +59,6 @@ function createPendingDefenseId() {
         ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function clearPendingDefense(pendingDefenseId) {
-    if (!pendingDefenseId) return;
-    const timeoutId = activeDefenseState.pendingDefenseTimers.get(pendingDefenseId);
-    if (timeoutId) clearTimeout(timeoutId);
-    activeDefenseState.pendingDefenseTimers.delete(pendingDefenseId);
-    activeDefenseState.rollingDefenses.delete(pendingDefenseId);
-    if (activeDefenseState.pendingDefense?.pendingDefenseId === pendingDefenseId) {
-        activeDefenseState.pendingDefense = null;
-    }
-}
-
 function schedulePendingDefenseCleanup(pending) {
     const delay = Math.max(0, pending.expiresAt - Date.now());
     const timeoutId = setTimeout(() => clearPendingDefense(pending.pendingDefenseId), delay);
@@ -70,6 +73,7 @@ function rememberPendingDefense(message, targetOverride = null, options = {}) {
         ?? getControlledTokenDocument()
         ?? services.getHudContext()?.target;
     const defender = options.defender ?? target;
+    const difficulty = activeDefenseDifficultyForOffense(message);
     clearPendingDefense(activeDefenseState.pendingDefense?.pendingDefenseId);
     const pending = {
         pendingDefenseId: createPendingDefenseId(),
@@ -83,6 +87,7 @@ function rememberPendingDefense(message, targetOverride = null, options = {}) {
         defenseId: options.defense?.id ?? null,
         defenseSkillId: options.defense?.skill?.id ?? null,
         assisted: Boolean(options.assisted),
+        ...difficulty,
         startedAt: Date.now(),
         expiresAt: Date.now() + PENDING_DEFENSE_TTL_MS,
     };
@@ -94,27 +99,6 @@ function rememberPendingDefense(message, targetOverride = null, options = {}) {
 export function getControlledTokenDocument() {
     const controlled = Array.from(canvas?.tokens?.controlled ?? []);
     return controlled.at(-1)?.document ?? null;
-}
-
-export function normalizePendingDefense(value) {
-    if (!value || typeof value !== "object" || typeof value.attackMessageId !== "string") return null;
-    const targetTokenUuid = primaryTargetTokenUuid(value);
-    const targetActorUuid = primaryTargetActorUuid(value);
-    return {
-        pendingDefenseId: typeof value.pendingDefenseId === "string" ? value.pendingDefenseId : null,
-        attackMessageId: value.attackMessageId,
-        primaryTargetTokenUuid: typeof targetTokenUuid === "string" ? targetTokenUuid : null,
-        primaryTargetActorUuid: typeof targetActorUuid === "string" ? targetActorUuid : null,
-        targetTokenUuid: typeof targetTokenUuid === "string" ? targetTokenUuid : null,
-        targetActorUuid: typeof targetActorUuid === "string" ? targetActorUuid : null,
-        defenderTokenUuid: typeof value.defenderTokenUuid === "string" ? value.defenderTokenUuid : null,
-        defenderActorUuid: typeof value.defenderActorUuid === "string" ? value.defenderActorUuid : null,
-        defenseId: typeof value.defenseId === "string" ? value.defenseId : null,
-        defenseSkillId: typeof value.defenseSkillId === "string" ? value.defenseSkillId : null,
-        assisted: Boolean(value.assisted),
-        startedAt: Number(value.startedAt) || 0,
-        expiresAt: Number(value.expiresAt) || Date.now() + 60 * 1000,
-    };
 }
 
 function pendingMatchesDefenseMessage(pending, message) {
@@ -479,62 +463,58 @@ async function runPendingDefenseRoll(pending, operation) {
     }
 }
 
-function observeActiveDefenseDialog(dialog, pending) {
-    if (!dialog || typeof dialog.rollDefense !== "function" || typeof dialog.close !== "function") return false;
-    // Splittermond closes this selector while its actor roll is still running, so observe both lifecycles.
-    const originalClose = dialog.close;
-    const originalRollDefense = dialog.rollDefense;
-    let rollStarted = false;
-
-    dialog.close = function (...args) {
-        if (!rollStarted) clearPendingDefense(pending.pendingDefenseId);
-        return originalClose.apply(this, args);
+function interceptPendingDefenseActorRoll(actor, pending) {
+    const originalActorRoll = actor?.rollActiveDefense;
+    if (typeof originalActorRoll !== "function") return null;
+    const hadOwnRoll = Object.hasOwn(actor, "rollActiveDefense");
+    let installed = false;
+    let captured = false;
+    let unregisterCleanup = () => {};
+    const restore = () => {
+        unregisterCleanup();
+        unregisterCleanup = () => {};
+        if (!installed || actor.rollActiveDefense !== interceptActorRoll) return;
+        if (hadOwnRoll) actor.rollActiveDefense = originalActorRoll;
+        else delete actor.rollActiveDefense;
+        installed = false;
     };
-    dialog.rollDefense = function (...args) {
-        rollStarted = true;
-        if (!startPendingDefenseRoll(pending)) return originalRollDefense.apply(this, args);
-
-        const actor = dialog.actor;
-        const originalActorRoll = actor?.rollActiveDefense;
-        let actorRollCaptured = false;
-        let actorRollInstalled = false;
-        const restoreActorRoll = () => {
-            if (!actorRollInstalled || actor.rollActiveDefense !== interceptActorRoll) return;
-            delete actor.rollActiveDefense;
-            if (actor.rollActiveDefense !== originalActorRoll) actor.rollActiveDefense = originalActorRoll;
-            actorRollInstalled = false;
-        };
-        const interceptActorRoll = function (...rollArgs) {
-            actorRollCaptured = true;
-            restoreActorRoll();
-            try {
-                const result = originalActorRoll.apply(this, rollArgs);
-                watchPendingDefenseRoll(result, pending);
-                return result;
-            } catch (error) {
-                clearPendingDefense(pending.pendingDefenseId);
-                throw error;
-            }
-        };
-        if (actor && typeof originalActorRoll === "function") {
-            try {
-                actor.rollActiveDefense = interceptActorRoll;
-                actorRollInstalled = actor.rollActiveDefense === interceptActorRoll;
-            } catch {
-                actorRollInstalled = false;
-            }
-        }
-
+    const interceptActorRoll = function (...rollArgs) {
+        captured = true;
+        restore();
+        if (!startPendingDefenseRoll(pending)) return originalActorRoll.apply(this, rollArgs);
         try {
-            const result = originalRollDefense.apply(this, args);
-            restoreActorRoll();
-            if (!actorRollCaptured && result?.then) watchPendingDefenseRoll(result, pending);
+            const result = pending.distractingFeatureValue > 0
+                ? invokeActiveDefenseRoll(originalActorRoll, this, rollArgs, pending.activeDefenseDifficulty)
+                : originalActorRoll.apply(this, rollArgs);
+            watchPendingDefenseRoll(result, pending);
             return result;
         } catch (error) {
-            restoreActorRoll();
             clearPendingDefense(pending.pendingDefenseId);
             throw error;
         }
+    };
+    try {
+        actor.rollActiveDefense = interceptActorRoll;
+        installed = actor.rollActiveDefense === interceptActorRoll;
+    } catch {
+        installed = false;
+    }
+    if (!installed) return null;
+    unregisterCleanup = registerPendingDefenseCleanup(pending.pendingDefenseId, restore);
+    return {
+        get captured() {
+            return captured;
+        },
+        restore,
+    };
+}
+
+function observeActiveDefenseDialog(dialog, pending, actorRollInterceptor) {
+    if (!dialog || typeof dialog.close !== "function") return false;
+    const originalClose = dialog.close;
+    dialog.close = function (...args) {
+        if (!actorRollInterceptor.captured) clearPendingDefense(pending.pendingDefenseId);
+        return originalClose.apply(this, args);
     };
     return true;
 }
@@ -542,11 +522,20 @@ function observeActiveDefenseDialog(dialog, pending) {
 async function launchActorActiveDefense(actor, type, pending) {
     const normalizedType = String(type ?? "defense").toLocaleLowerCase();
     if (!["defense", "vtd"].includes(normalizedType)) {
-        return runPendingDefenseRoll(pending, () => actor.activeDefenseDialog(type || undefined));
+        return runPendingDefenseRoll(pending, () => launchDirectActiveDefense(actor, type, pending));
+    }
+    const actorRollInterceptor = interceptPendingDefenseActorRoll(actor, pending);
+    if (!actorRollInterceptor) {
+        clearPendingDefense(pending.pendingDefenseId);
+        return actor.activeDefenseDialog(type || undefined);
     }
     try {
         const dialog = await actor.activeDefenseDialog(type || undefined);
-        if (!observeActiveDefenseDialog(dialog, pending)) clearPendingDefense(pending.pendingDefenseId);
+        if (!actorRollInterceptor.captured && dialog?.rendered === false) {
+            clearPendingDefense(pending.pendingDefenseId);
+        } else if (!observeActiveDefenseDialog(dialog, pending, actorRollInterceptor)) {
+            clearPendingDefense(pending.pendingDefenseId);
+        }
         return dialog;
     } catch (error) {
         clearPendingDefense(pending.pendingDefenseId);
@@ -650,7 +639,7 @@ export async function beginDefenderDefense(message) {
     }));
     try {
         const baseDefense = await target.actor.derivedValues.defense.value.calculate();
-        const difficulty = Number(globalThis.CONFIG?.splittermond?.check?.activeDefenseDifficulty) || 15;
+        const difficulty = pending.activeDefenseDifficulty;
         const defenderModifier = Array.from(current.defense.skill.selectableModifier ?? [])
             .find((modifier) => isDefenderMasteryName(modifier?.attributes?.name));
         await runPendingDefenseRoll(pending, () => current.defense.skill.roll({

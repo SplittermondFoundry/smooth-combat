@@ -171,8 +171,12 @@ configureServices({
 
 function resetHarness() {
     for (const timeoutId of activeDefenseState.pendingDefenseTimers.values()) clearTimeout(timeoutId);
+    for (const cleanups of activeDefenseState.pendingDefenseCleanups.values()) {
+        for (const cleanup of cleanups) cleanup();
+    }
     activeDefenseState.pendingDefense = null;
     activeDefenseState.pendingDefenseTimers.clear();
+    activeDefenseState.pendingDefenseCleanups.clear();
     activeDefenseState.rollingDefenses.clear();
     activeDefenseState.claimedDefenses.clear();
     activeDefenseState.processingDefenseMessages.clear();
@@ -394,4 +398,128 @@ test("dialog nonces isolate stale and cancelled active-defense workflows", async
     assert.equal(await claimPendingDefenseForMessage(unrelatedMessage), null);
     assert.equal(activeDefenseState.pendingDefense, null);
     assert.notEqual(cancelledNonce, claimed.pendingDefenseId);
+});
+
+test("Ablenkend from the live attack or serialized weapon raises the active-defense difficulty", async () => {
+    resetHarness();
+    const rolledDifficulties = [];
+    let dialog = null;
+    const defense = {
+        skill: {
+            roll: async (options) => {
+                rolledDifficulties.push(options.difficulty);
+                return true;
+            },
+        },
+        roll() {
+            return this.skill.roll({ difficulty: 15, type: "defense" });
+        },
+    };
+    const actor = {
+        id: "target-distracting",
+        uuid: "Actor.target-distracting",
+        isOwner: true,
+        activeDefenseDialog: async function () {
+            dialog = {
+                actor: this,
+                close() { return this; },
+                rollDefense() {
+                    this.actor.rollActiveDefense("defense", defense);
+                    this.close();
+                },
+            };
+            return dialog;
+        },
+        rollActiveDefense: (_type, item) => item.roll(),
+    };
+    harness.tokens.set("Token.distracting-target", {
+        uuid: "Token.distracting-target",
+        name: "Ziel",
+        actor,
+    });
+    const attack = createAttack("attack-distracting", attackReport(), {
+        primaryTargetTokenUuid: "Token.distracting-target",
+    });
+    attack.system.attackReference = {
+        get: () => ({
+            featuresAsRef: {
+                featureValue: (name) => name === "Ablenkend" ? 2 : 0,
+            },
+        }),
+    };
+
+    await beginActiveDefense(attack);
+    dialog.rollDefense();
+    await Promise.resolve();
+
+    const serializedAttack = createAttack("attack-serialized-distracting", attackReport({
+        weapon: { features: "Scharf 2, Ablenkend" },
+    }), {
+        primaryTargetTokenUuid: "Token.distracting-target",
+    });
+    await beginActiveDefense(serializedAttack);
+    dialog.rollDefense();
+    await Promise.resolve();
+
+    assert.deepEqual(rolledDifficulties, [25, 20]);
+});
+
+test("Ablenkend is applied even when the defense is selected before the dialog render promise settles", async () => {
+    resetHarness();
+    globalThis.CONFIG.splittermond.check = { activeDefenseDifficulty: 15 };
+    const rolledDifficulties = [];
+    const defense = {
+        skill: {
+            roll: async (options) => {
+                rolledDifficulties.push(options.difficulty);
+                return true;
+            },
+        },
+        roll() {
+            return this.skill.roll({
+                difficulty: globalThis.CONFIG.splittermond.check.activeDefenseDifficulty,
+                type: "defense",
+            });
+        },
+    };
+    const actor = {
+        id: "target-fast-defense",
+        uuid: "Actor.target-fast-defense",
+        isOwner: true,
+        activeDefenseDialog: async function () {
+            const dialog = {
+                actor: this,
+                rendered: true,
+                close() {
+                    this.rendered = false;
+                    return this;
+                },
+                rollDefense() {
+                    this.actor.rollActiveDefense("defense", defense);
+                    this.close();
+                },
+            };
+            dialog.rollDefense();
+            await Promise.resolve();
+            return dialog;
+        },
+        rollActiveDefense: (_type, item) => item.roll(),
+    };
+    harness.tokens.set("Token.fast-defense", {
+        uuid: "Token.fast-defense",
+        name: "Schnelles Ziel",
+        actor,
+    });
+    const attack = createAttack("attack-fast-defense", attackReport({
+        weapon: { features: "Ablenkend" },
+    }), {
+        primaryTargetTokenUuid: "Token.fast-defense",
+    });
+
+    await beginActiveDefense(attack);
+    await Promise.resolve();
+
+    assert.deepEqual(rolledDifficulties, [20]);
+    assert.equal(globalThis.CONFIG.splittermond.check.activeDefenseDifficulty, 15);
+    assert.equal(activeDefenseState.pendingDefenseCleanups.size, 0);
 });

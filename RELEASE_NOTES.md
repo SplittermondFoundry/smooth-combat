@@ -1,13 +1,13 @@
-# Splittermond Smoother Fight 0.3.59
+# Splittermond Smoother Fight 0.3.60
 
-Dieses Update schärft die Charakterberechtigungen im Kampf-HUD und ergänzt Angriffe außerhalb des eigenen Zuges.
+Dieses Update berücksichtigt das Waffenmerkmal **Ablenkend** bei Aktiven Abwehren.
 
 ## Änderungen
 
-- Spieler sehen und verwenden die **Patzertabelle** nur noch für den ihnen zugeordneten Charakter; Spielleiter bleiben berechtigt.
-- Die Berechtigungsprüfung schützt zusätzlich den eigentlichen Patzerwurf, auch wenn eine veraltete Karte noch sichtbar sein sollte.
-- Außerhalb des eigenen Zuges bietet das persönliche HUD nun die verfügbaren **Nahkampfangriffe** an, etwa für Gelegenheitsangriffe.
-- Fernkampfangriffe bleiben in diesem persönlichen Reaktionsbereich ausgeblendet.
+- Das Modul ermittelt **Ablenkend** aus dem tatsächlichen Angriff beziehungsweise der verwendeten Waffe oder NSC-Attacke.
+- Die Grundschwierigkeit der Aktiven Abwehr steigt regelgemäß um **5 pro Merkmalsstufe**; ein ungestuftes Ablenkend erhöht sie von 15 auf 20.
+- Die Anpassung greift bei der normalen Aktiven Abwehr und bei einer Abwehr über die Meisterschaft **Verteidiger**.
+- Die Schwierigkeit wird bereits vor dem Öffnen des Abwehrauswahldialogs gesetzt, sodass auch eine sofort gewählte Abwehr korrekt behandelt wird.
 
 ## Installation
 

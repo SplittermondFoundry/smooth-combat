@@ -9,11 +9,13 @@ import {
     attackOutcomeChanged,
     attackReadiness,
     bestActiveDefenseValue,
+    calculateActiveDefenseDifficulty,
     calculateActiveDefenseValue,
     combatActionHighlightState,
     combatMessageKind,
     combatTickActionsFor,
     findDefensiveFeatureValue,
+    findDistractingFeatureValue,
     fullyConsumedCost,
     hasSplittermondCheckUpdate,
     hasTokenPositionUpdate,
@@ -82,6 +84,11 @@ test("successful active defense increases the base defense by 1 + EG + Defensiv"
 
 test("failed active defense leaves the base defense unchanged", () => {
     assert.equal(calculateActiveDefenseValue({ baseDefense: 20, succeeded: false }, 3), 20);
+});
+
+test("Ablenkend raises the active-defense base difficulty by five per level", () => {
+    assert.equal(calculateActiveDefenseDifficulty(15, 2), 25);
+    assert.equal(calculateActiveDefenseDifficulty(undefined, 0), 15);
 });
 
 test("audio feedback profiles preserve valid personal and custom world settings", () => {
@@ -388,6 +395,16 @@ test("Defensiv is found in serialized feature lists", () => {
     assert.equal(findDefensiveFeatureValue({
         itemFeatures: { internalFeatureList: [{ name: "Defensiv", value: 2 }] },
     }), 2);
+});
+
+test("Ablenkend is found in live and serialized attack feature representations", () => {
+    assert.equal(findDistractingFeatureValue("Scharf 2, Ablenkend 3"), 3);
+    assert.equal(findDistractingFeatureValue({ featureList: [
+        { name: "Ablenkend", value: 2 },
+        { name: "Scharf", value: 4 },
+    ] }), 2);
+    assert.equal(findDistractingFeatureValue({ featureValue: (name) => name === "Ablenkend" ? 4 : 0 }), 4);
+    assert.equal(findDistractingFeatureValue("Ablenkend"), 1);
 });
 
 test("token mapping prefers exact token or actor matches", () => {

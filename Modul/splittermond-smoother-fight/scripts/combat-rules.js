@@ -27,8 +27,10 @@ export {
 export {
     activeDefenseChangesDifficulty,
     bestActiveDefenseValue,
+    calculateActiveDefenseDifficulty,
     calculateActiveDefenseValue,
     findDefensiveFeatureValue,
+    findDistractingFeatureValue,
     isDefenderMasteryName,
     mergeActiveDefenseCheck,
     parseActiveDefenseDescription,

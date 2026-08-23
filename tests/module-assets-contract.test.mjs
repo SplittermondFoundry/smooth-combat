@@ -11,9 +11,9 @@ const moduleRoot = path.join(projectRoot, "Modul", "splittermond-smoother-fight"
 test("Foundry manifest entry points remain stable", () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(moduleRoot, "module.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.3.59");
+    assert.equal(manifest.version, "0.3.60");
     assert.deepEqual(manifest.esmodules, ["scripts/smoother-fight.js"]);
-    assert.deepEqual(manifest.styles, ["styles/smoother-fight-0.3.59.css"]);
+    assert.deepEqual(manifest.styles, ["styles/smoother-fight-0.3.60.css"]);
     assert.equal(manifest.socket, true);
     assert.deepEqual(manifest.languages.map(({ lang, path: languagePath }) => [lang, languagePath]), [
         ["de", "lang/de.json"],
@@ -89,7 +89,7 @@ test("published DOM integration attributes remain available", () => {
 
 test("the local HUD demo loads the manifest stylesheet entry", () => {
     const demo = fs.readFileSync(path.join(projectRoot, "demo", "index.html"), "utf8");
-    assert.match(demo, /href="\.\.\/Modul\/splittermond-smoother-fight\/styles\/smoother-fight-0\.3\.59\.css"/u);
+    assert.match(demo, /href="\.\.\/Modul\/splittermond-smoother-fight\/styles\/smoother-fight-0\.3\.60\.css"/u);
 });
 
 test("the compact HUD retains mechanical status and summarizes secondary targets", () => {
@@ -103,13 +103,13 @@ test("the compact HUD retains mechanical status and summarizes secondary targets
 
 test("the legacy stylesheet URL remains a compatible entry point", () => {
     const compatibilityWrapper = fs.readFileSync(path.join(moduleRoot, "styles", "smoother-fight.css"), "utf8");
-    assert.equal(compatibilityWrapper, '@import url("./smoother-fight-0.3.59.css?module=0.3.59");\n');
+    assert.equal(compatibilityWrapper, '@import url("./smoother-fight-0.3.60.css?module=0.3.60");\n');
 });
 
 test("split styles flatten in the verified cascade order", () => {
-    const wrapperPath = path.join(moduleRoot, "styles", "smoother-fight-0.3.59.css");
+    const wrapperPath = path.join(moduleRoot, "styles", "smoother-fight-0.3.60.css");
     const wrapper = fs.readFileSync(wrapperPath, "utf8");
-    const imports = [...wrapper.matchAll(/@import\s+url\("\.\/([^"?]+)\?module=0\.3\.59"\);/gu)]
+    const imports = [...wrapper.matchAll(/@import\s+url\("\.\/([^"?]+)\?module=0\.3\.60"\);/gu)]
         .map((match) => match[1]);
     assert.deepEqual(imports, ["themes/default.css", "hud.css", "combat-events.css", "settings.css", "responsive.css"]);
     const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));

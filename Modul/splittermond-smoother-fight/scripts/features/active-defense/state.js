@@ -2,6 +2,7 @@
 export const activeDefenseState = {
     pendingDefense: null,
     pendingDefenseTimers: new Map(),
+    pendingDefenseCleanups: new Map(),
     rollingDefenses: new Map(),
     claimedDefenses: new Map(),
     processingDefenseMessages: new Set(),

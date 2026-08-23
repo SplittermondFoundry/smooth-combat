@@ -16,6 +16,12 @@ export function calculateActiveDefenseValue(checkData, defensiveFeature = 0) {
     return baseDefense + 1 + totalDegreesOfSuccess(checkData) + numberOr(defensiveFeature);
 }
 
+export function calculateActiveDefenseDifficulty(baseDifficulty, distractingFeature = 0) {
+    const base = numberOr(baseDifficulty, 15);
+    const level = Math.max(0, numberOr(distractingFeature));
+    return base + 5 * level;
+}
+
 export function mergeActiveDefenseCheck(checkData, checkReport) {
     if (!checkData && !checkReport) return null;
     const merged = { ...(checkReport ?? {}), ...(checkData ?? {}) };
@@ -81,4 +87,56 @@ export function findDefensiveFeatureValue(itemData) {
         for (const value of Object.values(current)) queue.push(value);
     }
     return 0;
+}
+
+export function findDistractingFeatureValue(...sources) {
+    return Math.max(0, ...sources.map((source) => findFeatureValue(source, "ablenkend")));
+}
+
+function findFeatureValue(source, featureName) {
+    const queue = [source];
+    const visited = new Set();
+    let highest = 0;
+
+    while (queue.length) {
+        const current = queue.shift();
+        if (!current) continue;
+
+        if (typeof current === "string") {
+            highest = Math.max(highest, featureValueFromText(current, featureName));
+            continue;
+        }
+        if (typeof current !== "object" || visited.has(current)) continue;
+        visited.add(current);
+
+        if (typeof current.featureValue === "function") {
+            try {
+                highest = Math.max(highest, positiveFeatureValue(current.featureValue("Ablenkend"), 0));
+                continue;
+            } catch {
+                // Serialized feature data remains available through the traversal below.
+            }
+        }
+
+        const name = normalizeSearchText(current.name ?? current.id ?? current.key ?? "");
+        if (name === featureName) highest = Math.max(highest, positiveFeatureValue(current.value, 1));
+        for (const value of Object.values(current)) {
+            if (typeof value !== "function") queue.push(value);
+        }
+    }
+    return highest;
+}
+
+function featureValueFromText(value, featureName) {
+    for (const entry of String(value).split(",")) {
+        const match = entry.trim().match(/^(.+?)(?:\s+(\d+))?$/u);
+        if (normalizeSearchText(match?.[1]) !== featureName) continue;
+        return positiveFeatureValue(match?.[2], 1);
+    }
+    return 0;
+}
+
+function positiveFeatureValue(value, fallback) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
