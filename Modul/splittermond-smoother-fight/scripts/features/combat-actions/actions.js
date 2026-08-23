@@ -232,6 +232,16 @@ export async function resumeCombatant(context) {
     services.scheduleRender(0);
 }
 
+export async function revertTokenMovement(context) {
+    const token = context.token?.document ?? context.token;
+    if (!token || typeof token.revertRecordedMovement !== "function") return false;
+    const reverted = await token.revertRecordedMovement();
+    if (!reverted) return false;
+    await token.clearMovementHistory?.();
+    services.scheduleRender(0);
+    return true;
+}
+
 export function focusCombatantToken(context) {
     return showTokenOnCanvas(context.token);
 }

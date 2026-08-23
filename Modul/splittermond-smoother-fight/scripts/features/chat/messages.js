@@ -18,6 +18,13 @@ import {
     t,
 } from "../../shared/values.js";
 
+import {
+    formatMovementDistance,
+    readTokenMovementDistance,
+} from "../../shared/movement.js";
+
+const MOVEMENT_ACTIONS = new Set(["walk", "sprint"]);
+
 export async function createTickActionChatCard(context, actionId, selectedTicks = "custom", options = {}) {
     const action = COMBAT_TICK_ACTIONS.find((candidate) => candidate.id === actionId);
     if (!action || !context?.actor) throw new Error(`Unknown combat tick action: ${actionId}`);
@@ -28,9 +35,14 @@ export async function createTickActionChatCard(context, actionId, selectedTicks 
     const kind = t(`SMOOTHER_FIGHT.HUD.TickActionKinds.${action.kind}`);
     const duration = tickActionCardDuration(action, selectedTicks);
     const description = options.description ?? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Description`);
-    const special = options.special ?? (action.special
+    const baseSpecial = options.special ?? (action.special
         ? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Special`)
         : t("SMOOTHER_FIGHT.HUD.TickActionDash"));
+    const special = MOVEMENT_ACTIONS.has(action.id)
+        ? `${baseSpecial} (${t("SMOOTHER_FIGHT.HUD.MovementDistance", {
+            distance: formatMovementDistance(readTokenMovementDistance(token)),
+        })})`
+        : baseSpecial;
     const source = action.source
         ? `<footer class="sf-tick-action-chat-source"><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSource", action.source))}</small></footer>`
         : "";

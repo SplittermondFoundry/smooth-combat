@@ -13,6 +13,7 @@ import { buildHud } from "../Modul/splittermond-smoother-fight/scripts/features/
 
 const harness = {
     controlledToken: null,
+    movementTracking: true,
     player: null,
     renderCalls: 0,
 };
@@ -30,6 +31,8 @@ configureServices({
         primaryTargetTokenUuid: null,
         primaryTargetActorUuid: null,
     }),
+    hasPendingActiveDefense: () => false,
+    isPreparingSpell: () => false,
     isRangedAttack: (attack) => Boolean(attack.isRanged),
     resolveCombatantToken: (combatant) => combatant.token ?? null,
     scheduleRender: () => harness.renderCalls += 1,
@@ -67,6 +70,7 @@ function combatant(id, controller, { owner = false } = {}) {
 function installFixture() {
     resetPersonalCombatantSelection();
     harness.controlledToken = null;
+    harness.movementTracking = true;
     harness.renderCalls = 0;
     const player = { id: "player", isGM: false, name: "Player" };
     const other = { id: "other", isGM: false, name: "Other" };
@@ -92,6 +96,7 @@ function installFixture() {
         settings: {
             get: (_moduleId, key) => ({
                 minimized: false,
+                movementTracking: harness.movementTracking,
                 revealTargetDefenses: false,
                 showCards: false,
                 theme: "dark",
@@ -145,4 +150,27 @@ test("personal HUD controls expose melee attacks but not ranged attacks outside 
     assert.match(html, /data-attack-id="sword"/u);
     assert.doesNotMatch(html, /data-attack-id="bow"/u);
     assert.match(html, /SMOOTHER_FIGHT\.HUD\.TickActions\.meleeAttack\.Name/u);
+});
+
+test("movement tracking setting shows and hides the tracker for the active combatant", async () => {
+    const { active } = installFixture();
+    active.actor.isOwner = true;
+    active.actor.derivedValues = { speed: { value: 7 } };
+    active.runtimeController = harness.player;
+    const tokenDocument = {
+        ...active.token,
+        movementHistory: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
+        measureMovementPath: () => ({ distance: 10 }),
+    };
+    active.token = { document: tokenDocument };
+
+    const context = getHudContext();
+    assert.equal(context.token, tokenDocument);
+    const enabled = await buildHud(context);
+    assert.match(enabled, /class="sf-movement-tracker is-sprint"/u);
+    assert.match(enabled, /data-tick-action-id="sprint"/u);
+
+    harness.movementTracking = false;
+    const disabled = await buildHud(getHudContext());
+    assert.doesNotMatch(disabled, /sf-movement-tracker/u);
 });

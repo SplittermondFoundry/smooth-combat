@@ -13,7 +13,8 @@ export function getHudContext() {
     const combatant = combat.combatant ?? combat.turns?.[0] ?? null;
     if (!combatant) return null;
     const actor = combatant?.actor ?? null;
-    const token = combatant.token ?? services.resolveCombatantToken(combatant);
+    const resolvedToken = combatant.token ?? services.resolveCombatantToken(combatant);
+    const token = resolvedToken?.document ?? resolvedToken;
     const visible = isCombatantVisibleToUser(game.user?.isGM, combatant.hidden, token?.hidden);
     if (!visible || (!actor && !game.user?.isGM)) {
         return {

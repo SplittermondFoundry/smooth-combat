@@ -566,3 +566,41 @@ test("clickable tick actions create a public chat card for the acting token", as
         tokenUuid: "Scene.scene-1.Token.token-1",
     });
 });
+
+test("walking and sprinting chat cards include the measured token movement", async () => {
+    const created = [];
+    let measuredDistance = 7;
+    const actor = { id: "actor-1", name: "Arrou" };
+    const token = {
+        id: "token-1",
+        uuid: "Scene.scene-1.Token.token-1",
+        name: "Arrou der Flinke",
+        movementHistory: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
+        measureMovementPath: () => ({ distance: measuredDistance }),
+    };
+
+    globalThis.game = {
+        i18n: {
+            lang: "de",
+            localize: translation,
+            format: (key, data) => Object.entries(data).reduce(
+                (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+                translation(key)
+            ),
+        },
+    };
+    globalThis.ChatMessage = {
+        getSpeaker: (options) => ({ actor: options.actor.id, token: options.token.id }),
+        create: async (data) => {
+            created.push(data);
+            return { id: `message-${created.length}`, ...data };
+        },
+    };
+
+    await createTickActionChatCard({ actor, token }, "walk", "5");
+    measuredDistance = 18;
+    await createTickActionChatCard({ actor, token }, "sprint", "10");
+
+    assert.match(created[0].content, /GSW in m \(7 m bewegt\)/u);
+    assert.match(created[1].content, /3 × GSW in m \(18 m bewegt\)/u);
+});

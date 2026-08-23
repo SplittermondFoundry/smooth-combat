@@ -12,6 +12,7 @@ import {
 
 import {
     asElement,
+    getSetting,
 } from "../shared/values.js";
 
 export function registerHooks() {
@@ -38,6 +39,9 @@ export function registerHooks() {
     Hooks.on("updateToken", (token, changes) => {
         if (Object.hasOwn(changes ?? {}, "hidden")) services.scheduleRender(0);
         if (hasTokenPositionUpdate(changes)) services.scheduleRenderAfterTokenMovement(token);
+    });
+    Hooks.on("recordToken", () => {
+        if (getSetting("movementTracking", true)) services.scheduleRender(0);
     });
 
     Hooks.on("canvasReady", services.seedHealthFeedbackState);

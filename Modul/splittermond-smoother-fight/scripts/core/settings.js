@@ -35,6 +35,16 @@ export function registerSettings() {
         default: true,
         onChange: rerender,
     });
+    game.settings.register(MODULE_ID, "movementTracking", {
+        name: "SMOOTHER_FIGHT.Settings.MovementTrackingName",
+        hint: "SMOOTHER_FIGHT.Settings.MovementTrackingHint",
+        scope: "world",
+        config: true,
+        restricted: true,
+        type: Boolean,
+        default: true,
+        onChange: rerender,
+    });
     game.settings.register(MODULE_ID, "minimized", {
         scope: "client",
         config: false,

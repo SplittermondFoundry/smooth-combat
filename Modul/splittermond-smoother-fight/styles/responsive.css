@@ -156,6 +156,14 @@
         left: 0;
     }
 
+    #splittermond-smoother-fight-hud .sf-movement-actions button span {
+        display: none;
+    }
+
+    #splittermond-smoother-fight-hud .sf-movement-actions button {
+        padding-inline: 6px;
+    }
+
     #splittermond-smoother-fight-hud .sf-action-popover button.sf-defense-option {
         gap: 4px;
         padding: 6px 8px;

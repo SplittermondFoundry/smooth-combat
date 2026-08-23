@@ -237,6 +237,249 @@
     background: rgba(0, 0, 0, 0.12);
 }
 
+#splittermond-smoother-fight-hud .sf-movement-tracker {
+    padding: 5px 7px 6px;
+    border-bottom: 1px solid var(--sf-line);
+    background: linear-gradient(90deg, rgba(108, 201, 193, 0.08), rgba(216, 168, 93, 0.05));
+}
+
+#splittermond-smoother-fight-hud .sf-movement-heading,
+#splittermond-smoother-fight-hud .sf-movement-heading > span,
+#splittermond-smoother-fight-hud .sf-movement-controls,
+#splittermond-smoother-fight-hud .sf-movement-actions {
+    display: flex;
+    align-items: center;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-heading {
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+    color: var(--sf-muted);
+    font-size: var(--sf-font-small);
+    line-height: 1.1;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-heading > span {
+    min-width: 0;
+    gap: 5px;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-heading i {
+    color: var(--sf-teal);
+}
+
+#splittermond-smoother-fight-hud .sf-movement-heading strong {
+    color: var(--sf-text);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-heading b {
+    color: var(--sf-gold-bright);
+    font-weight: 700;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-heading small {
+    overflow: hidden;
+    color: var(--sf-muted);
+    font-size: var(--sf-font-small);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-controls {
+    gap: 6px;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-bar {
+    position: relative;
+    flex: 1;
+    min-width: 120px;
+    height: 34px;
+    border: 1px solid rgba(117, 191, 186, 0.34);
+    border-radius: 5px;
+    background: rgba(2, 10, 12, 0.45);
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.28);
+    overflow: hidden;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-sections {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    display: grid;
+    grid-template-columns: max-content minmax(max-content, 1fr) minmax(max-content, 3fr);
+}
+
+#splittermond-smoother-fight-hud .sf-movement-section {
+    position: relative;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 2px 4px;
+    color: var(--sf-text);
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+    isolation: isolate;
+    overflow: hidden;
+}
+
+#splittermond-smoother-fight-hud button.sf-movement-section {
+    width: auto;
+    height: auto;
+    min-height: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    color: var(--sf-text);
+    background: transparent;
+    box-shadow: none;
+    font: inherit;
+    cursor: pointer;
+    appearance: none;
+}
+
+#splittermond-smoother-fight-hud button.sf-movement-section:hover {
+    color: var(--sf-gold-bright);
+    box-shadow: inset 0 0 0 1px rgba(242, 206, 135, 0.72);
+    filter: brightness(1.15);
+}
+
+#splittermond-smoother-fight-hud button.sf-movement-section:focus-visible {
+    outline: 2px solid var(--sf-gold-bright);
+    outline-offset: -3px;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-section-walk {
+    padding-inline: 8px;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-section::before {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    inset: 0 auto 0 0;
+    width: var(--sf-movement-fill, 0%);
+    border-right: 1px solid rgba(242, 206, 135, 0.7);
+    background: linear-gradient(90deg, rgba(108, 201, 193, 0.5), rgba(216, 168, 93, 0.5));
+    box-shadow: 1px 0 8px rgba(216, 168, 93, 0.24);
+    transition: width 180ms ease-out;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-section + .sf-movement-section {
+    border-left: 1px solid rgba(238, 244, 239, 0.3);
+}
+
+#splittermond-smoother-fight-hud .sf-movement-section small {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    color: inherit;
+    font-size: var(--sf-font-meta);
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-section b {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    color: var(--sf-gold-bright);
+    font-size: var(--sf-font-small);
+}
+
+#splittermond-smoother-fight-hud .sf-movement-section-ticks {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 4px;
+    border: 1px solid rgba(242, 206, 135, 0.58);
+    border-radius: 4px;
+    color: var(--sf-gold-bright);
+    background: rgba(2, 10, 12, 0.48);
+    font-size: var(--sf-font-meta);
+    font-style: normal;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-actions {
+    flex: none;
+    gap: 4px;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-actions button {
+    width: auto;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin: 0;
+    padding: 3px 7px;
+    border: 1px solid rgba(117, 191, 186, 0.34);
+    border-radius: 5px;
+    color: var(--sf-text);
+    background: rgba(108, 201, 193, 0.08);
+    font-size: var(--sf-font-small);
+    line-height: 1;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-actions button:hover,
+#splittermond-smoother-fight-hud .sf-movement-actions button:focus-visible {
+    border-color: rgba(216, 168, 93, 0.62);
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.14);
+}
+
+#splittermond-smoother-fight-hud .sf-movement-undo {
+    border-color: rgba(198, 93, 85, 0.44) !important;
+    color: #ffaaa3 !important;
+    background: rgba(198, 93, 85, 0.08) !important;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker.is-excess .sf-movement-heading small,
+#splittermond-smoother-fight-hud .sf-movement-tracker.is-excess .sf-movement-heading b {
+    color: #ffaaa3;
+    font-weight: 700;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker.is-excess .sf-movement-bar {
+    border-color: var(--sf-danger);
+    background: rgba(198, 93, 85, 0.3);
+    box-shadow: inset 0 0 10px rgba(198, 93, 85, 0.35), 0 0 7px rgba(198, 93, 85, 0.2);
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker.is-excess .sf-movement-section::before {
+    width: 100%;
+    border-right: 0;
+    background: rgba(198, 93, 85, 0.48);
+    box-shadow: none;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker.is-excess .sf-movement-section b {
+    color: #ffd0cc;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker.is-excess .sf-movement-section-ticks {
+    border-color: rgba(255, 208, 204, 0.68);
+    color: #ffd0cc;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker.is-unavailable .sf-movement-bar {
+    opacity: 0.58;
+}
+
 #splittermond-smoother-fight-hud .sf-personal-combat-controls {
     box-shadow: inset 3px 0 0 rgba(108, 201, 193, 0.48);
 }

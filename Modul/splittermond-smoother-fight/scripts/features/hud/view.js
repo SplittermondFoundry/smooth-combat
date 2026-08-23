@@ -12,6 +12,10 @@ import {
 } from "./quick-targets.js";
 
 import {
+    buildMovementTracker,
+} from "./movement.js";
+
+import {
     attackControlSelection,
     attackControlState,
     attackReadiness,
@@ -105,6 +109,7 @@ export async function buildHud(context) {
                     ${hudToggle}
                 </header>
                 ${canAct ? buildCombatControls(context) : await buildPersonalControls(context)}
+                ${canAct && getSetting("movementTracking", true) ? buildMovementTracker(context) : ""}
                 ${canAct ? await buildActionBar(context) : ""}
                 ${getSetting("showCards", true) ? services.buildCombatEvents(context) : ""}
             </main>

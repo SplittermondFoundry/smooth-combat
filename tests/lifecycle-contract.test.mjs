@@ -23,6 +23,7 @@ const EXPECTED_HOOKS = [
     "controlToken",
     "userConnected",
     "updateToken",
+    "recordToken",
     "canvasReady",
     "preUpdateActor",
     "updateActor",
@@ -204,6 +205,10 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         handlersFor(hookRegistrations, "updateToken")[0](movedToken, { hidden: false, x: 120 });
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
         assert.deepEqual(callsOf("scheduleRenderAfterTokenMovement"), [[movedToken]]);
+
+        callLog.length = 0;
+        handlersFor(hookRegistrations, "recordToken")[0](movedToken);
+        assert.deepEqual(callsOf("scheduleRender"), [[0]]);
 
         callLog.length = 0;
         const currentUser = {

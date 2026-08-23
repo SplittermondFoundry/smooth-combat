@@ -283,6 +283,9 @@ class SmootherFightHud {
                         target.dataset.tickActionAdvance
                     ));
                     break;
+                case "revert-movement":
+                    await services.requireOwner(context, () => services.revertTokenMovement(context));
+                    break;
                 case "select-personal-combatant":
                     selectPersonalCombatantFromMenu(hudContext, target.dataset.combatantId);
                     break;

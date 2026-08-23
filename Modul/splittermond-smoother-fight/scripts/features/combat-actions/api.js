@@ -15,6 +15,7 @@ export {
     removeCombatant,
     requireGm,
     requireOwner,
+    revertTokenMovement,
     resumeCombatant,
     showTokenOnCanvas,
     toggleCombatantHidden,

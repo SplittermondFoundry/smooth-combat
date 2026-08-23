@@ -42,6 +42,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
         "enabled",
         "hideSystemBar",
         "showCards",
+        "movementTracking",
         "minimized",
         "maxCards",
         "defenseRecalculation",
@@ -85,6 +86,10 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
             type: Boolean,
             default: true,
         }])),
+    );
+    assert.deepEqual(
+        [settingByKey.movementTracking.scope, settingByKey.movementTracking.config, settingByKey.movementTracking.restricted, settingByKey.movementTracking.type, settingByKey.movementTracking.default],
+        ["world", true, true, Boolean, true],
     );
     assert.deepEqual(settingByKey.maxCards.range, { min: 1, max: 5, step: 1 });
     assert.equal(settingByKey.maxCards.default, 3);

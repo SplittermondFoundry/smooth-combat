@@ -11,9 +11,9 @@ const moduleRoot = path.join(projectRoot, "Modul", "splittermond-smoother-fight"
 test("Foundry manifest entry points remain stable", () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(moduleRoot, "module.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.3.60");
+    assert.equal(manifest.version, "0.4.0");
     assert.deepEqual(manifest.esmodules, ["scripts/smoother-fight.js"]);
-    assert.deepEqual(manifest.styles, ["styles/smoother-fight-0.3.60.css"]);
+    assert.deepEqual(manifest.styles, ["styles/smoother-fight-0.4.0.css"]);
     assert.equal(manifest.socket, true);
     assert.deepEqual(manifest.languages.map(({ lang, path: languagePath }) => [lang, languagePath]), [
         ["de", "lang/de.json"],
@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "31c72c71ddcf76744ab35df2d1bbc3dfc786e3b19f5e57e64fda200b464bbca7",
+        "bb8520dfaa62fe50ba3f12ee2ea0d01655cac2f76ee0b0b2cce6a453ae00cdeb",
     );
 });
 
@@ -89,7 +89,7 @@ test("published DOM integration attributes remain available", () => {
 
 test("the local HUD demo loads the manifest stylesheet entry", () => {
     const demo = fs.readFileSync(path.join(projectRoot, "demo", "index.html"), "utf8");
-    assert.match(demo, /href="\.\.\/Modul\/splittermond-smoother-fight\/styles\/smoother-fight-0\.3\.60\.css"/u);
+    assert.match(demo, /href="\.\.\/Modul\/splittermond-smoother-fight\/styles\/smoother-fight-0\.4\.0\.css"/u);
 });
 
 test("the compact HUD retains mechanical status and summarizes secondary targets", () => {
@@ -103,13 +103,13 @@ test("the compact HUD retains mechanical status and summarizes secondary targets
 
 test("the legacy stylesheet URL remains a compatible entry point", () => {
     const compatibilityWrapper = fs.readFileSync(path.join(moduleRoot, "styles", "smoother-fight.css"), "utf8");
-    assert.equal(compatibilityWrapper, '@import url("./smoother-fight-0.3.60.css?module=0.3.60");\n');
+    assert.equal(compatibilityWrapper, '@import url("./smoother-fight-0.4.0.css?module=0.4.0");\n');
 });
 
 test("split styles flatten in the verified cascade order", () => {
-    const wrapperPath = path.join(moduleRoot, "styles", "smoother-fight-0.3.60.css");
+    const wrapperPath = path.join(moduleRoot, "styles", "smoother-fight-0.4.0.css");
     const wrapper = fs.readFileSync(wrapperPath, "utf8");
-    const imports = [...wrapper.matchAll(/@import\s+url\("\.\/([^"?]+)\?module=0\.3\.60"\);/gu)]
+    const imports = [...wrapper.matchAll(/@import\s+url\("\.\/([^"?]+)\?module=0\.4\.0"\);/gu)]
         .map((match) => match[1]);
     assert.deepEqual(imports, ["themes/default.css", "hud.css", "combat-events.css", "settings.css", "responsive.css"]);
     const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));
@@ -122,10 +122,15 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-portrait-image::after\s*\{[^}]*linear-gradient/su);
     assert.match(flattenedCss, /--sf-side-panel-width:\s*172px/u);
     assert.match(flattenedCss, /--sf-portrait-height:\s*212px/u);
+    assert.match(
+        flattenedCss,
+        /\.sf-movement-sections\s*\{[^}]*grid-template-columns:\s*max-content minmax\(max-content, 1fr\) minmax\(max-content, 3fr\)/su,
+    );
+    assert.match(flattenedCss, /\.sf-movement-section::before\s*\{[^}]*width:\s*var\(--sf-movement-fill, 0%\)/su);
     assert.doesNotMatch(flattenedCss, /font-size:\s*[78]px/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "7fa74baeb4bda72d26b1c9378c9c26e5b077e67e9087803e104c6ee9b252dd61",
+        "45816d699fdac521148cb7302fc6ef12ed0b13351ac662d0221f6bc833f010a3",
     );
 });
 

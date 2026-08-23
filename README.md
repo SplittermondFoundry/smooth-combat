@@ -27,6 +27,7 @@ Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github
 
 - kompaktes Kampf-HUD mit aktivem Combatant, ausgewählten Zielen, VTD/KW/GW sowie Lebens- und Fokusleiste
 - persönliche Zuganzeige, Zielwarnungen und ein- oder ausblendbare Standard-Aktionsleiste
+- Foundry-basierte Bewegungsverfolgung mit freier Bewegung, Laufen, Sprinten, Überziehungswarnung und Rückgängig-Funktion
 - Fertigkeiten, Favoriten, Zauber, Angriffe, Ausrüstung und Aktive Abwehr direkt im HUD
 - korrekte Vorbereitung und Auslösung von Fernkampfangriffen und Zaubern
 - übersichtliche Kampfereignisse für Angriff, Abwehr, Schaden und Patzer mit weiter nutzbaren Splittermond-Aktionen
