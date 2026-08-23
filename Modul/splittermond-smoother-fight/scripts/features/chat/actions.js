@@ -78,6 +78,30 @@ export async function handleChatCardAction(event, button) {
         }
         return;
     }
+    if (isLegacySplinterpointAction(button)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!mayManageMessageRoll(message)) {
+            ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.NoOwner"));
+            return;
+        }
+        const actor = services.resolveSpeakerActor(message);
+        if (!actor?.useSplinterpointBonus) {
+            ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.NoOwner"));
+            return;
+        }
+        button.disabled = true;
+        try {
+            await actor.useSplinterpointBonus(message);
+            services.scheduleRender(0);
+        } catch (error) {
+            console.error(`${MODULE_ID} | Legacy splinterpoint action failed`, error);
+            ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+        } finally {
+            if (button.isConnected) button.disabled = false;
+        }
+        return;
+    }
     const localAction = button.dataset.localaction ?? button.dataset.localAction;
     const remoteAction = button.dataset.action;
     if (!localAction && !remoteAction) return;
@@ -105,9 +129,6 @@ export async function handleChatCardAction(event, button) {
         if (localAction && String(action).toLocaleLowerCase() === "applydamagetousertargets") {
             await withTrackedDamageApplication(message, () => applyDamageToLinkedTarget(message, actionData));
             services.scheduleRender();
-            return;
-        }
-        if (!localAction && String(action).toLocaleLowerCase() === "usesplinterpoint" && forwardToOriginalChatHandler(message, button, action)) {
             return;
         }
         if (localAction) {
@@ -274,6 +295,10 @@ function isLegacyTickAction(control) {
     return Boolean(control?.matches?.(".add-tick[data-ticks]"));
 }
 
+function isLegacySplinterpointAction(control) {
+    return Boolean(control?.matches?.(".use-splinterpoint"));
+}
+
 async function advanceLegacyChatTicks(message, button) {
     const alreadyStarted = message.getFlag?.(MODULE_ID, "legacyTickAdvanceStarted")
         ?? message.flags?.[MODULE_ID]?.legacyTickAdvanceStarted;
@@ -318,23 +343,6 @@ function resolveMessageSpeakerCombatant(message, actor = services.resolveSpeaker
         (token?.uuid && services.tokenUuid(services.resolveCombatantToken(combatant)) === token.uuid)
         || (token?.id && combatant.tokenId === token.id)
     ) ?? Array.from(combat.combatants ?? []).find((combatant) => combatant.actorId === actor?.id) ?? null;
-}
-
-function forwardToOriginalChatHandler(message, sourceButton, action) {
-    const messageRoots = Array.from(document.querySelectorAll(".message[data-message-id]"))
-        .filter((element) => element.dataset.messageId === message.id && !element.closest(`#${MODULE_ID}-hud`));
-    const candidates = messageRoots.flatMap((element) =>
-        Array.from(element.querySelectorAll(".splittermond-chat-action[data-action]"))
-    );
-    const original = candidates.find((candidate) => candidate.dataset.action === action && !candidate.disabled);
-    if (!original) return false;
-
-    sourceButton.disabled = true;
-    original.click();
-    setTimeout(() => {
-        if (sourceButton.isConnected) sourceButton.disabled = false;
-    }, 1500);
-    return true;
 }
 
 async function applyDamageToLinkedTarget(message, actionData) {

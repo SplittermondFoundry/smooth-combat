@@ -49,6 +49,7 @@ import {
     reorderFavoriteSkillIds,
     replaceManagedUserTokenLinks,
     requiresRollManagementPermission,
+    resolveActiveDefenseResult,
     resolveCombatEventOpenIds,
     selectPersonalCombatant,
     tickAdvanceConfirmed,
@@ -81,6 +82,28 @@ test("successful active defense increases the base defense by 1 + EG + Defensiv"
         degreeOfSuccess: { fromRoll: 2, modification: 1 },
     }, 2);
     assert.equal(value, 26);
+});
+
+test("active defense retains an inferred Defensiv value across a broken splinterpoint rerender", () => {
+    const initialCheck = {
+        baseDefense: 24,
+        succeeded: true,
+        degreeOfSuccess: { fromRoll: 3, modification: 0 },
+        itemData: {},
+    };
+    const initial = resolveActiveDefenseResult(initialCheck, 30);
+    assert.deepEqual(initial, { defenseValue: 30, defensiveFeatureValue: 2 });
+
+    const afterSplinterpoint = resolveActiveDefenseResult({
+        ...initialCheck,
+        degreeOfSuccess: { fromRoll: 4, modification: 0 },
+    }, 29, { knownDefensiveFeature: initial.defensiveFeatureValue });
+    assert.deepEqual(afterSplinterpoint, { defenseValue: 31, defensiveFeatureValue: 2 });
+
+    assert.deepEqual(resolveActiveDefenseResult(initialCheck, null, {
+        knownDefensiveFeature: 2,
+        fallbackBaseDefense: 25,
+    }), { defenseValue: 31, defensiveFeatureValue: 2 });
 });
 
 test("failed active defense leaves the base defense unchanged", () => {

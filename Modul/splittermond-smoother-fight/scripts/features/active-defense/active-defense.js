@@ -15,17 +15,17 @@ import {
 export { normalizePendingDefense };
 
 import { services } from "../../core/services.js";
+import { persistMissingDefensiveFeature } from "./system-compatibility.js";
 
 import {
     activeDefenseChangesDifficulty,
     attackOutcomeChanged,
     bestActiveDefenseValue,
-    calculateActiveDefenseValue,
-    findDefensiveFeatureValue,
     isDefenderMasteryName,
     isOffensiveCombatMessage,
     parseActiveDefenseDescription,
     recalculateAttackReport,
+    resolveActiveDefenseResult,
     tokenDocumentCenter,
     totalDegreesOfSuccess,
 } from "../../combat-rules.js";
@@ -150,30 +150,34 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
     if (!pendingMatchesDefenseMessage(pending, message)) return;
     if (pending.assisted && !isValidDefenderAttempt(pending, message)) return;
     const processedOffense = resolveProcessedDefenseOffense(pending.attackMessageId, message.id);
-    if (processedOffense) return processedOffense;
     requestLatestEventForDefense(pending);
 
     const existingDefenseContext = services.getMessageContext(message) ?? {};
     const contentTemplate = document.createElement("template");
     contentTemplate.innerHTML = message.content ?? "";
-    const defensePresentation = parseActiveDefenseDescription(contentTemplate.content.textContent);
+    const defenseDescription = contentTemplate.content.querySelector?.(".degree-of-success-description");
+    const defensePresentation = parseActiveDefenseDescription(
+        defenseDescription?.textContent ?? contentTemplate.content.textContent
+    );
     const numbingDamage = defensePresentation.numbingDamage;
-    await services.setRequiredFlag(message, "context", {
-        ...existingDefenseContext,
-        pendingDefenseId: pending.pendingDefenseId,
-        attackMessageId: pending.attackMessageId,
-        primaryTargetTokenUuid: pending.targetTokenUuid,
-        primaryTargetActorUuid: pending.targetActorUuid,
-        targetTokenUuid: pending.targetTokenUuid,
-        targetActorUuid: pending.targetActorUuid,
-        defenderTokenUuid: pending.defenderTokenUuid,
-        defenderActorUuid: pending.defenderActorUuid,
-        defenseId: pending.defenseId,
-        defenseSkillId: pending.defenseSkillId,
-        assisted: pending.assisted,
-        numbingDamage: existingDefenseContext.numbingDamage ?? (numbingDamage || null),
-        numbingDamageApplied: Boolean(existingDefenseContext.numbingDamageApplied),
-    });
+    if (!processedOffense) {
+        await services.setRequiredFlag(message, "context", {
+            ...existingDefenseContext,
+            pendingDefenseId: pending.pendingDefenseId,
+            attackMessageId: pending.attackMessageId,
+            primaryTargetTokenUuid: pending.targetTokenUuid,
+            primaryTargetActorUuid: pending.targetActorUuid,
+            targetTokenUuid: pending.targetTokenUuid,
+            targetActorUuid: pending.targetActorUuid,
+            defenderTokenUuid: pending.defenderTokenUuid,
+            defenderActorUuid: pending.defenderActorUuid,
+            defenseId: pending.defenseId,
+            defenseSkillId: pending.defenseSkillId,
+            assisted: pending.assisted,
+            numbingDamage: existingDefenseContext.numbingDamage ?? (numbingDamage || null),
+            numbingDamageApplied: Boolean(existingDefenseContext.numbingDamageApplied),
+        });
+    }
 
     if (!game.user.isGM) {
         const gm = services.getActivePrimaryGm();
@@ -199,6 +203,7 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
         pending
     );
     if (newOffense) services.scheduleRender(0);
+    return newOffense;
 }
 
 function requestLatestEventForDefense(pending) {
@@ -260,16 +265,25 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
     const original = resolveLatestOffenseMessage(root);
     if (!original || !isOffensiveCombatMessage(original)) return null;
 
-    const featureValue = findDefensiveFeatureValue(defenseCheck.itemData);
     const originalContext = services.getMessageContext(original) ?? {};
+    const existingDefenseContext = services.getMessageContext(defenseMessage) ?? pending ?? {};
     const target = services.resolveToken(primaryTargetTokenUuid(originalContext));
     const calculatedBase = await target?.actor?.derivedValues?.[defenseCheck.defenseType]?.value?.calculate?.();
-    const candidateDefense = displayedDefenseValue !== null && Number.isFinite(Number(displayedDefenseValue))
-        ? Number(displayedDefenseValue)
-        : calculateActiveDefenseValue({
-            ...defenseCheck,
-            baseDefense: Number.isFinite(Number(calculatedBase)) ? Number(calculatedBase) : defenseCheck.baseDefense,
-        }, featureValue);
+    const resolvedDefense = resolveActiveDefenseResult(defenseCheck, displayedDefenseValue, {
+        knownDefensiveFeature: existingDefenseContext.defensiveFeatureValue,
+        fallbackBaseDefense: calculatedBase,
+    });
+    const candidateDefense = resolvedDefense.defenseValue;
+    const featureValue = resolvedDefense.defensiveFeatureValue;
+    await persistMissingDefensiveFeature(defenseMessage, featureValue);
+    const previousCandidate = existingDefenseContext.resultingDefenseValue;
+    const hasPreviousCandidate = previousCandidate !== null
+        && previousCandidate !== undefined
+        && previousCandidate !== ""
+        && Number.isFinite(Number(previousCandidate));
+    const alreadyProcessed = originalContext.defenseMessageIds?.includes?.(defenseMessage.id);
+    if (alreadyProcessed && (!hasPreviousCandidate || candidateDefense <= Number(previousCandidate))) return original;
+
     const newDefense = bestActiveDefenseValue(originalContext.defenseValue, candidateDefense);
     const actorUuid = pending?.defenderActorUuid ?? services.resolveSpeakerActor(defenseMessage)?.uuid ?? null;
     const attemptedDefenseActorUuids = Array.from(new Set([
@@ -282,13 +296,12 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
         defenseMessage.id,
     ].filter(Boolean)));
     await services.setRequiredFlag(defenseMessage, "context", {
-        ...(services.getMessageContext(defenseMessage) ?? pending ?? {}),
+        ...existingDefenseContext,
         resultingDefenseValue: candidateDefense,
         effectiveDefenseValue: newDefense,
         defensiveFeatureValue: featureValue,
     });
 
-    if (originalContext.defenseMessageIds?.includes?.(defenseMessage.id)) return original;
     const historyContext = {
         ...originalContext,
         rootAttackMessageId: root.id,

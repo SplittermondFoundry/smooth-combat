@@ -56,6 +56,7 @@ test("the public combat-rules facade retains its named export contract", () => {
         "reorderFavoriteSkillIds",
         "replaceManagedUserTokenLinks",
         "requiresRollManagementPermission",
+        "resolveActiveDefenseResult",
         "resolveCombatEventOpenIds",
         "selectPersonalCombatant",
         "tickAdvanceConfirmed",

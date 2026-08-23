@@ -78,6 +78,7 @@ class TestActor {
         this.items = new Map();
         this.tickApplications = 0;
         this.damageApplications = 0;
+        this.splinterpointApplications = [];
         this.system = {
             health: {
                 consumed: { value: 0 },
@@ -100,6 +101,10 @@ class TestActor {
     async consumeCost() {
         this.damageApplications += 1;
         this.system.health.consumed.value += 1;
+    }
+
+    async useSplinterpointBonus(message) {
+        this.splinterpointApplications.push(message);
     }
 }
 
@@ -169,13 +174,14 @@ function clickEvent() {
     };
 }
 
-function actionButton(message, dataset, { legacy = false } = {}) {
+function actionButton(message, dataset, { legacy = false, legacySplinterpoint = false } = {}) {
     return {
         closest: (selector) => selector === ".sf-chat-message" ? { dataset: { messageId: message.id } } : null,
         dataset,
         disabled: false,
         isConnected: true,
-        matches: (selector) => legacy && selector === ".add-tick[data-ticks]",
+        matches: (selector) => (legacy && selector === ".add-tick[data-ticks]")
+            || (legacySplinterpoint && selector === ".use-splinterpoint"),
     };
 }
 
@@ -217,6 +223,47 @@ test("optional flag writes absorb setFlag rejection while required writes notify
     await assert.rejects(setRequiredFlag(required, "context", {}), /Could not persist required context flag/u);
     assert.equal(harness.errors.length, 1);
     assert.match(harness.errors[0], /context/u);
+});
+
+test("player splinterpoint actions dispatch directly through the Splittermond socket", async () => {
+    resetHarness();
+    const emitted = [];
+    const player = { id: "player", isGM: false, targets: new Set() };
+    const actor = new TestActor("splinterpoint-actor");
+    const message = new TestMessage("splinterpoint", { actor });
+    harness.messages.set(message.id, message);
+    game.user = player;
+    game.users = [player, { id: "gm", isGM: true, active: true }];
+    game.socket.emit = (...args) => emitted.push(args);
+
+    await handleChatCardAction(
+        clickEvent(),
+        actionButton(message, { action: "useSplinterpoint" })
+    );
+
+    assert.deepEqual(emitted, [[
+        "system.splittermond",
+        {
+            type: "chatAction",
+            action: "useSplinterpoint",
+            messageId: message.id,
+            userId: player.id,
+        },
+    ]]);
+});
+
+test("legacy active-defense splinterpoints use the speaker actor from the HUD", async () => {
+    resetHarness();
+    const actor = new TestActor("defender");
+    const message = new TestMessage("legacy-defense", { actor });
+    harness.messages.set(message.id, message);
+
+    await handleChatCardAction(
+        clickEvent(),
+        actionButton(message, {}, { legacySplinterpoint: true })
+    );
+
+    assert.deepEqual(actor.splinterpointApplications, [message]);
 });
 
 test("required flag writes accept an empty Foundry result only after a matching read-back", async (t) => {

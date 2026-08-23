@@ -16,6 +16,33 @@ export function calculateActiveDefenseValue(checkData, defensiveFeature = 0) {
     return baseDefense + 1 + totalDegreesOfSuccess(checkData) + numberOr(defensiveFeature);
 }
 
+export function resolveActiveDefenseResult(checkData, displayedDefenseValue, options = {}) {
+    const hasDisplayedValue = displayedDefenseValue !== null
+        && displayedDefenseValue !== undefined
+        && displayedDefenseValue !== ""
+        && Number.isFinite(Number(displayedDefenseValue));
+    const displayedValue = hasDisplayedValue ? Number(displayedDefenseValue) : null;
+    const featurelessValue = calculateActiveDefenseValue(checkData, 0);
+    const inferredFeature = checkData?.succeeded && displayedValue !== null
+        ? Math.max(0, displayedValue - featurelessValue)
+        : 0;
+    const defensiveFeatureValue = Math.max(
+        findDefensiveFeatureValue(checkData?.itemData),
+        Math.max(0, numberOr(options.knownDefensiveFeature)),
+        inferredFeature
+    );
+    const reconstructedValue = calculateActiveDefenseValue(checkData, defensiveFeatureValue);
+    const fallbackBase = Number(options.fallbackBaseDefense);
+    const fallbackValue = calculateActiveDefenseValue({
+        ...checkData,
+        baseDefense: Number.isFinite(fallbackBase) ? fallbackBase : checkData?.baseDefense,
+    }, defensiveFeatureValue);
+    return {
+        defenseValue: displayedValue === null ? fallbackValue : Math.max(displayedValue, reconstructedValue),
+        defensiveFeatureValue,
+    };
+}
+
 export function calculateActiveDefenseDifficulty(baseDifficulty, distractingFeature = 0) {
     const base = numberOr(baseDifficulty, 15);
     const level = Math.max(0, numberOr(distractingFeature));

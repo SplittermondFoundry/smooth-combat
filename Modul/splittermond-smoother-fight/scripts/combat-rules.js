@@ -34,6 +34,7 @@ export {
     isDefenderMasteryName,
     mergeActiveDefenseCheck,
     parseActiveDefenseDescription,
+    resolveActiveDefenseResult,
 } from "./domain/combat/defense.js";
 
 export {

@@ -61,6 +61,11 @@ class TestMessage {
     async update(changes) {
         await Promise.resolve();
         if (Object.hasOwn(changes, "content")) this.content = changes.content;
+        if (Object.hasOwn(changes, "flags.splittermond.check.itemData")) {
+            this.flags.splittermond ??= {};
+            this.flags.splittermond.check ??= {};
+            this.flags.splittermond.check.itemData = clone(changes["flags.splittermond.check.itemData"]);
+        }
         const contextPath = `flags.${MODULE_ID}.context`;
         if (Object.hasOwn(changes, contextPath)) {
             this.flags[MODULE_ID] ??= {};
@@ -100,6 +105,12 @@ class FakeFragment {
                 this.html = this.html.replaceAll(/<div class="sf-chat-recalculated[^"]*">[\s\S]*?<\/div>/gu, "");
             } }]
             : [];
+    }
+
+    querySelector(selector) {
+        if (selector !== ".degree-of-success-description") return null;
+        const match = this.html.match(/<div class="degree-of-success-description">([\s\S]*?)<\/div>/u);
+        return match ? new FakeFragment(match[1]) : null;
     }
 
     cloneNode() {
@@ -224,14 +235,16 @@ function createDefense(id, value, actorId) {
         author: { id: "gm" },
     });
     harness.messages.set(id, message);
-    harness.checks.set(id, {
+    const check = {
         type: "defense",
         defenseType: "defense",
         baseDefense: 20,
         succeeded: true,
         degreeOfSuccess: { fromRoll: value - 21, modification: 0 },
         itemData: { id: `defense-${actorId}`, itemFeatures: [] },
-    });
+    };
+    harness.checks.set(id, check);
+    message.flags.splittermond = { check: clone(check) };
     return message;
 }
 
@@ -308,6 +321,120 @@ test("a sequential duplicate defense exits before rewriting its persisted contex
         Array.from(harness.messages.values()).filter((message) => message.type === "attackRollMessage").length,
         offensesAfterFirstPass
     );
+});
+
+test("a splinterpoint improvement reprocesses the same active defense with Defensiv", async () => {
+    resetHarness();
+    const root = createAttack("attack-splinterpoint", attackReport({
+        roll: { total: 35 },
+        degreeOfSuccess: { fromRoll: 5, modification: 0 },
+    }));
+    const defense = createDefense("defense-splinterpoint", 24, "defender-splinterpoint");
+    const check = harness.checks.get(defense.id);
+    check.degreeOfSuccess.fromRoll = 1;
+    check.itemData.itemFeatures = {
+        internalFeatureList: [{ name: "Defensiv", value: 2 }],
+    };
+    const pending = pendingFor(root, defense, 1);
+
+    await processDefenseMessage(defense, pending);
+
+    defense.content = "VTD: 25";
+    check.degreeOfSuccess.fromRoll = 2;
+    await processDefenseMessage(defense, pending);
+
+    const offenses = Array.from(harness.messages.values()).filter((message) => message.type === "attackRollMessage");
+    let latest = root;
+    while (latest.flags[MODULE_ID]?.context?.supersededBy) {
+        latest = harness.messages.get(latest.flags[MODULE_ID].context.supersededBy);
+    }
+
+    assert.equal(offenses.length, 2, "the unchanged attack outcome updates the existing successor");
+    assert.equal(latest.flags[MODULE_ID].context.defenseValue, 25);
+    assert.deepEqual(latest.flags[MODULE_ID].context.defenseMessageIds, [defense.id]);
+    assert.match(latest.content, /<strong>25<\/strong>/u);
+    assert.equal(defense.flags[MODULE_ID].context.resultingDefenseValue, 25);
+    assert.equal(defense.flags[MODULE_ID].context.effectiveDefenseValue, 25);
+    assert.equal(defense.flags[MODULE_ID].context.defensiveFeatureValue, 2);
+});
+
+test("the rendered defense value retains Defensiv when serialized item data is empty", async () => {
+    resetHarness();
+    const root = createAttack("attack-rendered-defense", attackReport({
+        difficulty: 24,
+        roll: { total: 33 },
+        degreeOfSuccess: { fromRoll: 3, modification: 0 },
+    }));
+    const defense = createDefense("defense-rendered-value", 30, "defender-rendered-value");
+    const check = harness.checks.get(defense.id);
+    check.baseDefense = 24;
+    check.degreeOfSuccess.fromRoll = 5;
+    check.itemData = {};
+    defense.content = `
+        <article class="splittermond check success">
+            <header>Dornenhandschuh, freihändig (Angepasst)</header>
+            <div class="roll-total">32</div>
+            <div class="degree-of-success">5 EG Herausragend gelungen</div>
+            <div class="degree-of-success-description"><p><strong>VTD: 32</strong></p></div>
+        </article>
+    `;
+
+    await processDefenseMessage(defense, pendingFor(root, defense, 1));
+
+    let latest = root;
+    while (latest.flags[MODULE_ID]?.context?.supersededBy) {
+        latest = harness.messages.get(latest.flags[MODULE_ID].context.supersededBy);
+    }
+
+    assert.equal(latest.system.checkReport.difficulty, 32);
+    assert.equal(latest.flags[MODULE_ID].context.defenseValue, 32);
+    assert.match(latest.content, /<strong>32<\/strong>/u);
+    assert.doesNotMatch(latest.content, /<strong>30<\/strong>/u);
+    assert.equal(defense.flags[MODULE_ID].context.resultingDefenseValue, 32);
+    assert.equal(defense.flags[MODULE_ID].context.defensiveFeatureValue, 2);
+    assert.deepEqual(defense.flags.splittermond.check.itemData.itemFeatures.internalFeatureList, [
+        { name: "Defensiv", value: 2 },
+    ]);
+});
+
+test("a broken splinterpoint rerender retains Defensiv and recalculates the attack again", async () => {
+    resetHarness();
+    const root = createAttack("attack-splinterpoint-rerender", attackReport({
+        difficulty: 24,
+        roll: { total: 30 },
+        degreeOfSuccess: { fromRoll: 2, modification: 0 },
+    }));
+    const defense = createDefense("defense-splinterpoint-rerender", 28, "defender-splinterpoint-rerender");
+    const check = harness.checks.get(defense.id);
+    check.baseDefense = 24;
+    check.degreeOfSuccess.fromRoll = 3;
+    check.itemData = {};
+    defense.content = '<div class="degree-of-success-description"><strong>VTD: 30</strong></div>';
+    const pending = pendingFor(root, defense, 1);
+
+    await processDefenseMessage(defense, pending);
+    const firstSuccessor = harness.messages.get(root.flags[MODULE_ID].context.supersededBy);
+    assert.equal(firstSuccessor.system.checkReport.difficulty, 30);
+    assert.equal(defense.flags[MODULE_ID].context.defensiveFeatureValue, 2);
+
+    check.degreeOfSuccess.fromRoll = 4;
+    defense.content = '<div class="degree-of-success-description"><strong>VTD: 29</strong></div>';
+    await processDefenseMessage(defense, pending);
+
+    let latest = root;
+    while (latest.flags[MODULE_ID]?.context?.supersededBy) {
+        latest = harness.messages.get(latest.flags[MODULE_ID].context.supersededBy);
+    }
+    const offenses = Array.from(harness.messages.values()).filter((message) => message.type === "attackRollMessage");
+
+    assert.equal(offenses.length, 3, "the VTD increase from 30 to 31 creates another successor");
+    assert.notEqual(latest.id, firstSuccessor.id);
+    assert.equal(latest.system.checkReport.difficulty, 31);
+    assert.equal(latest.system.checkReport.succeeded, false);
+    assert.equal(latest.flags[MODULE_ID].context.defenseValue, 31);
+    assert.match(latest.content, /<strong>31<\/strong>/u);
+    assert.equal(defense.flags[MODULE_ID].context.resultingDefenseValue, 31);
+    assert.equal(defense.flags[MODULE_ID].context.defensiveFeatureValue, 2);
 });
 
 test("an improved defense remains visible when the attack outcome does not change", async () => {
