@@ -1,16 +1,23 @@
-# Splittermond Smoother Fight 0.4.0
+# Splittermond Smoother Fight 0.5.0
 
-Dieses Update ergänzt das Kampf-HUD um eine vollständige Bewegungsverfolgung auf Basis der von Foundry gemessenen Token-Wege.
+Dieses Update erweitert die Aktive Abwehr um den Einsatz von Splitterpunkten und verbessert die Bedienung sowie den Schutz nicht freigegebener Kampfwerte im HUD.
 
-## Änderungen
+## Neue Funktionen
 
-- Der neue Bewegungsbalken unterscheidet **2 m freie Bewegung**, **Laufen bis GSW** und **Sprinten bis 3 × GSW**.
-- Die Segmentbreiten bilden die Bewegungsbereiche besser ab und bleiben auch bei wenig Platz sauber lesbar.
-- Nach Überschreiten der freien Bewegung werden die passenden Segmente direkt zu Schaltflächen für **Laufen (5 Ticks)** und **Sprinten (10 Ticks)**. Beim Sprinten bleibt Laufen weiterhin auswählbar.
-- Bewegungen über 3 × GSW werden rot markiert und zeigen die überschrittene Distanz an.
-- **Bewegung rückgängig** setzt das Token an seine Startposition zurück und leert Foundrys Bewegungshistorie einschließlich der sofort sichtbaren Meteranzeige.
-- Chatkarten für Laufen und Sprinten zeigen zusätzlich die tatsächlich gemessene Bewegung an.
-- Die Bewegungsverfolgung ist als globale Welteinstellung standardmäßig aktiv und kann vollständig deaktiviert werden.
+- Bei Angriffen gegen die VTD kann der Besitzer des Ziels direkt über die Angriffskarte einen **Splitterpunkt für +3 VTD** einsetzen. Der Punkt wird automatisch abgezogen und die Angriffskarte mit dem neuen Verteidigungswert aktualisiert.
+- Ab Heldengrad 3 kann ein anderer berechtigter Kampfteilnehmer eine **Splitterpunkt-Resonanz für weitere +2 VTD** beisteuern. Pro Angriff ist höchstens eine Resonanz möglich.
+- Splitterpunkte und Aktive Abwehr lassen sich in beliebiger Reihenfolge einsetzen. Bereits gewährte Boni bleiben bei der Neuberechnung erhalten; die aktualisierten Angriffskarten und eigene Chatkarten dokumentieren das Ergebnis.
+- Die vollständige Handlungsübersicht im Kampf-HUD besitzt jetzt eine Suche. Sie filtert unter anderem nach Handlung, Kategorie, Art, Dauer, Besonderheit und Quelle.
+- Eine neue Welteinstellung erlaubt Spielleitungen, **LP und FO fremder Ziele offenzulegen**. Die Einstellung ist standardmäßig deaktiviert.
+
+## Verbesserungen und Fehlerbehebungen
+
+- Das Kampf-HUD blendet VTD, KW, GW, LP und FO des aktiven Kämpfers nun ebenfalls aus, wenn einem Spieler die nötigen Rechte oder Weltfreigaben fehlen.
+- Ein **temporärer Kompatibilitäts-Hotfix für das Splittermond-System** verhindert, dass bei der Ausgabe eines Splitterpunkts für eine Aktive Abwehr das Merkmal **Defensiv** in der Neuberechnung verloren geht. Ohne den Hotfix konnte die neu berechnete VTD trotz des ausgegebenen Splitterpunkts niedriger ausfallen als zuvor. Das Modul rekonstruiert den fehlenden Merkmalswert und übernimmt ihn in die erneute Berechnung.
+- Die Schnellauswahl von Zielen verhält sich eindeutiger: Ein normaler Klick ersetzt die bisherige Auswahl und setzt das Primärziel, während **Umschalt + Klick** weitere Ziele ergänzt.
+- Bei der Mehrfachauswahl bleiben das geöffnete Zielmenü, der Suchbegriff, der gewählte Filter und die Scrollposition erhalten.
+- Gleichzeitige Abwehr- und Splitterpunktaktionen werden geordnet verarbeitet, damit keine Boni verloren gehen oder mehrfach angewendet werden.
+- Fehlgeschlagene Aktualisierungen rollen den abgezogenen Splitterpunkt sicher zurück.
 
 ## Installation
 

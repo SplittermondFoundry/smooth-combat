@@ -29,11 +29,12 @@ Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github
 - persönliche Zuganzeige, Zielwarnungen und ein- oder ausblendbare Standard-Aktionsleiste
 - Foundry-basierte Bewegungsverfolgung mit freier Bewegung, Laufen, Sprinten, Überziehungswarnung und Rückgängig-Funktion
 - Fertigkeiten, Favoriten, Zauber, Angriffe, Ausrüstung und Aktive Abwehr direkt im HUD
+- Splitterpunkte für +3 VTD und Splitterpunkt-Resonanz für weitere +2 VTD direkt an der Angriffskarte
 - korrekte Vorbereitung und Auslösung von Fernkampfangriffen und Zaubern
 - übersichtliche Kampfereignisse für Angriff, Abwehr, Schaden und Patzer mit weiter nutzbaren Splittermond-Aktionen
 - Unterstützung der Meisterschaft **Verteidiger** einschließlich Reichweiten- und Abwehrprüfung
 - Ziel-Quickmenü, Mehrfachziele und zwischen Clients synchronisiertes Primärziel
-- Tickbuttons, freie Tickeingabe, Abwartend, Bereithalten und Reaktivieren
+- durchsuchbare Handlungsübersicht, Tickbuttons, freie Tickeingabe, Abwartend, Bereithalten und Reaktivieren
 - dauerhafte Zuordnung von Charakteren, NSCs und einzelnen Tokens zu Benutzern
 - Rechteprüfung für Ressourcen, Verteidigungswerte und ausführbare Chatkarten-Aktionen
 - Dark-/Lightmode, anpassbare Hintergründe und Icons sowie optionale Audiohinweise
