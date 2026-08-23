@@ -15,7 +15,14 @@ const harness = {
     controlledToken: null,
     movementTracking: true,
     player: null,
+    revealTargetResources: false,
     renderCalls: 0,
+    targetSelection: {
+        target: null,
+        targets: [],
+        primaryTargetTokenUuid: null,
+        primaryTargetActorUuid: null,
+    },
 };
 
 configureServices({
@@ -25,15 +32,11 @@ configureServices({
     getAssignedUser: (combatant) => combatant.assignedUser ?? null,
     getControlledTokenDocument: () => harness.controlledToken,
     getRuntimeController: (combatant) => combatant.runtimeController ?? null,
-    getTargetSelectionForUser: () => ({
-        target: null,
-        targets: [],
-        primaryTargetTokenUuid: null,
-        primaryTargetActorUuid: null,
-    }),
+    getTargetSelectionForUser: () => harness.targetSelection,
     hasPendingActiveDefense: () => false,
     isPreparingSpell: () => false,
     isRangedAttack: (attack) => Boolean(attack.isRanged),
+    isCurrentUserTarget: () => false,
     resolveCombatantToken: (combatant) => combatant.token ?? null,
     scheduleRender: () => harness.renderCalls += 1,
     tokenUuid: (token) => token?.uuid ?? null,
@@ -71,7 +74,14 @@ function installFixture() {
     resetPersonalCombatantSelection();
     harness.controlledToken = null;
     harness.movementTracking = true;
+    harness.revealTargetResources = false;
     harness.renderCalls = 0;
+    harness.targetSelection = {
+        target: null,
+        targets: [],
+        primaryTargetTokenUuid: null,
+        primaryTargetActorUuid: null,
+    };
     const player = { id: "player", isGM: false, name: "Player" };
     const other = { id: "other", isGM: false, name: "Other" };
     const active = combatant("active", other);
@@ -98,6 +108,7 @@ function installFixture() {
                 minimized: false,
                 movementTracking: harness.movementTracking,
                 revealTargetDefenses: false,
+                revealTargetResources: harness.revealTargetResources,
                 showCards: false,
                 theme: "dark",
             })[key],
@@ -173,4 +184,38 @@ test("movement tracking setting shows and hides the tracker for the active comba
     harness.movementTracking = false;
     const disabled = await buildHud(getHudContext());
     assert.doesNotMatch(disabled, /sf-movement-tracker/u);
+});
+
+test("the world option reveals a foreign target's health and focus", async () => {
+    installFixture();
+    const targetActor = {
+        img: "target.webp",
+        name: "Target actor",
+        derivedValues: {},
+        system: {
+            healthBar: { value: 7, max: 13 },
+            focusBar: { value: 5, max: 11 },
+        },
+        testUserPermission: () => false,
+    };
+    const target = {
+        actor: targetActor,
+        name: "Foreign target",
+        uuid: "Scene.scene.Token.foreign-target",
+    };
+    harness.targetSelection = {
+        target,
+        targets: [target],
+        primaryTargetTokenUuid: target.uuid,
+        primaryTargetActorUuid: null,
+    };
+
+    const concealed = await buildHud(getHudContext());
+    assert.doesNotMatch(concealed, /7\/13/u);
+    assert.doesNotMatch(concealed, /5\/11/u);
+
+    harness.revealTargetResources = true;
+    const revealed = await buildHud(getHudContext());
+    assert.match(revealed, /7\/13/u);
+    assert.match(revealed, /5\/11/u);
 });

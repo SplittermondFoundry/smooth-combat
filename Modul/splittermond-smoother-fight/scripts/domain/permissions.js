@@ -6,6 +6,10 @@ export function mayViewTargetDefenses(revealToEveryone, isGm, hasObserverPermiss
     return Boolean(revealToEveryone || isGm || hasObserverPermission);
 }
 
+export function mayViewTargetResources(revealToEveryone, isGm, hasObserverPermission) {
+    return Boolean(revealToEveryone || mayViewActorResources(isGm, hasObserverPermission));
+}
+
 export function isCombatantVisibleToUser(isGm, combatantHidden, tokenHidden = false) {
     return Boolean(isGm || (!combatantHidden && !tokenHidden));
 }

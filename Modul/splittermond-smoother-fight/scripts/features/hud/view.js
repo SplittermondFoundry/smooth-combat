@@ -23,6 +23,7 @@ import {
     isPlayersTurn,
     mayViewActorResources,
     mayViewTargetDefenses,
+    mayViewTargetResources,
     normalizeFavoriteSkillIds,
 } from "../../combat-rules.js";
 
@@ -205,7 +206,7 @@ function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted =
                 <span><small>KW</small>${escapeHtml(body)}</span>
                 <span><small>GW</small>${escapeHtml(mind)}</span>
             </div>` : `<div class="sf-defense-row is-concealed"><i class="fa-solid fa-eye-slash"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefensesHidden"))}</span></div>`}
-            ${canViewResources(actor) ? resourceBars(actor) : ""}
+            ${canViewResources(actor, side === "target") ? resourceBars(actor) : ""}
         </aside>
     `;
 }
@@ -256,8 +257,11 @@ function resourceBars(actor) {
     </div>`;
 }
 
-function canViewResources(actor) {
+function canViewResources(actor, isTarget = false) {
     const observer = Boolean(actor?.testUserPermission?.(game.user, "OBSERVER"));
+    if (isTarget) {
+        return mayViewTargetResources(getSetting("revealTargetResources", false), game.user?.isGM, observer);
+    }
     return mayViewActorResources(game.user?.isGM, observer);
 }
 

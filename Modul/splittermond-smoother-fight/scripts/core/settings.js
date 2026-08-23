@@ -80,6 +80,16 @@ export function registerSettings() {
         default: false,
         onChange: rerender,
     });
+    game.settings.register(MODULE_ID, "revealTargetResources", {
+        name: "SMOOTHER_FIGHT.Settings.RevealTargetResourcesName",
+        hint: "SMOOTHER_FIGHT.Settings.RevealTargetResourcesHint",
+        scope: "world",
+        config: true,
+        restricted: true,
+        type: Boolean,
+        default: false,
+        onChange: rerender,
+    });
     game.settings.register(MODULE_ID, "audioFeedback", {
         scope: "client",
         config: false,

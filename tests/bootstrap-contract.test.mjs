@@ -47,6 +47,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
         "maxCards",
         "defenseRecalculation",
         "revealTargetDefenses",
+        "revealTargetResources",
         "audioFeedback",
         "audioFeedbackMigrated",
         "audioDefenseEnabled",
@@ -97,6 +98,8 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     assert.equal(settingByKey.defenseRecalculation.default, true);
     assert.equal(settingByKey.revealTargetDefenses.scope, "world");
     assert.equal(settingByKey.revealTargetDefenses.default, false);
+    assert.equal(settingByKey.revealTargetResources.scope, "world");
+    assert.equal(settingByKey.revealTargetResources.default, false);
     for (const key of ["hudBackgroundDark", "hudBackgroundLight", "hudIconDirectory"]) {
         assert.deepEqual(
             [settingByKey[key].scope, settingByKey[key].config, settingByKey[key].type, settingByKey[key].default],

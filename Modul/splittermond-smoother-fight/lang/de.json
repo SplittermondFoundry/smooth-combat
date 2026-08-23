@@ -26,6 +26,8 @@
       "DefenseRecalculationHint": "Erstellt bei einer erfolgreichen Aktiven Abwehr eine neue Angriffskarte mit dem erhöhten Verteidigungswert.",
       "RevealTargetDefensesName": "VTD, KW und GW fremder Ziele offenlegen",
       "RevealTargetDefensesHint": "Wenn aktiviert, sehen Spieler die Verteidigungswerte ausgewählter Ziele auch ohne Owner- oder Observer-Rechte. Standardmäßig bleiben diese Werte verborgen.",
+      "RevealTargetResourcesName": "LP und FO fremder Ziele offenlegen",
+      "RevealTargetResourcesHint": "Wenn aktiviert, sehen Spieler die Lebens- und Fokusressourcen ausgewählter Ziele auch ohne Owner- oder Observer-Rechte. Standardmäßig bleiben diese Werte verborgen.",
       "AudioEventEnabledHint": "Legt fest, ob für dieses Ereignis ein akustisches Signal abgespielt wird.",
       "AudioEventSoundHint": "Wählt das akustische Signal für dieses Ereignis aus.",
       "AudioPreview": "Probehören",

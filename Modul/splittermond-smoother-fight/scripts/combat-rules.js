@@ -81,6 +81,7 @@ export {
     mayUseRemoteChatActions,
     mayViewActorResources,
     mayViewTargetDefenses,
+    mayViewTargetResources,
     mayViewTargetDifficulty,
     requiresRollManagementPermission,
 } from "./domain/permissions.js";

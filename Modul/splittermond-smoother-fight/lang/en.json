@@ -26,6 +26,8 @@
       "DefenseRecalculationHint": "Creates a new attack card using the increased defense after a successful active defense.",
       "RevealTargetDefensesName": "Reveal target Defense, Body Resistance, and Mind Resistance",
       "RevealTargetDefensesHint": "When enabled, players can see a selected target's defenses without Owner or Observer permission. These values are hidden by default.",
+      "RevealTargetResourcesName": "Reveal target Health and Focus",
+      "RevealTargetResourcesHint": "When enabled, players can see a selected target's Health and Focus resources without Owner or Observer permission. These values are hidden by default.",
       "AudioEventEnabledHint": "Controls whether an audio cue is played for this event.",
       "AudioEventSoundHint": "Selects the audio cue used for this event.",
       "AudioPreview": "Preview",

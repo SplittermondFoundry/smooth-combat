@@ -33,6 +33,7 @@ import {
     mayUseRemoteChatActions,
     mayViewActorResources,
     mayViewTargetDefenses,
+    mayViewTargetResources,
     mayViewTargetDifficulty,
     mergeActiveDefenseCheck,
     normalizeAudioFeedbackProfile,
@@ -556,6 +557,13 @@ test("target defenses stay private by default and can be revealed by the world o
     assert.equal(mayViewTargetDefenses(false, false, true), true);
     assert.equal(mayViewTargetDefenses(false, true, false), true);
     assert.equal(mayViewTargetDefenses(true, false, false), true);
+});
+
+test("target health and focus stay private by default and can be revealed by the world option", () => {
+    assert.equal(mayViewTargetResources(false, false, false), false);
+    assert.equal(mayViewTargetResources(false, false, true), true);
+    assert.equal(mayViewTargetResources(false, true, false), true);
+    assert.equal(mayViewTargetResources(true, false, false), true);
 });
 
 test("players never receive hidden combatants as their current HUD actor", () => {

@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "bb8520dfaa62fe50ba3f12ee2ea0d01655cac2f76ee0b0b2cce6a453ae00cdeb",
+        "2083223557664c3467f37175f62f8574fa2a0f1b1b9c4f7d31ed21828c4d65d3",
     );
 });
 
