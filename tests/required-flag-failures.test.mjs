@@ -2,14 +2,25 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { configureServices } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
-import { handleChatCardAction } from "../Modul/splittermond-smoother-fight/scripts/features/chat/actions.js";
+import {
+    handleChatCardAction,
+} from "../Modul/splittermond-smoother-fight/scripts/features/chat/actions.js";
+import {
+    applyRemoteDamageApplication,
+    getDamageApplicationState,
+    getNumbingDamageApplicationState,
+} from "../Modul/splittermond-smoother-fight/scripts/features/chat/damage-application.js";
 import {
     safeSetFlag,
     setOptionalFlag,
     setRequiredFlag,
 } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 import { installHealthCostFeedbackInterceptor } from "../Modul/splittermond-smoother-fight/scripts/features/feedback/feedback.js";
-import { handleFumbleAction } from "../Modul/splittermond-smoother-fight/scripts/features/fumbles/fumbles.js";
+import {
+    getFumbleActionApplicationState,
+    handleFumbleAction,
+    recoverFumbleAction,
+} from "../Modul/splittermond-smoother-fight/scripts/features/fumbles/fumbles.js";
 
 const MODULE_ID = "splittermond-smoother-fight";
 const harness = {
@@ -19,6 +30,9 @@ const harness = {
     legacyLocks: new Set(),
     messages: new Map(),
     pendingDamageApplications: [],
+    remoteTargets: [],
+    tokens: new Map(),
+    warnings: [],
 };
 
 function clone(value) {
@@ -93,14 +107,18 @@ class TestActor {
     }
 
     async addTicks(ticks) {
+        if (this.tickError) throw this.tickError;
         this.tickApplications += 1;
         const combatant = Array.from(game.combat?.combatants ?? []).find((candidate) => candidate.actorId === this.id);
         if (combatant) combatant.initiative += ticks;
+        if (this.tickErrorAfterMutation) throw this.tickErrorAfterMutation;
     }
 
     async consumeCost() {
+        if (this.damageError) throw this.damageError;
         this.damageApplications += 1;
         this.system.health.consumed.value += 1;
+        if (this.damageErrorAfterMutation) throw this.damageErrorAfterMutation;
     }
 
     async useSplinterpointBonus(message) {
@@ -116,8 +134,10 @@ configureServices({
     findPendingDamageApplicationForActor: (actorUuid) => [...harness.pendingDamageApplications]
         .reverse()
         .find((application) => !application.actorUuids.size || application.actorUuids.has(actorUuid)) ?? null,
-    getActivePrimaryGm: () => game.user,
+    getActivePrimaryGm: () => Array.from(game.users ?? []).find((user) => user.isGM && user.active)
+        ?? (game.user?.isGM ? game.user : null),
     getHudContext: () => null,
+    getTargetSelectionForUser: () => ({ targets: harness.remoteTargets }),
     getMessageContext: (message) => message?.flags?.[MODULE_ID]?.context ?? null,
     getRuntimeController: () => game.user,
     getSceneTokens: () => [],
@@ -132,7 +152,8 @@ configureServices({
         if (index >= 0) harness.pendingDamageApplications.splice(index, 1);
     },
     resolveSpeakerActor: (message) => message?.actor ?? null,
-    resolveToken: () => null,
+    resolveToken: (uuid) => harness.tokens.get(uuid) ?? null,
+    mayUserApplyDamageToActor: (user, actor) => Boolean(user?.isGM || actor?.testUserPermission?.(user, "OWNER")),
     scheduleRender: () => {},
     setRequiredFlag,
     speakerTokenUuid: () => null,
@@ -146,6 +167,9 @@ function resetHarness() {
     harness.legacyLocks.clear();
     harness.messages.clear();
     harness.pendingDamageApplications.length = 0;
+    harness.remoteTargets.length = 0;
+    harness.tokens.clear();
+    harness.warnings.length = 0;
     globalThis.game = {
         combat: { combatants: [] },
         i18n: {
@@ -156,12 +180,13 @@ function resetHarness() {
         messages: { get: (id) => harness.messages.get(id) },
         socket: { emit: () => {} },
         user: { id: "gm", isGM: true, targets: new Set() },
+        users: [],
     };
     globalThis.ui = {
         notifications: {
             error: (message) => harness.errors.push(message),
             info: (message) => harness.infos.push(message),
-            warn: () => {},
+            warn: (message) => harness.warnings.push(message),
         },
     };
     globalThis.foundry = { utils: { randomID: () => "feedback" } };
@@ -308,7 +333,42 @@ test("a rejected fumble write before the effect prevents the mechanical applicat
     assert.equal(harness.errors.length, 1);
 });
 
-test("a rejected fumble completion leaves a persistent retry barrier and prevents double application", async (t) => {
+test("a rejected fumble effect without a mutation returns to idle and can be retried", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    const actor = new TestActor("fumble-retry");
+    const combatant = { id: "fumble-combatant", actorId: actor.id, initiative: 10 };
+    game.combat.combatants = [combatant];
+    const message = new TestMessage("fumble-retry", { actor, fumble: fumbleData() });
+    actor.tickError = new Error("ticks rejected");
+
+    await assert.rejects(handleFumbleAction(message, "ticks"), /ticks rejected/u);
+    assert.equal(getFumbleActionApplicationState(message, "ticks"), "idle");
+    assert.equal(combatant.initiative, 10);
+
+    actor.tickError = null;
+    await handleFumbleAction(message, "ticks");
+    assert.equal(combatant.initiative, 13);
+    assert.equal(getFumbleActionApplicationState(message, "ticks"), "completed");
+});
+
+test("a rejected fumble effect after a mutation becomes uncertain", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    const actor = new TestActor("fumble-partial");
+    const combatant = { id: "fumble-combatant", actorId: actor.id, initiative: 10 };
+    game.combat.combatants = [combatant];
+    const message = new TestMessage("fumble-partial", { actor, fumble: fumbleData() });
+    actor.tickErrorAfterMutation = new Error("ticks failed late");
+
+    await assert.rejects(handleFumbleAction(message, "ticks"), /ticks failed late/u);
+    assert.equal(combatant.initiative, 13);
+    assert.equal(getFumbleActionApplicationState(message, "ticks"), "uncertain");
+    await handleFumbleAction(message, "ticks");
+    assert.equal(combatant.initiative, 13);
+});
+
+test("a rejected fumble completion becomes uncertain and prevents double application", async (t) => {
     resetHarness();
     t.mock.method(console, "error", () => {});
     const actor = new TestActor("fumble-completion");
@@ -324,8 +384,14 @@ test("a rejected fumble completion leaves a persistent retry barrier and prevent
     assert.equal(actor.tickApplications, 1);
     assert.equal(message.flags[MODULE_ID].fumble.ticksApplicationStarted, true);
     assert.equal(message.flags[MODULE_ID].fumble.ticksApplied, false);
-    assert.equal(message.setFlagCalls, 2, "the retry is blocked by the durable write-ahead marker");
+    assert.equal(message.flags[MODULE_ID].fumble.applications.ticks.state, "uncertain");
+    assert.equal(getFumbleActionApplicationState(message, "ticks"), "uncertain");
+    assert.equal(message.setFlagCalls, 3, "the explicit uncertain state blocks the retry");
     assert.equal(harness.infos.length, 0, "success is not announced when completion persistence failed");
+
+    await recoverFumbleAction(message, "ticks", "complete");
+    assert.equal(getFumbleActionApplicationState(message, "ticks"), "completed");
+    assert.equal(message.flags[MODULE_ID].fumble.ticksApplied, true);
 });
 
 test("the in-memory fumble lock closes the parallel-click gap before the persistent marker is visible", async () => {
@@ -347,7 +413,7 @@ test("the in-memory fumble lock closes the parallel-click gap before the persist
     assert.equal(message.setFlagCalls, 2);
 });
 
-test("rejected legacy-tick completion cannot advance the actor twice", async (t) => {
+test("rejected legacy-tick completion becomes uncertain and cannot advance the actor twice", async (t) => {
     resetHarness();
     t.mock.method(console, "error", () => {});
     const actor = new TestActor("legacy-ticks");
@@ -362,12 +428,57 @@ test("rejected legacy-tick completion cannot advance the actor twice", async (t)
 
     assert.equal(actor.tickApplications, 1);
     assert.equal(combatant.initiative, 13);
-    assert.equal(message.flags[MODULE_ID].legacyTickAdvanceStarted, true);
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvance.state, "uncertain");
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvanceStarted, undefined);
     assert.equal(message.flags[MODULE_ID].legacyTickAdvanceApplied, undefined);
-    assert.equal(message.setFlagCalls, 2);
+    assert.equal(message.setFlagCalls, 3);
+
+    await handleChatCardAction(clickEvent(), actionButton(message, {
+        sfLegacyTickRecovery: "complete",
+    }));
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvance.state, "completed");
 });
 
-test("rejected stun-damage completion cannot apply defense damage twice", async (t) => {
+test("a rejected legacy tick without an initiative change returns to idle", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    const actor = new TestActor("legacy-retry");
+    actor.tickError = new Error("ticks rejected");
+    const combatant = { id: "combatant", actorId: actor.id, initiative: 7 };
+    game.combat.combatants = [combatant];
+    const message = new TestMessage("legacy-retry", { actor });
+    harness.messages.set(message.id, message);
+    const button = actionButton(message, { ticks: "2" }, { legacy: true });
+
+    await handleChatCardAction(clickEvent(), button);
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvance.state, "idle");
+    assert.equal(combatant.initiative, 7);
+
+    actor.tickError = null;
+    await handleChatCardAction(clickEvent(), button);
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvance.state, "completed");
+    assert.equal(combatant.initiative, 9);
+});
+
+test("a rejected legacy tick after initiative changed becomes uncertain", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    const actor = new TestActor("legacy-partial");
+    actor.tickErrorAfterMutation = new Error("ticks failed late");
+    const combatant = { id: "combatant", actorId: actor.id, initiative: 4 };
+    game.combat.combatants = [combatant];
+    const message = new TestMessage("legacy-partial", { actor });
+    harness.messages.set(message.id, message);
+    const button = actionButton(message, { ticks: "3" }, { legacy: true });
+
+    await handleChatCardAction(clickEvent(), button);
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvance.state, "uncertain");
+    assert.equal(combatant.initiative, 7);
+    await handleChatCardAction(clickEvent(), button);
+    assert.equal(combatant.initiative, 7);
+});
+
+test("rejected stun-damage completion becomes uncertain and cannot apply defense damage twice", async (t) => {
     resetHarness();
     t.mock.method(console, "error", () => {});
     const actor = new TestActor("defense-damage");
@@ -379,16 +490,18 @@ test("rejected stun-damage completion cannot apply defense damage twice", async 
     harness.messages.set(message.id, message);
     const button = actionButton(message, { sfDefenseNumbingDamage: "3" });
 
-    await assert.rejects(handleChatCardAction(clickEvent(), button), /Could not persist required context flag/u);
+    await handleChatCardAction(clickEvent(), button);
     await handleChatCardAction(clickEvent(), button);
 
     assert.equal(actor.damageApplications, 1);
     assert.equal(message.flags[MODULE_ID].context.numbingDamageApplicationStarted, true);
     assert.equal(message.flags[MODULE_ID].context.numbingDamageApplied, false);
-    assert.equal(message.setFlagCalls, 2);
+    assert.equal(message.flags[MODULE_ID].context.numbingDamageApplication.state, "uncertain");
+    assert.equal(getNumbingDamageApplicationState(message), "uncertain");
+    assert.equal(message.setFlagCalls, 3);
 });
 
-test("rejected generic-damage completion leaves damageApplicationStarted as the retry barrier", async (t) => {
+test("rejected generic-damage completion becomes uncertain and remains a retry barrier", async (t) => {
     resetHarness();
     t.mock.method(console, "error", () => {});
     globalThis.CONFIG = { Actor: { documentClass: TestActor } };
@@ -403,8 +516,246 @@ test("rejected generic-damage completion leaves damageApplicationStarted as the 
     await handleChatCardAction(clickEvent(), button);
 
     assert.equal(actor.damageApplications, 1);
-    assert.equal(message.flags[MODULE_ID].damageApplicationStarted, true);
-    assert.equal(message.flags[MODULE_ID].damageApplicationCompleted, undefined);
-    assert.equal(message.setFlagCalls, 2);
+    assert.equal(message.flags[MODULE_ID].damageApplication.state, "uncertain");
+    assert.equal(getDamageApplicationState(message), "uncertain");
+    assert.equal(message.setFlagCalls, 3);
     assert.equal(harness.completedDamageApplications.has(message.id), false);
+});
+
+test("missing linked targets abort before starting damage and remain retryable", async () => {
+    resetHarness();
+    const message = new TestMessage("missing-linked-target", {
+        context: { primaryTargetTokenUuid: "Scene.scene.Token.missing" },
+    });
+    harness.messages.set(message.id, message);
+    const button = actionButton(message, { localaction: "applyDamageToUserTargets" });
+
+    await handleChatCardAction(clickEvent(), button);
+    await handleChatCardAction(clickEvent(), button);
+
+    assert.equal(getDamageApplicationState(message), "idle");
+    assert.equal(message.setFlagCalls, 0);
+    assert.equal(harness.warnings.length, 2);
+});
+
+test("missing target permission aborts before starting damage and remains retryable", async () => {
+    resetHarness();
+    const player = { id: "player", isGM: false, targets: new Set() };
+    game.user = player;
+    const targetActor = new TestActor("unowned-target");
+    targetActor.testUserPermission = () => false;
+    const target = {
+        id: "unowned-target",
+        uuid: "Scene.scene.Token.unowned-target",
+        actor: targetActor,
+        object: {},
+    };
+    harness.tokens.set(target.uuid, target);
+    const message = new TestMessage("unowned-linked-target", {
+        context: { primaryTargetTokenUuid: target.uuid },
+    });
+    harness.messages.set(message.id, message);
+    const button = actionButton(message, { localaction: "applyDamageToUserTargets" });
+
+    await handleChatCardAction(clickEvent(), button);
+
+    assert.equal(getDamageApplicationState(message), "idle");
+    assert.equal(message.setFlagCalls, 0);
+    assert.equal(harness.warnings.length, 1);
+});
+
+test("a rejected health cost without a health mutation returns generic damage to idle", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    globalThis.CONFIG = { Actor: { documentClass: TestActor } };
+    installHealthCostFeedbackInterceptor();
+    const actor = new TestActor("generic-safe-failure");
+    actor.damageError = new Error("No health cost was consumed");
+    const message = new TestMessage("generic-safe-failure", { actor });
+    message.system.handleGenericAction = () => actor.consumeCost("health", "1V1");
+    harness.messages.set(message.id, message);
+    const button = actionButton(message, { localaction: "applyDamageToSelf" });
+
+    await handleChatCardAction(clickEvent(), button);
+    assert.equal(getDamageApplicationState(message), "idle");
+    assert.equal(actor.damageApplications, 0);
+
+    actor.damageError = null;
+    await handleChatCardAction(clickEvent(), button);
+    assert.equal(getDamageApplicationState(message), "completed");
+    assert.equal(actor.damageApplications, 1);
+});
+
+test("a rejected health cost after a mutation becomes uncertain", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    const actor = new TestActor("generic-ambiguous-failure");
+    actor.damageErrorAfterMutation = new Error("Health changed before the failure");
+    const message = new TestMessage("generic-ambiguous-failure", { actor });
+    message.system.handleGenericAction = () => actor.consumeCost("health", "1V1");
+    harness.messages.set(message.id, message);
+    const button = actionButton(message, { localaction: "applyDamageToSelf" });
+
+    await handleChatCardAction(clickEvent(), button);
+    await handleChatCardAction(clickEvent(), button);
+
+    assert.equal(getDamageApplicationState(message), "uncertain");
+    assert.equal(actor.damageApplications, 1);
+});
+
+test("parallel generic-damage clicks produce one completed application", async () => {
+    resetHarness();
+    const actor = new TestActor("parallel-generic-damage");
+    let releaseAction;
+    const actionGate = new Promise((resolve) => {
+        releaseAction = resolve;
+    });
+    const message = new TestMessage("parallel-generic-damage", { actor });
+    message.system.handleGenericAction = async () => {
+        await actionGate;
+        return actor.consumeCost("health", "1V1");
+    };
+    harness.messages.set(message.id, message);
+    const button = actionButton(message, { localaction: "applyDamageToSelf" });
+
+    const first = handleChatCardAction(clickEvent(), button);
+    const second = handleChatCardAction(clickEvent(), button);
+    releaseAction();
+    await Promise.all([first, second]);
+
+    assert.equal(actor.damageApplications, 1);
+    assert.equal(getDamageApplicationState(message), "completed");
+    assert.equal(message.setFlagCalls, 2);
+});
+
+test("remote multi-target damage is completed only after every observed health cost", async () => {
+    resetHarness();
+    const player = { id: "player", isGM: false, targets: new Set() };
+    const firstActor = new TestActor("remote-first");
+    const secondActor = new TestActor("remote-second");
+    harness.remoteTargets.push(
+        { actor: firstActor, object: {} },
+        { actor: secondActor, object: {} }
+    );
+    const message = new TestMessage("remote-multi-target");
+    message.system.handleGenericAction = async () => {
+        await firstActor.consumeCost("health", "1V1");
+        await secondActor.consumeCost("health", "1V1");
+    };
+    harness.messages.set(message.id, message);
+
+    const result = await applyRemoteDamageApplication(
+        message,
+        { action: "applyDamageToTargets" },
+        player
+    );
+
+    assert.deepEqual(result, { state: "completed", error: null });
+    assert.equal(firstActor.damageApplications, 1);
+    assert.equal(secondActor.damageApplications, 1);
+    assert.equal(getDamageApplicationState(message), "completed");
+});
+
+test("a rejected stun cost without a health mutation returns to idle and can be retried", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    const actor = new TestActor("stun-safe-failure");
+    actor.damageError = new Error("No stun damage was consumed");
+    const message = new TestMessage("stun-safe-failure", {
+        actor,
+        context: { numbingDamage: 3 },
+    });
+    harness.messages.set(message.id, message);
+    const button = actionButton(message, { sfDefenseNumbingDamage: "3" });
+
+    await handleChatCardAction(clickEvent(), button);
+    assert.equal(getNumbingDamageApplicationState(message), "idle");
+    assert.equal(actor.damageApplications, 0);
+
+    actor.damageError = null;
+    await handleChatCardAction(clickEvent(), button);
+    assert.equal(getNumbingDamageApplicationState(message), "completed");
+    assert.equal(actor.damageApplications, 1);
+});
+
+test("GM recovery can release or complete an uncertain generic damage application", async () => {
+    resetHarness();
+    const message = new TestMessage("damage-recovery");
+    message.flags[MODULE_ID].damageApplication = {
+        state: "uncertain",
+        attemptId: "attempt",
+        startedAt: Date.now() - 60_000,
+    };
+    harness.messages.set(message.id, message);
+
+    await handleChatCardAction(
+        clickEvent(),
+        actionButton(message, { sfDamageRecovery: "retry", sfDamageKind: "generic" })
+    );
+    assert.equal(getDamageApplicationState(message), "idle");
+
+    message.flags[MODULE_ID].damageApplication.state = "uncertain";
+    await handleChatCardAction(
+        clickEvent(),
+        actionButton(message, { sfDamageRecovery: "complete", sfDamageKind: "generic" })
+    );
+    assert.equal(getDamageApplicationState(message), "completed");
+});
+
+test("GM recovery can release or complete uncertain defense stun damage", async () => {
+    resetHarness();
+    const message = new TestMessage("stun-recovery", {
+        context: {
+            numbingDamage: 3,
+            numbingDamageApplication: {
+                state: "uncertain",
+                attemptId: "attempt",
+                startedAt: Date.now() - 60_000,
+            },
+            numbingDamageApplicationStarted: true,
+            numbingDamageApplied: false,
+        },
+    });
+    harness.messages.set(message.id, message);
+
+    await handleChatCardAction(
+        clickEvent(),
+        actionButton(message, { sfDamageRecovery: "retry", sfDamageKind: "numbing" })
+    );
+    assert.equal(getNumbingDamageApplicationState(message), "idle");
+    assert.equal(message.flags[MODULE_ID].context.numbingDamageApplicationStarted, false);
+
+    message.flags[MODULE_ID].context.numbingDamageApplication.state = "uncertain";
+    await handleChatCardAction(
+        clickEvent(),
+        actionButton(message, { sfDamageRecovery: "complete", sfDamageKind: "numbing" })
+    );
+    assert.equal(getNumbingDamageApplicationState(message), "completed");
+    assert.equal(message.flags[MODULE_ID].context.numbingDamageApplied, true);
+});
+
+test("stale applying records become uncertain while recent attempts remain applying", () => {
+    resetHarness();
+    const now = Date.now();
+    const message = new TestMessage("stale-applying");
+    message.flags[MODULE_ID].damageApplication = {
+        state: "applying",
+        attemptId: "attempt",
+        startedAt: now,
+    };
+
+    assert.equal(getDamageApplicationState(message, now + 1_000), "applying");
+    assert.equal(getDamageApplicationState(message, now + 31_000), "uncertain");
+});
+
+test("legacy started-only flags are treated as uncertain until a GM recovers them", () => {
+    resetHarness();
+    const damage = new TestMessage("legacy-damage");
+    damage.flags[MODULE_ID].damageApplicationStarted = true;
+    const stun = new TestMessage("legacy-stun", {
+        context: { numbingDamageApplicationStarted: true, numbingDamageApplied: false },
+    });
+
+    assert.equal(getDamageApplicationState(damage), "uncertain");
+    assert.equal(getNumbingDamageApplicationState(stun), "uncertain");
 });

@@ -57,6 +57,7 @@ function callsOf(name) {
 const serviceStubs = {
     scheduleRender: (...args) => record("scheduleRender", args),
     scheduleRenderAfterTokenMovement: (...args) => record("scheduleRenderAfterTokenMovement", args),
+    resetCompletedMovementReversalApplication: (...args) => record("resetCompletedMovementReversalApplication", args),
     seedHealthFeedbackState: (...args) => record("seedHealthFeedbackState", args),
     rememberActorHealthCost: (...args) => record("rememberActorHealthCost", args),
     announceAppliedDamageFeedback: (...args) => record("announceAppliedDamageFeedback", args),
@@ -108,7 +109,13 @@ const serviceStubs = {
         record("mayUserApplyDamageToActor", args);
         return behavior.mayUserApplyDamageToActor(...args);
     },
+    applyRemoteDamageApplication: async (...args) => {
+        record("applyRemoteDamageApplication", args);
+        return behavior.applyRemoteDamageApplication(...args);
+    },
+    finishRemoteDamageApplication: (...args) => record("finishRemoteDamageApplication", args),
     recordCompletedDamageApplication: (...args) => record("recordCompletedDamageApplication", args),
+    setDamageApplicationState: async (...args) => record("setDamageApplicationState", args),
     setRequiredFlag: async (...args) => {
         record("setRequiredFlag", args);
         return true;
@@ -142,6 +149,7 @@ function resetHarness(gameStub) {
         resolveActorUuid: () => null,
         isDamageMessage: (message) => message?.type === "damageMessage",
         mayUserApplyDamageToActor: () => false,
+        applyRemoteDamageApplication: async () => ({ state: "completed", error: null }),
         waitForChatMessage: () => null,
         normalizePendingDefense: (value) => value?.attackMessageId ? value : null,
         canUserSubmitDefense: () => false,
@@ -174,6 +182,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         messages: new Map(),
         socket: {
             on: (channel, callback) => socketRegistrations.push({ channel, callback }),
+            emit: (...args) => record("socketEmit", args),
         },
     };
     class FakeHTMLElement {}
@@ -216,6 +225,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         handlersFor(hookRegistrations, "updateToken")[0](movedToken, { hidden: false, x: 120 });
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
         assert.deepEqual(callsOf("scheduleRenderAfterTokenMovement"), [[movedToken]]);
+        assert.deepEqual(callsOf("resetCompletedMovementReversalApplication"), [[movedToken]]);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "recordToken")[0](movedToken);
@@ -424,20 +434,77 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         };
 
         await socketHandler(payload);
-        assert.deepEqual(callsOf("setRequiredFlag"), []);
+        assert.deepEqual(callsOf("setDamageApplicationState"), []);
 
         gameStub.user.isGM = true;
         behavior.mayUserApplyDamageToActor = () => false;
         await socketHandler(payload);
-        assert.deepEqual(callsOf("setRequiredFlag"), []);
-        assert.deepEqual(callsOf("recordCompletedDamageApplication"), []);
+        assert.deepEqual(callsOf("setDamageApplicationState"), []);
 
         behavior.mayUserApplyDamageToActor = () => true;
         await socketHandler(payload);
-        assert.deepEqual(callsOf("recordCompletedDamageApplication"), [[message.id]]);
-        assert.deepEqual(callsOf("setRequiredFlag"), [[message, "damageApplicationCompleted", true]]);
+        assert.deepEqual(callsOf("setDamageApplicationState"), [[message, "completed", { initiatedBy: sender.id }]]);
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
         assert.deepEqual(callsOf("mayUserApplyDamageToActor").at(-1), [sender, actor]);
+    });
+
+    await t.test("damage requests execute only on their recipient GM and return a correlated result", async () => {
+        resetHarness(gameStub);
+        const sender = { id: "sender", isGM: false };
+        const gm = { id: "gm", isGM: true };
+        const message = { id: "damage-request", type: "damageMessage" };
+        gameStub.user = gm;
+        gameStub.users.set(sender.id, sender);
+        gameStub.users.set(gm.id, gm);
+        gameStub.messages.set(message.id, message);
+        const payload = {
+            type: "damage-application-request",
+            senderId: sender.id,
+            recipientId: gm.id,
+            messageId: message.id,
+            actionData: { action: "applyDamageToSelf" },
+        };
+
+        await socketHandler({ ...payload, recipientId: "other-gm" });
+        assert.deepEqual(callsOf("applyRemoteDamageApplication"), []);
+
+        await socketHandler(payload);
+        assert.deepEqual(callsOf("applyRemoteDamageApplication"), [[message, payload.actionData, sender]]);
+        assert.deepEqual(callsOf("socketEmit"), [["module.splittermond-smoother-fight", {
+            type: "damage-application-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            messageId: message.id,
+            state: "completed",
+            error: null,
+        }]]);
+
+        callLog.length = 0;
+        gameStub.user = sender;
+        await socketHandler({
+            type: "damage-application-result",
+            senderId: "unknown",
+            recipientId: sender.id,
+            messageId: message.id,
+        });
+        assert.deepEqual(callsOf("finishRemoteDamageApplication"), []);
+
+        await socketHandler({
+            type: "damage-application-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            messageId: message.id,
+            state: "completed",
+            error: null,
+        });
+        assert.deepEqual(callsOf("finishRemoteDamageApplication"), [[message.id, {
+            type: "damage-application-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            messageId: message.id,
+            state: "completed",
+            error: null,
+        }]]);
     });
 
     await t.test("defense recalculation validates receiver, author, offense, and submit permission", async () => {

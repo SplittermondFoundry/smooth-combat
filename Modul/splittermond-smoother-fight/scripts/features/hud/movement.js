@@ -1,4 +1,8 @@
 import {
+    services,
+} from "../../core/services.js";
+
+import {
     movementTrackerState,
 } from "../../domain/combat/movement.js";
 
@@ -38,8 +42,24 @@ export function buildMovementTracker(context) {
         movementSection("sprint", t("SMOOTHER_FIGHT.HUD.TickActions.sprint.Name"), sprintLimit, state.sectionProgress.sprint, state),
     ].join("");
     const undoLabel = t("SMOOTHER_FIGHT.HUD.UndoMovement");
+    const reversal = services.getMovementReversalApplicationStatus?.(context.token) ?? { state: "idle", record: null };
+    const reversalBlocked = reversal.state !== "idle";
+    const reversalTitle = reversal.state === "completed"
+        ? t("SMOOTHER_FIGHT.HUD.AlreadyApplied")
+        : reversal.state === "applying"
+            ? t("SMOOTHER_FIGHT.HUD.OperationApplying")
+            : reversal.state === "uncertain"
+                ? t("SMOOTHER_FIGHT.HUD.OperationUncertain")
+                : undoLabel;
     const undoButton = state.moved > 0
-        ? `<button type="button" class="sf-movement-undo" data-sf-action="revert-movement" title="${escapeAttr(undoLabel)}" aria-label="${escapeAttr(undoLabel)}"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i><span>${escapeHtml(undoLabel)}</span></button>`
+        ? `<button type="button" class="sf-movement-undo ${reversalBlocked ? `is-${escapeAttr(reversal.state)}` : ""}" data-sf-action="revert-movement" title="${escapeAttr(reversalTitle)}" aria-label="${escapeAttr(reversalTitle)}" ${reversalBlocked ? "disabled" : ""}><i class="fa-solid fa-rotate-left" aria-hidden="true"></i><span>${escapeHtml(undoLabel)}</span></button>`
+        : "";
+    const reversalRecovery = reversal.state === "uncertain" && game.user?.isGM
+        ? `<div class="sf-operation-recovery-actions sf-movement-recovery-actions">
+            <span><i class="fa-solid fa-triangle-exclamation"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.OperationUncertain"))}</span>
+            <button type="button" data-sf-action="recover-movement" data-decision="retry"><i class="fa-solid fa-rotate-left"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.RetryOperation"))}</button>
+            <button type="button" data-sf-action="recover-movement" data-decision="complete"><i class="fa-solid fa-check"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MarkOperationCompleted"))}</button>
+        </div>`
         : "";
 
     return `<section class="sf-movement-tracker is-${escapeAttr(state.phase)}" aria-label="${escapeAttr(trackerLabel)}">
@@ -53,6 +73,7 @@ export function buildMovementTracker(context) {
             </div>
             ${undoButton ? `<div class="sf-movement-actions">${undoButton}</div>` : ""}
         </div>
+        ${reversalRecovery}
     </section>`;
 }
 

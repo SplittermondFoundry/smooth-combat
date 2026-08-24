@@ -2,6 +2,7 @@ import { services } from "../../core/services.js";
 
 import {
     fullyConsumedCost,
+    healthCostTotal,
     isOffensiveCombatMessage,
     parseStatusEffectLabel,
 } from "../../combat-rules.js";
@@ -9,6 +10,13 @@ import {
 import {
     MODULE_ID,
 } from "../../core/constants.js";
+
+import {
+    APPLICATION_STALE_AFTER_MS,
+    applicationStateTitle,
+    effectiveApplicationState,
+    nextApplicationRecord,
+} from "../../shared/application-state.js";
 
 import {
     cloneData,
@@ -20,6 +28,7 @@ import {
 } from "../../shared/values.js";
 
 const fumbleActionLocks = new Set();
+const staleFumbleActionTimers = new Map();
 
 export async function attachFumbleActions(message, renderedRoot = null, sourceMessageId = null, sourceItemId = null) {
     const existing = getFumbleData(message);
@@ -72,6 +81,7 @@ export function createFumbleData(message, contentOrRoot = message.content) {
         weaponDamageApplicationStarted: false,
         conditionsApplied: false,
         conditionsApplicationStarted: false,
+        applications: {},
     };
 }
 
@@ -170,6 +180,20 @@ export function decorateFumbleCard(content, fumble) {
 
 export function bindFumbleActions(message, html) {
     applyFumbleActionState(message, html);
+    for (const button of html.querySelectorAll("[data-sf-fumble-recovery]")) {
+        if (button.dataset.smootherFightBound) continue;
+        button.dataset.smootherFightBound = "true";
+        button.addEventListener("click", async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            try {
+                await recoverFumbleAction(message, button.dataset.sfFumbleKind, button.dataset.sfFumbleRecovery);
+            } catch (error) {
+                console.error(`${MODULE_ID} | Fumble recovery failed`, error);
+                ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+            }
+        });
+    }
     for (const button of html.querySelectorAll("[data-sf-fumble-action]")) {
         if (button.dataset.smootherFightBound) continue;
         button.dataset.smootherFightBound = "true";
@@ -197,13 +221,24 @@ function applyFumbleActionState(message, root) {
     if (!fumble) return;
     const actor = resolveFumbleActor(message, fumble);
     const allowed = Boolean(game.user.isGM || actor?.isOwner);
+    root.querySelectorAll(".sf-fumble-recovery-actions").forEach((element) => element.remove());
+    const uncertain = new Set();
     for (const button of root.querySelectorAll("[data-sf-fumble-action]")) {
         const action = button.dataset.sfFumbleAction;
-        const state = fumbleActionState(action);
-        const applied = Boolean(state && (fumble[state.applied] || fumble[state.started]));
-        button.disabled = applied || !allowed;
-        button.classList.toggle("is-applied", Boolean(applied));
-        if (applied) button.title = t("SMOOTHER_FIGHT.HUD.AlreadyApplied");
+        const definition = fumbleActionDefinition(action);
+        const state = getFumbleActionApplicationState(fumble, action);
+        const blocked = state !== "idle";
+        button.disabled = blocked || !allowed;
+        button.classList.toggle("is-applied", state === "completed");
+        button.classList.toggle("is-applying", state === "applying");
+        button.classList.toggle("is-uncertain", state === "uncertain");
+        button.title = applicationStateTitle(state, operationStateLabels());
+        if (state === "applying") scheduleStaleFumbleRender(message, fumble, definition);
+        if (state === "uncertain" && definition) uncertain.add(definition.key);
+    }
+    if (game.user.isGM && uncertain.size > 0) {
+        const container = root.querySelector(".sf-fumble-actions");
+        for (const key of uncertain) container?.insertAdjacentHTML("beforeend", fumbleRecoveryMarkup(key));
     }
 }
 
@@ -215,71 +250,186 @@ export async function handleFumbleAction(message, action) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.FumbleNotAllowed"));
         return;
     }
-    const state = fumbleActionState(action);
-    if (!state || fumble[state.applied] || fumble[state.started]) return;
-    const lockKey = `${message.id}:${state.applied}`;
+    const definition = fumbleActionDefinition(action);
+    if (!definition || getFumbleActionApplicationState(fumble, action) !== "idle") return;
+    const lockKey = message.id;
     if (fumbleActionLocks.has(lockKey)) return;
     fumbleActionLocks.add(lockKey);
     try {
-        await applyFumbleAction(message, actor, fumble, action, state);
+        await applyFumbleAction(message, actor, fumble, action, definition);
     } finally {
         fumbleActionLocks.delete(lockKey);
     }
 }
 
-async function applyFumbleAction(message, actor, fumble, action, state) {
-    const updated = { ...fumble, [state.started]: true };
-    const fumbleLabel = updated.kind === "fight"
+async function applyFumbleAction(message, actor, fumble, action, definition) {
+    const fumbleLabel = fumble.kind === "fight"
         ? t("SMOOTHER_FIGHT.HUD.CombatFumble")
         : t("SMOOTHER_FIGHT.HUD.MagicFumble");
-    const item = action === "weapon" ? actor.items?.get?.(updated.sourceItemId) : null;
+    const item = action === "weapon" ? actor.items?.get?.(fumble.sourceItemId) : null;
     if (action === "weapon" && (!item || !["weapon", "shield"].includes(item.type))) {
         throw new Error("Fumble weapon could not be resolved");
     }
     const selectedConditions = action.startsWith("condition:")
-        ? [updated.conditions[Number.parseInt(action.split(":")[1], 10)]].filter(Boolean)
-        : updated.conditions;
-    const actionable = (action === "ticks" && updated.ticks > 0)
-        || (action === "weapon" && updated.sourceItemId)
-        || (action === "damage" && updated.damage > 0)
+        ? [fumble.conditions[Number.parseInt(action.split(":")[1], 10)]].filter(Boolean)
+        : fumble.conditions;
+    const actionable = (action === "ticks" && fumble.ticks > 0)
+        || (action === "weapon" && fumble.sourceItemId)
+        || (action === "damage" && fumble.damage > 0)
         || ((action === "conditions" || action.startsWith("condition:")) && selectedConditions.length);
     if (!actionable) return;
 
-    // This durable write-ahead marker is the retry barrier if the completion write fails.
-    await services.setRequiredFlag(message, "fumble", updated);
+    const before = fumbleEffectSnapshot(actor, action, item);
+    let updated = await setFumbleActionApplicationState(message, fumble, definition, "applying");
     let notification = null;
-    if (action === "ticks") {
-        await actor.addTicks(updated.ticks, updated.tickMessage || fumbleLabel, false);
-        notification = t("SMOOTHER_FIGHT.HUD.FumbleTicksApplied", { ticks: updated.ticks, name: actor.name });
+    try {
+        if (action === "ticks") {
+            await actor.addTicks(updated.ticks, updated.tickMessage || fumbleLabel, false);
+            notification = t("SMOOTHER_FIGHT.HUD.FumbleTicksApplied", { ticks: updated.ticks, name: actor.name });
+        }
+        if (action === "weapon") {
+            const currentDamageLevel = Math.max(0, numericValue(item.system?.damageLevel));
+            const nextDamageLevel = Math.min(2, currentDamageLevel + 1);
+            await item.update({ "system.damageLevel": nextDamageLevel });
+            notification = t("SMOOTHER_FIGHT.HUD.FumbleWeaponDamageApplied", { item: item.name });
+        }
+        if (action === "damage") {
+            await actor.consumeCost("health", fullyConsumedCost(updated.damage), fumbleLabel);
+            notification = t("SMOOTHER_FIGHT.HUD.FumbleDamageApplied", { damage: updated.damage, name: actor.name });
+        }
+        if (action === "conditions" || action.startsWith("condition:")) {
+            await applyFumbleConditions(actor, selectedConditions);
+            notification = t("SMOOTHER_FIGHT.HUD.FumbleConditionsApplied", { name: actor.name });
+        }
+    } catch (error) {
+        const changed = fumbleEffectChanged(actor, action, item, before);
+        await persistFumbleFailureState(message, updated, definition, changed === false ? "idle" : "uncertain");
+        throw error;
     }
-    if (action === "weapon") {
-        const currentDamageLevel = Math.max(0, numericValue(item.system?.damageLevel));
-        const nextDamageLevel = Math.min(2, currentDamageLevel + 1);
-        await item.update({ "system.damageLevel": nextDamageLevel });
-        notification = t("SMOOTHER_FIGHT.HUD.FumbleWeaponDamageApplied", { item: item.name });
+    try {
+        updated = await setFumbleActionApplicationState(message, updated, definition, "completed");
+    } catch (error) {
+        await persistFumbleFailureState(message, updated, definition, "uncertain");
+        throw error;
     }
-    if (action === "damage") {
-        await actor.consumeCost("health", fullyConsumedCost(updated.damage), fumbleLabel);
-        notification = t("SMOOTHER_FIGHT.HUD.FumbleDamageApplied", { damage: updated.damage, name: actor.name });
-    }
-    if (action === "conditions" || action.startsWith("condition:")) {
-        await applyFumbleConditions(actor, selectedConditions);
-        notification = t("SMOOTHER_FIGHT.HUD.FumbleConditionsApplied", { name: actor.name });
-    }
-    updated[state.applied] = true;
-    await services.setRequiredFlag(message, "fumble", updated);
     if (notification) ui.notifications.info(notification);
     services.scheduleRender(0);
 }
 
-function fumbleActionState(action) {
-    if (action === "ticks") return { applied: "ticksApplied", started: "ticksApplicationStarted" };
-    if (action === "weapon") return { applied: "weaponDamageApplied", started: "weaponDamageApplicationStarted" };
-    if (action === "damage") return { applied: "damageApplied", started: "damageApplicationStarted" };
+function fumbleActionDefinition(action) {
+    if (action === "ticks") return { key: "ticks", applied: "ticksApplied", started: "ticksApplicationStarted" };
+    if (action === "weapon") return { key: "weapon", applied: "weaponDamageApplied", started: "weaponDamageApplicationStarted" };
+    if (action === "damage") return { key: "damage", applied: "damageApplied", started: "damageApplicationStarted" };
     if (action === "conditions" || String(action).startsWith("condition:")) {
-        return { applied: "conditionsApplied", started: "conditionsApplicationStarted" };
+        return { key: "conditions", applied: "conditionsApplied", started: "conditionsApplicationStarted" };
     }
     return null;
+}
+
+export function getFumbleActionApplicationState(fumbleOrMessage, action, now = Date.now()) {
+    const fumble = getFumbleData(fumbleOrMessage) ?? fumbleOrMessage;
+    const definition = fumbleActionDefinition(action);
+    if (!fumble || !definition) return "idle";
+    return effectiveApplicationState(fumble.applications?.[definition.key], {
+        legacyCompleted: Boolean(fumble[definition.applied]),
+        legacyStarted: Boolean(fumble[definition.started]),
+        now,
+    });
+}
+
+export async function recoverFumbleAction(message, action, decision) {
+    if (!game.user?.isGM || !["retry", "complete"].includes(decision)) return false;
+    const fumble = getFumbleData(message);
+    const definition = fumbleActionDefinition(action);
+    if (!fumble || !definition || getFumbleActionApplicationState(fumble, action) !== "uncertain") return false;
+    const state = decision === "complete" ? "completed" : "idle";
+    await setFumbleActionApplicationState(message, fumble, definition, state, { recoveredBy: game.user.id });
+    ui.notifications.info(t(decision === "complete"
+        ? "SMOOTHER_FIGHT.HUD.OperationMarkedCompleted"
+        : "SMOOTHER_FIGHT.HUD.OperationReset"));
+    services.scheduleRender(0);
+    return true;
+}
+
+async function setFumbleActionApplicationState(message, fumble, definition, state, details = {}) {
+    const updated = {
+        ...fumble,
+        applications: {
+            ...(fumble.applications ?? {}),
+            [definition.key]: nextApplicationRecord(fumble.applications?.[definition.key], state, details),
+        },
+        [definition.started]: state !== "idle",
+        [definition.applied]: state === "completed",
+    };
+    await services.setRequiredFlag(message, "fumble", updated);
+    if (state !== "applying") clearStaleFumbleRender(`${message.id}:${definition.key}`);
+    return updated;
+}
+
+async function persistFumbleFailureState(message, fumble, definition, state) {
+    try {
+        await setFumbleActionApplicationState(message, fumble, definition, state);
+    } catch (error) {
+        console.error(`${MODULE_ID} | Could not persist ${state} fumble application state`, error);
+    }
+}
+
+function fumbleEffectSnapshot(actor, action, item) {
+    if (action === "damage") return healthCostTotal(actor.system?.health);
+    if (action === "weapon") return numericValue(item?.system?.damageLevel);
+    if (action === "conditions" || action.startsWith("condition:")) {
+        return Array.from(actor.items ?? [])
+            .filter((candidate) => candidate.type === "statuseffect")
+            .map((candidate) => [candidate.id ?? candidate.uuid ?? candidate.name, candidate.name, numericValue(candidate.system?.level)])
+            .sort((left, right) => String(left[0]).localeCompare(String(right[0])));
+    }
+    const initiatives = Array.from(game.combat?.combatants ?? [])
+        .filter((combatant) => combatant.actorId === actor.id || combatant.actor?.uuid === actor.uuid)
+        .map((combatant) => [combatant.id, Number(combatant.initiative)]);
+    return initiatives.length > 0 ? initiatives : null;
+}
+
+function fumbleEffectChanged(actor, action, item, before) {
+    const after = fumbleEffectSnapshot(actor, action, item);
+    if (before === null || after === null) return null;
+    return JSON.stringify(after) !== JSON.stringify(before);
+}
+
+function operationStateLabels() {
+    return {
+        completed: t("SMOOTHER_FIGHT.HUD.AlreadyApplied"),
+        applying: t("SMOOTHER_FIGHT.HUD.OperationApplying"),
+        uncertain: t("SMOOTHER_FIGHT.HUD.OperationUncertain"),
+    };
+}
+
+function fumbleRecoveryMarkup(key) {
+    return `<div class="sf-operation-recovery-actions sf-fumble-recovery-actions">
+        <span><i class="fa-solid fa-triangle-exclamation"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.OperationUncertain"))}</span>
+        <button type="button" data-sf-fumble-recovery="retry" data-sf-fumble-kind="${escapeAttr(key)}"><i class="fa-solid fa-rotate-left"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.RetryOperation"))}</button>
+        <button type="button" data-sf-fumble-recovery="complete" data-sf-fumble-kind="${escapeAttr(key)}"><i class="fa-solid fa-check"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MarkOperationCompleted"))}</button>
+    </div>`;
+}
+
+function scheduleStaleFumbleRender(message, fumble, definition) {
+    const startedAt = Number(fumble.applications?.[definition?.key]?.startedAt);
+    if (!definition || !Number.isFinite(startedAt)) return;
+    const remaining = APPLICATION_STALE_AFTER_MS - (Date.now() - startedAt);
+    if (remaining <= 0) return;
+    const key = `${message.id}:${definition.key}`;
+    if (staleFumbleActionTimers.has(key)) return;
+    const timer = setTimeout(() => {
+        staleFumbleActionTimers.delete(key);
+        services.scheduleRender(0);
+    }, remaining);
+    timer.unref?.();
+    staleFumbleActionTimers.set(key, timer);
+}
+
+function clearStaleFumbleRender(key) {
+    const timer = staleFumbleActionTimers.get(key);
+    if (timer) clearTimeout(timer);
+    staleFumbleActionTimers.delete(key);
 }
 
 async function applyFumbleConditions(actor, conditions) {

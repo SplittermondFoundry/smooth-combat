@@ -28,5 +28,13 @@ export {
 } from "./actions.js";
 
 export {
+    getMovementReversalApplicationStatus,
+    getPreparationApplicationStatus,
+    recoverMovementReversalApplication,
+    recoverPreparationApplication,
+    resetCompletedMovementReversalApplication,
+} from "./applications.js";
+
+export {
     performTickAction,
 } from "./tick-actions.js";

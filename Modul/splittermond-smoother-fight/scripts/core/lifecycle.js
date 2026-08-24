@@ -7,6 +7,7 @@ import {
 } from "../combat-rules.js";
 
 import {
+    MODULE_ID,
     SOCKET,
 } from "./constants.js";
 
@@ -39,7 +40,10 @@ export function registerHooks() {
     Hooks.on("sightRefresh", () => services.scheduleRender(0));
     Hooks.on("updateToken", (token, changes) => {
         if (Object.hasOwn(changes ?? {}, "hidden")) services.scheduleRender(0);
-        if (hasTokenPositionUpdate(changes)) services.scheduleRenderAfterTokenMovement(token);
+        if (hasTokenPositionUpdate(changes)) {
+            void services.resetCompletedMovementReversalApplication(token);
+            services.scheduleRenderAfterTokenMovement(token);
+        }
     });
     Hooks.on("recordToken", () => {
         if (getSetting("movementTracking", true)) services.scheduleRender(0);
@@ -144,13 +148,41 @@ export function registerSocket() {
             return;
         }
 
+        if (payload.type === "damage-application-request" && payload.recipientId === game.user.id && game.user.isGM) {
+            const sender = game.users.get(payload.senderId);
+            const message = game.messages.get(payload.messageId);
+            let result = { state: "idle", error: "invalid" };
+            if (sender && message && services.isDamageMessage(message)) {
+                try {
+                    result = await services.applyRemoteDamageApplication(message, payload.actionData, sender);
+                } catch (error) {
+                    console.error(`${MODULE_ID} | Could not process remote damage application`, error);
+                    result = { state: "uncertain", error: "failed" };
+                }
+            }
+            game.socket.emit(SOCKET, {
+                type: "damage-application-result",
+                senderId: game.user.id,
+                recipientId: payload.senderId,
+                messageId: payload.messageId,
+                ...result,
+            });
+            return;
+        }
+
+        if (payload.type === "damage-application-result" && payload.recipientId === game.user.id) {
+            const sender = game.users.get(payload.senderId);
+            if (!sender?.isGM) return;
+            services.finishRemoteDamageApplication(payload.messageId, payload);
+            return;
+        }
+
         if (payload.type === "damage-application-completed" && payload.recipientId === game.user.id && game.user.isGM) {
             const sender = game.users.get(payload.senderId);
             const message = game.messages.get(payload.messageId);
             const actor = services.resolveActorUuid(payload.actorUuid) ?? services.resolveToken(payload.tokenUuid)?.actor ?? null;
             if (!sender || !message || !services.isDamageMessage(message) || !services.mayUserApplyDamageToActor(sender, actor)) return;
-            await services.setRequiredFlag(message, "damageApplicationCompleted", true);
-            services.recordCompletedDamageApplication(message.id);
+            await services.setDamageApplicationState(message, "completed", { initiatedBy: sender.id });
             services.scheduleRender(0);
             return;
         }

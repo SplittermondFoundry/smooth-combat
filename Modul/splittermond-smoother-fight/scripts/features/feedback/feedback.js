@@ -24,7 +24,6 @@ import {
 import {
     escapeAttr,
     getSetting,
-    t,
 } from "../../shared/values.js";
 
 export function announceMessageFeedback(message) {
@@ -103,53 +102,36 @@ export function installHealthCostFeedbackInterceptor() {
         const damageApplication = tracksHealth
             ? services.findPendingDamageApplicationForActor(this.uuid)
             : null;
-        const result = original.call(this, resource, cost, ...args);
+        let result;
+        try {
+            result = original.call(this, resource, cost, ...args);
+        } catch (error) {
+            if (damageApplication) {
+                damageApplication.completionPromises?.push(Promise.resolve({
+                    status: "failed",
+                    healthChanged: healthCostTotal(this.system?.health) !== previous,
+                    error,
+                }));
+            }
+            throw error;
+        }
         if (tracksHealth) {
-            const completion = Promise.resolve(result).then(async () => {
+            const completion = Promise.resolve(result).then(() => {
                 const current = healthCostTotal(this.system?.health);
-                if (damageApplication) await markDamageApplicationCompleted(damageApplication.messageId, this);
-                if (healthCostFeedbackKind(previous, current, true) !== "damageBlocked") return;
-                publishFeedback("damageBlocked", feedbackReferenceForActor(this));
-            }, () => {});
+                if (healthCostFeedbackKind(previous, current, true) === "damageBlocked") {
+                    publishFeedback("damageBlocked", feedbackReferenceForActor(this));
+                }
+                return { status: "completed", healthChanged: current !== previous, error: null };
+            }, (error) => ({
+                status: "failed",
+                healthChanged: healthCostTotal(this.system?.health) !== previous,
+                error,
+            }));
             if (damageApplication) damageApplication.completionPromises?.push(completion);
-            void completion.catch((error) => {
-                console.error(`${MODULE_ID} | Could not complete tracked damage application`, error);
-            });
         }
         return result;
     };
     Object.defineProperty(prototype, marker, { value: true });
-}
-
-async function markDamageApplicationCompleted(messageId, actor) {
-    if (!messageId || services.hasCompletedDamageApplication(messageId)) return;
-    const message = game.messages.get(messageId);
-    if (!message) {
-        ui.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.RequiredFlagFailed", { flag: "damageApplicationCompleted" }));
-        throw new Error(`Could not find damage message ${messageId} while persisting its completion`);
-    }
-
-    if (game.user.isGM || services.isOwnMessage(message)) {
-        await services.setRequiredFlag(message, "damageApplicationCompleted", true);
-        services.recordCompletedDamageApplication(messageId);
-        services.scheduleRender(0);
-        return;
-    }
-
-    const gm = services.getActivePrimaryGm();
-    if (!gm) {
-        ui.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.RequiredFlagFailed", { flag: "damageApplicationCompleted" }));
-        throw new Error(`No GM is available to persist damage completion for ${messageId}`);
-    }
-    const reference = feedbackReferenceForActor(actor);
-    game.socket.emit(SOCKET, {
-        type: "damage-application-completed",
-        senderId: game.user.id,
-        recipientId: gm.id,
-        messageId,
-        actorUuid: reference.actorUuid,
-        tokenUuid: reference.tokenUuid,
-    });
 }
 
 export function resolveActorUuid(uuid) {

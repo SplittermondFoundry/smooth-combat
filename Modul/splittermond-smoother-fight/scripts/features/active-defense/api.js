@@ -14,5 +14,7 @@ export {
 export {
     applyDefenseSplinterpointForUser,
     getDefenseSplinterpointActions,
+    getDefenseSplinterpointRecoveries,
+    recoverDefenseSplinterpointApplication,
     requestDefenseSplinterpoint,
 } from "./splinterpoints.js";

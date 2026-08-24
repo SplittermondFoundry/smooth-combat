@@ -321,6 +321,12 @@ class SmootherFightHud {
                 case "cancel-prepared-attack":
                     await services.requireOwner(context, () => services.cancelPreparedAttack(context));
                     break;
+                case "recover-preparation":
+                    await services.requireGm(() => services.recoverPreparationApplication(
+                        context.actor,
+                        target.dataset.decision
+                    ));
+                    break;
                 case "add-ticks":
                     await services.requireOwner(context, () => services.addCombatTicks(context, target.dataset.ticks));
                     break;
@@ -333,6 +339,12 @@ class SmootherFightHud {
                     break;
                 case "revert-movement":
                     await services.requireOwner(context, () => services.revertTokenMovement(context));
+                    break;
+                case "recover-movement":
+                    await services.requireGm(() => services.recoverMovementReversalApplication(
+                        context.token,
+                        target.dataset.decision
+                    ));
                     break;
                 case "select-personal-combatant":
                     selectPersonalCombatantFromMenu(hudContext, target.dataset.combatantId);
@@ -379,6 +391,13 @@ class SmootherFightHud {
                         game.messages.get(target.dataset.messageId),
                         target.dataset.splinterpointActorUuid
                     ) && target.isConnected) target.disabled = false;
+                    break;
+                case "recover-defense-splinterpoint":
+                    await services.requireGm(() => services.recoverDefenseSplinterpointApplication(
+                        game.messages.get(target.dataset.messageId),
+                        target.dataset.splinterpointActorUuid,
+                        target.dataset.decision
+                    ));
                     break;
                 case "toggle-equipped":
                     await services.requireOwner(context, () => {

@@ -267,6 +267,15 @@ async function applyEffectiveDefense(root, original, context, defenseValue, defe
             await created.delete?.();
         } catch (cleanupError) {
             console.debug(`${MODULE_ID} | Could not remove incomplete attack successor ${created.id}`, cleanupError);
+            if (error && typeof error === "object") {
+                error.successorCleanupFailed = true;
+                error.createdMessageId = created.id;
+            } else {
+                const transactionError = new Error("Attack successor cleanup failed", { cause: error });
+                transactionError.successorCleanupFailed = true;
+                transactionError.createdMessageId = created.id;
+                throw transactionError;
+            }
         }
         throw error;
     }

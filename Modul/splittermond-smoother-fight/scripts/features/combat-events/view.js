@@ -316,22 +316,29 @@ function removeLeadingText(element, length) {
 
 function addDefenseNumbingDamageAction(element, message, damage) {
     const actor = services.resolveSpeakerActor(message);
-    const context = services.getMessageContext(message) ?? {};
     const allowed = Boolean(actor && (game.user.isGM || actor.isOwner));
-    const applied = Boolean(context.numbingDamageApplied || context.numbingDamageApplicationStarted);
+    const state = services.getNumbingDamageApplicationState(message);
+    const blocked = state !== "idle";
     const actions = document.createElement("div");
     actions.className = "sf-defense-consequence-actions";
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `sf-defense-damage-action ${allowed ? "is-own-defense-damage" : ""} ${applied ? "is-applied" : ""}`.trim();
+    button.className = `sf-defense-damage-action ${allowed ? "is-own-defense-damage" : ""} ${state === "completed" ? "is-applied" : blocked ? `is-${state}` : ""}`.trim();
     button.dataset.sfDefenseNumbingDamage = String(damage);
-    button.disabled = applied || !allowed;
-    button.title = applied ? t("SMOOTHER_FIGHT.HUD.AlreadyApplied") : "";
+    button.disabled = blocked || !allowed;
+    button.title = state === "completed"
+        ? t("SMOOTHER_FIGHT.HUD.AlreadyApplied")
+        : state === "applying"
+            ? t("SMOOTHER_FIGHT.HUD.DamageApplying")
+            : state === "uncertain"
+                ? t("SMOOTHER_FIGHT.HUD.DamageApplicationUncertain")
+                : "";
     button.innerHTML = `<i class="fa-solid fa-heart-crack"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyDefenseNumbingDamage", {
         damage,
         name: actor?.name ?? message.speaker?.alias ?? "–",
     }))}`;
     actions.append(button);
+    if (state === "uncertain") services.addDamageRecoveryActions(actions, "numbing");
     element.append(actions);
 }
 

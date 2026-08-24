@@ -7,5 +7,6 @@ export {
     getFumbleData,
     handleFumbleAction,
     isFumbleTableMessage,
+    recoverFumbleAction,
     resolveFumbleSourceItemId,
 } from "./fumbles.js";

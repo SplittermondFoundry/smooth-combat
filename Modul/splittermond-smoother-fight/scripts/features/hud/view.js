@@ -410,6 +410,7 @@ function buildPersonalActionBar(actor, leadingControl = "", meleeAttackControl =
 async function buildActionBar(context) {
     const actor = context.actor;
     const defenseAlert = services.hasPendingActiveDefense(context);
+    const preparationStatus = services.getPreparationApplicationStatus?.(actor) ?? { state: "idle", record: null };
     const preparedSpellId = actor.getFlag?.("splittermond", "preparedSpell");
     const { favoriteSkills, skillControlMarkup } = getSkillActionData(actor);
     const spells = [...(actor.spells ?? [])].sort((a, b) =>
@@ -420,6 +421,7 @@ async function buildActionBar(context) {
     const spellLabel = `${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells})`;
     const attackControlMarkup = await buildAttackControlMarkup(actor);
     return `<nav class="sf-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
+        ${preparationApplicationMarkup(preparationStatus)}
         ${skillControlMarkup}
         ${attackControlMarkup}
         ${preparedSpell ? preparedSpellMenu(preparedSpell, availableSpells) : actionMenu("fa-solid fa-wand-sparkles", spellLabel, spells.map((spell) => {
@@ -448,6 +450,20 @@ async function buildActionBar(context) {
         </div>
         ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
     </nav>`;
+}
+
+function preparationApplicationMarkup({ state, record }) {
+    if (!record || !["applying", "uncertain"].includes(state)) return "";
+    const text = t(state === "applying"
+        ? "SMOOTHER_FIGHT.HUD.OperationApplying"
+        : "SMOOTHER_FIGHT.HUD.OperationUncertain");
+    const recovery = state === "uncertain" && game.user?.isGM
+        ? `<button type="button" data-sf-action="recover-preparation" data-decision="retry"><i class="fa-solid fa-rotate-left"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.RetryOperation"))}</button>
+            <button type="button" data-sf-action="recover-preparation" data-decision="complete"><i class="fa-solid fa-check"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MarkOperationCompleted"))}</button>`
+        : "";
+    return `<div class="sf-operation-recovery-actions sf-preparation-application is-${escapeAttr(state)}">
+        <span><i class="fa-solid ${state === "applying" ? "fa-spinner fa-spin" : "fa-triangle-exclamation"}"></i>${escapeHtml(text)}</span>${recovery}
+    </div>`;
 }
 
 async function buildAttackControlMarkup(actor, { meleeOnly = false } = {}) {

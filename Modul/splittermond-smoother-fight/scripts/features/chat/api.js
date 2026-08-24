@@ -5,6 +5,14 @@ export {
 } from "./actions.js";
 
 export {
+    addDamageRecoveryActions,
+    applyRemoteDamageApplication,
+    finishRemoteDamageApplication,
+    getNumbingDamageApplicationState,
+    setDamageApplicationState,
+} from "./damage-application.js";
+
+export {
     isDiceAnimationPending,
     onCreateChatMessage,
     onUpdateChatMessage,

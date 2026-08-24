@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "46ab96bc274d1779670869b74a804f729e2c992a6d128c501d5837c83fcb88e7",
+        "b1aa2e5e2566e014d80acf4529feefd8ed406fbb590a13ebb9603371e4767624",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -152,7 +152,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "238a26566f7ea22e0c4dce3bd733edbd8ed2a8c1beafab34fdf5558afaefff41",
+        "b3a2259e8db4693a22f0e47551b97066a9527bc3e2434d39f0809053bcd91f83",
     );
 });
 

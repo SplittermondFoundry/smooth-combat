@@ -9,7 +9,6 @@ import {
     mayViewActorResources,
     mayViewTargetDifficulty,
     requiresRollManagementPermission,
-    tickAdvanceConfirmed,
 } from "../../combat-rules.js";
 
 import {
@@ -18,10 +17,33 @@ import {
 } from "../../core/constants.js";
 
 import {
+    escapeAttr,
     escapeHtml,
     localizeSystem,
     t,
 } from "../../shared/values.js";
+
+import {
+    addDamageRecoveryActions,
+    applyDamageToLinkedTarget,
+    applyDefenseNumbingDamage,
+    damageApplicationTitle,
+    getDamageApplicationState,
+    isDamageApplicationAction,
+    isDamageApplicationBlocked,
+    isDamageApplicationCompleted,
+    recoverDamageApplication,
+    requestRemoteDamageApplication,
+    resolveDamageApplicationTarget,
+    validateLinkedDamageTarget,
+    withTrackedDamageApplication,
+} from "./damage-application.js";
+
+import {
+    advanceLegacyChatTicks,
+    recoverLegacyTickApplication,
+    synchronizeLegacyTickActionState,
+} from "./legacy-ticks.js";
 
 function primaryTargetTokenUuid(context) {
     return context?.primaryTargetTokenUuid ?? context?.targetTokenUuid ?? null;
@@ -31,17 +53,37 @@ function primaryTargetActorUuid(context) {
     return context?.primaryTargetActorUuid ?? context?.targetActorUuid ?? null;
 }
 
-const damageApplicationLocks = new Set();
-const defenseNumbingDamageLocks = new Set();
-
 export async function handleChatCardAction(event, button) {
     const messageElement = button.closest(".sf-chat-message");
     const message = game.messages.get(messageElement?.dataset.messageId);
     if (!message || button.disabled) return;
+    const fumbleRecovery = button.dataset.sfFumbleRecovery;
+    if (fumbleRecovery) {
+        event.preventDefault();
+        await services.recoverFumbleAction(message, button.dataset.sfFumbleKind, fumbleRecovery);
+        return;
+    }
+    const legacyTickRecovery = button.dataset.sfLegacyTickRecovery;
+    if (legacyTickRecovery) {
+        event.preventDefault();
+        await recoverLegacyTickApplication(message, legacyTickRecovery);
+        return;
+    }
+    const damageRecovery = button.dataset.sfDamageRecovery;
+    if (damageRecovery) {
+        event.preventDefault();
+        await recoverDamageApplication(message, damageRecovery, button.dataset.sfDamageKind);
+        return;
+    }
     const defenseNumbingDamage = Number.parseInt(button.dataset.sfDefenseNumbingDamage ?? "", 10);
     if (Number.isFinite(defenseNumbingDamage) && defenseNumbingDamage > 0) {
         event.preventDefault();
-        await applyDefenseNumbingDamage(message, defenseNumbingDamage);
+        try {
+            await applyDefenseNumbingDamage(message, defenseNumbingDamage);
+        } catch (error) {
+            console.error(`${MODULE_ID} | Defense stun damage failed`, error);
+            ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+        }
         return;
     }
     const fumbleAction = button.dataset.sfFumbleAction;
@@ -127,7 +169,9 @@ export async function handleChatCardAction(event, button) {
         const action = localAction || remoteAction;
         const actionData = { ...button.dataset, action };
         if (localAction && String(action).toLocaleLowerCase() === "applydamagetousertargets") {
-            await withTrackedDamageApplication(message, () => applyDamageToLinkedTarget(message, actionData));
+            const target = validateLinkedDamageTarget(message, game.user, true);
+            if (!target) return;
+            await withTrackedDamageApplication(message, () => applyDamageToLinkedTarget(message, actionData, target));
             services.scheduleRender();
             return;
         }
@@ -141,13 +185,10 @@ export async function handleChatCardAction(event, button) {
                 return;
             }
             if (isDamageApplicationAction(action)) {
-                if (damageApplicationLocks.has(message.id) || isDamageApplicationCompleted(message)) return;
-                damageApplicationLocks.add(message.id);
-                try {
-                    await services.setRequiredFlag(message, "damageApplicationStarted", true);
-                } finally {
-                    damageApplicationLocks.delete(message.id);
-                }
+                if (isDamageApplicationBlocked(message)) return;
+                requestRemoteDamageApplication(message, actionData);
+                services.scheduleRender();
+                return;
             }
             game.socket.emit(SYSTEM_SOCKET, {
                 type: "chatAction",
@@ -190,82 +231,6 @@ function clearPendingDamageRoll(messageId) {
     services.deletePendingDamageRollTimer(messageId);
 }
 
-async function withTrackedDamageApplication(message, callback, action = "applyDamageToUserTargets") {
-    if (!isDamageApplicationAction(action)) return callback();
-    if (damageApplicationLocks.has(message.id) || isDamageApplicationCompleted(message)) return;
-    damageApplicationLocks.add(message.id);
-    let application = null;
-    try {
-        await services.setRequiredFlag(message, "damageApplicationStarted", true);
-        application = {
-            messageId: message.id,
-            actorUuids: damageApplicationActorUuids(message, action),
-            completionPromises: [],
-        };
-        services.addPendingDamageApplication(application);
-        const result = await callback();
-        await Promise.all(application.completionPromises);
-        return result;
-    } finally {
-        if (application) services.removePendingDamageApplication(application);
-        damageApplicationLocks.delete(message.id);
-    }
-}
-
-function damageApplicationActorUuids(message, action) {
-    const actorUuids = new Set();
-    const normalized = String(action ?? "").trim().toLocaleLowerCase();
-    if (normalized === "applydamagetotargets") {
-        for (const target of game.user?.targets ?? []) {
-            const actorUuid = target?.document?.actor?.uuid ?? target?.actor?.uuid;
-            if (actorUuid) actorUuids.add(actorUuid);
-        }
-    }
-    const linkedTarget = resolveDamageApplicationTarget(message);
-    if (linkedTarget?.actor?.uuid) actorUuids.add(linkedTarget.actor.uuid);
-    return actorUuids;
-}
-
-function isDamageApplicationAction(action) {
-    return ["applydamagetotargets", "applydamagetousertargets", "applydamagetoself"].includes(
-        String(action ?? "").trim().toLocaleLowerCase()
-    );
-}
-
-async function applyDefenseNumbingDamage(message, fallbackDamage) {
-    if (defenseNumbingDamageLocks.has(message.id)) return;
-    const actor = services.resolveSpeakerActor(message);
-    if (!actor || !(game.user.isGM || actor.isOwner)) {
-        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseDamageNotAllowed"));
-        return;
-    }
-    const context = services.getMessageContext(message) ?? {};
-    if (context.numbingDamageApplied) return;
-    const damage = Math.max(0, Number.parseInt(context.numbingDamage ?? fallbackDamage, 10) || 0);
-    if (!damage) return;
-
-    if (context.numbingDamageApplicationStarted) return;
-    defenseNumbingDamageLocks.add(message.id);
-    try {
-        await services.setRequiredFlag(message, "context", {
-            ...context,
-            numbingDamage: damage,
-            numbingDamageApplicationStarted: true,
-        });
-        await actor.consumeCost("health", String(damage), t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageSource"));
-        await services.setRequiredFlag(message, "context", {
-            ...context,
-            numbingDamage: damage,
-            numbingDamageApplicationStarted: true,
-            numbingDamageApplied: true,
-        });
-        ui.notifications.info(t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageApplied", { damage, name: actor.name }));
-        services.scheduleRender(0);
-    } finally {
-        defenseNumbingDamageLocks.delete(message.id);
-    }
-}
-
 function isCombatFumbleRollControl(control) {
     const rollType = String(control?.dataset?.rollType ?? control?.dataset?.rolltype ?? "").toLocaleLowerCase();
     const action = String(control?.dataset?.localaction ?? control?.dataset?.localAction ?? "").toLocaleLowerCase();
@@ -299,108 +264,25 @@ function isLegacySplinterpointAction(control) {
     return Boolean(control?.matches?.(".use-splinterpoint"));
 }
 
-async function advanceLegacyChatTicks(message, button) {
-    const alreadyStarted = message.getFlag?.(MODULE_ID, "legacyTickAdvanceStarted")
-        ?? message.flags?.[MODULE_ID]?.legacyTickAdvanceStarted;
-    const alreadyApplied = message.getFlag?.(MODULE_ID, "legacyTickAdvanceApplied")
-        ?? message.flags?.[MODULE_ID]?.legacyTickAdvanceApplied;
-    if (services.hasPendingLegacyTickMessage(message.id) || alreadyStarted || alreadyApplied) return;
-    const actor = services.resolveSpeakerActor(message);
-    const ticks = Number(button.dataset.ticks);
-    const mayAdvance = Boolean(game.user.isGM || actor?.testUserPermission?.(game.user, "OWNER") || actor?.isOwner);
-    if (!actor || !Number.isFinite(ticks) || ticks < 1 || !mayAdvance) {
-        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.NoOwner"));
-        return;
-    }
-
-    const combatant = resolveMessageSpeakerCombatant(message, actor);
-    const previousInitiative = Number(combatant?.initiative);
-    services.addPendingLegacyTickMessage(message.id);
-    try {
-        await services.setRequiredFlag(message, "legacyTickAdvanceStarted", true);
-        await actor.addTicks(ticks, button.dataset.message || undefined);
-        const currentCombatant = game.combat?.combatants?.get?.(combatant?.id) ?? combatant;
-        if (tickAdvanceConfirmed(previousInitiative, currentCombatant?.initiative)) {
-            await services.setRequiredFlag(message, "legacyTickAdvanceApplied", true);
-        } else {
-            await services.setRequiredFlag(message, "legacyTickAdvanceStarted", false);
-        }
-        services.scheduleRender(0);
-    } finally {
-        services.deletePendingLegacyTickMessage(message.id);
-    }
-}
-
-function resolveMessageSpeakerCombatant(message, actor = services.resolveSpeakerActor(message)) {
-    const combat = game.combat;
-    if (!combat) return null;
-    const context = services.getMessageContext(message);
-    const token = services.resolveToken(
-        (services.isDefenseMessage(message) ? context?.defenderTokenUuid : context?.attackerTokenUuid)
-        ?? services.speakerTokenUuid(message)
-    );
-    return Array.from(combat.combatants ?? []).find((combatant) =>
-        (token?.uuid && services.tokenUuid(services.resolveCombatantToken(combatant)) === token.uuid)
-        || (token?.id && combatant.tokenId === token.id)
-    ) ?? Array.from(combat.combatants ?? []).find((combatant) => combatant.actorId === actor?.id) ?? null;
-}
-
-async function applyDamageToLinkedTarget(message, actionData) {
-    const target = resolveDamageApplicationTarget(message);
-    const tokenObject = target?.object ?? canvas?.tokens?.get(target?.id);
-    if (!target || !tokenObject) {
-        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageTargetMissing"));
-        return;
-    }
-    if (!(game.user.isGM || target.actor?.testUserPermission?.(game.user, "OWNER"))) {
-        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageTargetNotOwned"));
-        return;
-    }
-
-    await services.withTemporarySystemTargets([target], () =>
-        message.system.handleGenericAction({ ...actionData, action: "applyDamageToTargets" })
-    );
-}
-
-function resolveDamageApplicationTarget(message) {
-    const directTargetUuid = primaryTargetTokenUuid(services.getMessageContext(message));
-    if (directTargetUuid) {
-        const directTarget = services.resolveToken(directTargetUuid);
-        return directTarget && (game.user.isGM || !directTarget.hidden) ? directTarget : null;
-    }
-
-    const hudContext = services.getHudContext();
-    if (!hudContext) return null;
-    const group = services.collectCombatEventGroups(hudContext).find((candidate) =>
-        candidate.damages.some((damage) => damage.id === message.id)
-    );
-    const attackTargetUuid = primaryTargetTokenUuid(services.getMessageContext(group?.primary));
-    if (attackTargetUuid) {
-        const attackTarget = services.resolveToken(attackTargetUuid);
-        return attackTarget && (game.user.isGM || !attackTarget.hidden) ? attackTarget : null;
-    }
-
-    const speakerActor = services.resolveSpeakerActor(message);
-    const sameActiveActor = speakerActor?.id && speakerActor.id === hudContext.actor?.id;
-    return sameActiveActor ? hudContext.target : null;
-}
-
 function addEventDefenseActions(element, message) {
     if (!isOffensiveCombatMessage(message)) return;
     const context = services.getMessageContext(message);
     if (!message.system?.checkReport?.succeeded && !context?.recalculatedFrom) return;
     if (context?.supersededBy) return;
+    const splinterpointRecoveries = services.getDefenseSplinterpointRecoveries(message, game.user);
     const target = services.resolveToken(primaryTargetTokenUuid(context));
-    if (!target?.actor) return;
+    if (!target?.actor && !splinterpointRecoveries.length) return;
     const attempted = new Set(context?.attemptedDefenseActorUuids ?? []);
     const mayDefendTarget = Boolean(
+        target?.actor
+        &&
         context?.recalculatedFrom
         && !attempted.has(target.actor.uuid)
         && (game.user.isGM || target.actor.isOwner)
     );
-    const mayDefendOther = services.getEligibleDefenderChoices(message, game.user).length > 0;
+    const mayDefendOther = Boolean(target?.actor && services.getEligibleDefenderChoices(message, game.user).length > 0);
     const splinterpointActions = services.getDefenseSplinterpointActions(message, game.user);
-    if (!mayDefendTarget && !mayDefendOther && !splinterpointActions.length) return;
+    if (!mayDefendTarget && !mayDefendOther && !splinterpointActions.length && !splinterpointRecoveries.length) return;
 
     let actions = element.querySelector(".sf-promoted-actions");
     if (!actions) {
@@ -451,6 +333,15 @@ function addEventDefenseActions(element, message) {
         button.innerHTML = `<i class="fa-solid fa-star"></i>${escapeHtml(label)}`;
         actions.append(button);
     }
+    for (const application of splinterpointRecoveries) {
+        const actor = services.resolveActorUuid(application.spenderActorUuid);
+        const recovery = document.createElement("div");
+        recovery.className = "sf-operation-recovery-actions sf-splinterpoint-recovery-actions";
+        recovery.innerHTML = `<span><i class="fa-solid fa-triangle-exclamation"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SplinterpointApplicationUncertain", { name: actor?.name ?? application.spenderActorUuid }))}</span>
+            <button type="button" class="splittermond-chat-action" data-sf-action="recover-defense-splinterpoint" data-decision="retry" data-message-id="${escapeAttr(message.id)}" data-splinterpoint-actor-uuid="${escapeAttr(application.spenderActorUuid)}"><i class="fa-solid fa-rotate-left"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.RetryOperation"))}</button>
+            <button type="button" class="splittermond-chat-action" data-sf-action="recover-defense-splinterpoint" data-decision="complete" data-message-id="${escapeAttr(message.id)}" data-splinterpoint-actor-uuid="${escapeAttr(application.spenderActorUuid)}"><i class="fa-solid fa-check"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MarkOperationCompleted"))}</button>`;
+        actions.append(recovery);
+    }
 }
 
 export function enforceChatPermissions(root, hudContext) {
@@ -498,18 +389,6 @@ export function enforceChatPermissions(root, hudContext) {
         element.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action, .add-tick[data-ticks])), .sf-promoted-actions:not(:has(.splittermond-chat-action, .add-tick[data-ticks]))").forEach((container) => container.remove());
         element.querySelectorAll(".sf-promoted-degree-options:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
         element.querySelectorAll(".sf-promoted-controls:not(:has(.splittermond-chat-action, .add-tick[data-ticks]))").forEach((container) => container.remove());
-    }
-}
-
-function synchronizeLegacyTickActionState(element, message) {
-    const applied = message?.getFlag?.(MODULE_ID, "legacyTickAdvanceApplied")
-        ?? message?.flags?.[MODULE_ID]?.legacyTickAdvanceApplied;
-    const started = message?.getFlag?.(MODULE_ID, "legacyTickAdvanceStarted")
-        ?? message?.flags?.[MODULE_ID]?.legacyTickAdvanceStarted;
-    if (!applied && !started) return;
-    for (const button of element.querySelectorAll(".add-tick[data-ticks]")) {
-        button.disabled = true;
-        button.classList.add("is-applied");
     }
 }
 
@@ -588,17 +467,18 @@ function decorateEventActionButtons(element, message) {
         )),
         hasPendingDamageApplication,
     });
-    const damageApplicationCompleted = isDamageApplicationCompleted(message);
+    const damageApplicationState = getDamageApplicationState(message);
+    const damageApplicationBlocked = damageApplicationState !== "idle";
     if (ownsSpeaker && actionHighlight.degrees) {
         degreeOptions?.classList.add("is-next-degree-options");
         element.querySelector(".degree-of-success")?.classList.add("has-next-open-degrees");
     }
     for (const button of buttons) {
         const action = String(button.dataset.action ?? button.dataset.localaction ?? button.dataset.localAction ?? "").toLocaleLowerCase();
-        if (damageApplicationCompleted && isDamageApplicationAction(action)) {
+        if (damageApplicationBlocked && isDamageApplicationAction(action)) {
             button.disabled = true;
-            button.classList.add("is-applied");
-            button.title = t("SMOOTHER_FIGHT.HUD.AlreadyApplied");
+            button.classList.add(damageApplicationState === "completed" ? "is-applied" : `is-${damageApplicationState}`);
+            button.title = damageApplicationTitle(damageApplicationState);
         }
         if (isFocusCostControl(button) && ownsSpeaker && actionHighlight.focus && isUsableActionControl(button)) {
             button.classList.add("is-next-focus-cost");
@@ -615,13 +495,16 @@ function decorateEventActionButtons(element, message) {
             }
         }
         if (isCombatFumbleRollControl(button) && ownsSpeaker) button.classList.add("is-own-fumble-roll");
-        if (action === "applydamagetousertargets" && game.user?.isGM && !damageApplicationCompleted) {
+        if (action === "applydamagetousertargets" && game.user?.isGM && !damageApplicationBlocked) {
             button.classList.add("is-gm-target-application");
         }
-        if (!damageApplicationCompleted && (action === "applydamagetoself" || action === "applydamagetousertargets")) {
+        if (!damageApplicationBlocked && (action === "applydamagetoself" || action === "applydamagetousertargets")) {
             const target = resolveDamageApplicationTarget(message);
             if (target && services.isCurrentUserTarget(target)) button.classList.add("is-self-target");
         }
+    }
+    if (services.isDamageMessage(message) && damageApplicationState === "uncertain") {
+        addDamageRecoveryActions(element, "generic");
     }
 }
 
@@ -632,24 +515,6 @@ function getAssociatedDamageMessages(element, message) {
     return Array.from(group.querySelectorAll(".sf-associated-card.is-damage .sf-chat-message[data-message-id]"))
         .map((damageElement) => game.messages.get(damageElement.dataset.messageId))
         .filter((damageMessage) => damageMessage && services.isDamageMessage(damageMessage));
-}
-
-function isDamageApplicationCompleted(message) {
-    return Boolean(
-        message
-        && (services.hasCompletedDamageApplication(message.id)
-            || message.getFlag?.(MODULE_ID, "damageApplicationCompleted")
-            || message.flags?.[MODULE_ID]?.damageApplicationCompleted
-            || hasDamageApplicationStarted(message))
-    );
-}
-
-function hasDamageApplicationStarted(message) {
-    return Boolean(
-        message
-        && (message.getFlag?.(MODULE_ID, "damageApplicationStarted")
-            || message.flags?.[MODULE_ID]?.damageApplicationStarted)
-    );
 }
 
 export function isMessageSpeakerAssignedToCurrentUser(message) {

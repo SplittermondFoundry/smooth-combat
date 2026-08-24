@@ -9,7 +9,9 @@ import {
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/active-defense.js";
 import {
     applyDefenseSplinterpointForUser,
+    getDefenseSplinterpointApplicationStatus,
     getDefenseSplinterpointActions,
+    recoverDefenseSplinterpointApplication,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/splinterpoints.js";
 import { recreateOffenseAfterSplinterpoint } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/recalculation.js";
 import { activeDefenseState } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/state.js";
@@ -587,6 +589,8 @@ test("VTD splinterpoints, resonance, and active defense remain additive in every
         assert.equal(latest.system.checkReport.succeeded, false);
         assert.equal(target.splinterpoints.value, 1);
         assert.equal(resonator.splinterpoints.value, 1);
+        assert.equal(getDefenseSplinterpointApplicationStatus(root, target.uuid).state, "completed");
+        assert.equal(getDefenseSplinterpointApplicationStatus(root, resonator.uuid).state, "completed");
         assert.deepEqual(harness.splinterpointCards.map(({ kind, defenseValue, targetName }) => ({
             kind,
             defenseValue,
@@ -713,12 +717,54 @@ test("a failed attack-card transaction refunds the spent VTD splinterpoint", asy
     assert.equal(target.splinterpoints.value, 2);
     assert.equal(harness.splinterpointCards.length, 0);
     assert.equal(root.flags[MODULE_ID].context.vtdSplinterpointActorUuid, undefined);
+    assert.equal(getDefenseSplinterpointApplicationStatus(root, target.uuid).state, "idle");
     assert.deepEqual(
         Array.from(harness.messages.values())
             .filter((message) => message.type === "attackRollMessage")
             .map((message) => message.id),
         [root.id]
     );
+});
+
+test("a failed splinterpoint refund becomes uncertain until a GM resolves it", async (t) => {
+    resetHarness();
+    t.mock.method(console, "error", () => {});
+    const target = createSplinterpointActor("target-uncertain-refund", { points: 2 });
+    let actorUpdates = 0;
+    const updateActor = target.update.bind(target);
+    target.update = async (changes) => {
+        actorUpdates += 1;
+        if (actorUpdates === 2) throw new Error("refund rejected");
+        return updateActor(changes);
+    };
+    harness.tokens.set("Token.target-uncertain-refund", {
+        uuid: "Token.target-uncertain-refund",
+        name: "Target",
+        actor: target,
+    });
+    game.combat = { combatants: [] };
+    const root = createAttack("attack-uncertain-refund", attackReport(), {
+        primaryTargetTokenUuid: "Token.target-uncertain-refund",
+    });
+    root.content = '<button data-localaction="activeDefense">Abwehr</button>';
+    harness.rejectSetFlag = ({ message, key, value }) => Boolean(
+        message.id === root.id && key === "context" && value?.supersededBy
+    );
+
+    await assert.rejects(
+        applyDefenseSplinterpointForUser(root, target.uuid, game.user),
+        /Could not persist required context flag/u
+    );
+
+    assert.equal(target.splinterpoints.value, 1);
+    assert.equal(getDefenseSplinterpointApplicationStatus(root, target.uuid).state, "uncertain");
+    assert.deepEqual(getDefenseSplinterpointActions(root, game.user), []);
+
+    assert.equal(await recoverDefenseSplinterpointApplication(root, target.uuid, "retry"), true);
+    assert.equal(getDefenseSplinterpointApplicationStatus(root, target.uuid).state, "idle");
+    assert.deepEqual(getDefenseSplinterpointActions(root, game.user), [
+        { kind: "primary", actorUuid: target.uuid },
+    ]);
 });
 
 test("dialog nonces isolate stale and cancelled active-defense workflows", async () => {

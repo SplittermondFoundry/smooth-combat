@@ -26,6 +26,12 @@ import {
     t,
 } from "../../shared/values.js";
 
+import {
+    clearPreparationApplication,
+    prepareCombatAction,
+    revertTokenMovementApplication,
+} from "./applications.js";
+
 export async function performAttack(context, attackId, rollOptions = {}) {
     context = liveRuntimeActionContext(context);
     if (!context) return false;
@@ -49,23 +55,27 @@ export async function performAttack(context, attackId, rollOptions = {}) {
                 [context.target],
                 () => context.actor.rollAttack(attackId, rollOptions)
             );
-            if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
+            if (success && readiness.prepared) await clearPreparationApplication(context.actor, "attack");
+            else if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
             completed = Boolean(success);
         } catch (error) {
             combatActionState.pendingOffenseKinds.delete(context.actor.id);
             throw error;
         }
     } else {
-        await context.actor.addTicks(await getAttackSpeed(attack), `${localizeSystem("splittermond.attack", "Angriff")}: ${attack.name}`);
-        await context.actor.setFlag("splittermond", "preparedAttack", attackId);
-        completed = true;
+        completed = await prepareCombatAction(context, {
+            kind: "attack",
+            itemId: attackId,
+            ticks: await getAttackSpeed(attack),
+            label: `${localizeSystem("splittermond.attack", "Angriff")}: ${attack.name}`,
+        });
     }
     services.scheduleRender();
     return completed;
 }
 
 export async function cancelPreparedAttack(context) {
-    await context.actor.setFlag("splittermond", "preparedAttack", null);
+    await clearPreparationApplication(context.actor, "attack");
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.AttackCancelled"));
     services.scheduleRender(0);
 }
@@ -143,7 +153,7 @@ export async function performSpell(context, spellId) {
         });
         try {
             const success = await services.withTemporarySystemTargets([context.target], () => context.actor.rollSpell(spellId));
-            if (success) await context.actor.setFlag("splittermond", "preparedSpell", null);
+            if (success) await clearPreparationApplication(context.actor, "spell");
         } catch (error) {
             combatActionState.pendingOffenseKinds.delete(context.actor.id);
             throw error;
@@ -155,11 +165,12 @@ export async function performSpell(context, spellId) {
             const ticks = typeof spell.castDuration?.inTicks === "function"
                 ? await spell.castDuration.inTicks()
                 : numericValue(spell.castDuration);
-            await context.actor.addTicks(
+            await prepareCombatAction(context, {
+                kind: "spell",
+                itemId: spellId,
                 ticks,
-                `${localizeSystem("splittermond.castDuration", "Zauberdauer")}: ${spell.name}`
-            );
-            await context.actor.setFlag("splittermond", "preparedSpell", spellId);
+                label: `${localizeSystem("splittermond.castDuration", "Zauberdauer")}: ${spell.name}`,
+            });
         } finally {
             combatActionState.preparingSpellId = null;
         }
@@ -168,7 +179,7 @@ export async function performSpell(context, spellId) {
 }
 
 export async function cancelPreparedSpell(context) {
-    await context.actor.setFlag("splittermond", "preparedSpell", null);
+    await clearPreparationApplication(context.actor, "spell");
     combatActionState.preparingSpellId = null;
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.SpellCancelled"));
     services.scheduleRender(0);
@@ -253,13 +264,7 @@ export async function resumeCombatant(context) {
 }
 
 export async function revertTokenMovement(context) {
-    const token = context.token?.document ?? context.token;
-    if (!token || typeof token.revertRecordedMovement !== "function") return false;
-    const reverted = await token.revertRecordedMovement();
-    if (!reverted) return false;
-    await token.clearMovementHistory?.();
-    services.scheduleRender(0);
-    return true;
+    return revertTokenMovementApplication(context);
 }
 
 export function focusCombatantToken(context) {
