@@ -109,10 +109,14 @@ async function attachCombatContext(message) {
     if (services.getMessageContext(message) || !services.isOwnMessage(message)) return;
     const createdAt = Date.now();
     const combat = game.combat;
-    const speakerCombatant = Array.from(combat?.combatants ?? []).find((combatant) =>
-        (message.speaker?.token && combatant.tokenId === message.speaker.token) ||
-        (message.speaker?.actor && combatant.actorId === message.speaker.actor)
-    );
+    const combatants = Array.from(combat?.combatants ?? []);
+    const speakerCombatant = (message.speaker?.token
+        ? combatants.find((combatant) => combatant.tokenId === message.speaker.token)
+        : null)
+        ?? (message.speaker?.actor
+            ? combatants.find((combatant) => combatant.actorId === message.speaker.actor)
+            : null);
+    const activeCombatant = combat?.combatant ?? combat?.turns?.[0] ?? null;
     const actor = speakerCombatant?.actor ?? (message.speaker?.actor ? game.actors.get(message.speaker.actor) : null);
     const assignedUser = speakerCombatant && actor ? services.getAssignedUser(speakerCombatant) : game.user;
     const runtimeController = speakerCombatant && actor ? services.getRuntimeController(speakerCombatant) : game.user;
@@ -129,6 +133,7 @@ async function attachCombatContext(message) {
         attackerActorUuid: actor?.uuid ?? null,
         ...targetContext,
         actionKind: pendingKind?.expiresAt >= createdAt ? pendingKind.kind : null,
+        outOfTurn: Boolean(activeCombatant && speakerCombatant && activeCombatant.id !== speakerCombatant.id),
         assignedUserId: assignedUser?.id ?? null,
         runtimeControllerId: runtimeController?.id ?? game.user.id,
         createdAt,

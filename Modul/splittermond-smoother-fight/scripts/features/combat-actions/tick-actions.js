@@ -1,6 +1,7 @@
 import { services } from "../../core/services.js";
 
 import {
+    attackControlState,
     COMBAT_TICK_ACTIONS,
 } from "../../combat-rules.js";
 
@@ -90,7 +91,7 @@ async function performDisengage(context, action) {
         difficulty: "GW",
         title: actionName(action),
         subtitle: t("SMOOTHER_FIGHT.HUD.TickActionAgainstTarget", { target: targetName(context) }),
-    }, context.target);
+    }, context.target, choice.roll);
     if (!rollMessage) return false;
     return createCardThenAdvance(context, action.id, action.ticks, {
         special: t("SMOOTHER_FIGHT.HUD.TickActionDisengageChat", {
@@ -200,8 +201,10 @@ async function createCardThenAdvance(context, actionId, ticks, options) {
     return await services.addCombatTicks(context, ticks) !== null;
 }
 
-async function rollSkill(context, skillId, options, target = null) {
-    const operation = () => context.actor.rollSkill(skillId, options);
+async function rollSkill(context, skillId, options, target = null, roll = null) {
+    const operation = typeof roll === "function"
+        ? () => roll(options)
+        : () => context.actor.rollSkill(skillId, options);
     const message = await (target
         ? services.withTemporarySystemTargets([target], operation)
         : operation());
@@ -237,29 +240,41 @@ function skillLabel(actor, skillId) {
 function disengageSkillChoices(actor) {
     const acrobatics = actorSkill(actor, "acrobatics");
     const choices = acrobatics
-        ? [{ value: acrobatics.id, label: skillLabel(actor, acrobatics.id) }]
+        ? [{
+            value: acrobatics.id,
+            label: skillLabel(actor, acrobatics.id),
+            roll: (options) => actor.rollSkill(acrobatics.id, options),
+        }]
         : [];
     const fightingSkills = new Set(globalThis.CONFIG?.splittermond?.skillGroups?.fighting ?? [
         "melee", "slashing", "chains", "blades", "staffs",
     ]);
-    const wieldedWeaponSkills = new Set(Array.from(actor.attacks ?? []).flatMap((attack) => (
-        attack?.item?.type === "weapon"
-        && attack.item.system?.equipped !== false
-        && attack.skill?.id
-            ? [attack.skill.id]
-            : []
-    )));
     const masterySkills = Array.from(actor.items ?? []).flatMap((item) => {
         const id = String(item.system?.id ?? "").toLocaleLowerCase("de-DE");
         const name = String(item.name ?? "").normalize("NFKC");
-        const skillId = item.system?.skill;
+        const rawSkill = item.system?.skill;
+        const skillId = typeof rawSkill === "string" ? rawSkill : rawSkill?.id;
         const matches = item.type === "mastery"
             && (id === "rueckzugsgefecht" || /^rückzugsgefecht(?:\s*\([^)]*\))?$/iu.test(name));
-        return matches && fightingSkills.has(skillId) && wieldedWeaponSkills.has(skillId) ? [skillId] : [];
+        return matches && fightingSkills.has(skillId) ? [skillId] : [];
     });
-    for (const skillId of new Set(masterySkills)) {
-        const skill = actorSkill(actor, skillId);
-        if (skill) choices.push({ value: skill.id, label: skillLabel(actor, skill.id) });
+    const attacks = Array.from(actor.attacks ?? []);
+    const selectedAttackId = attackControlState(
+        attacks.map((attack) => attack?.id),
+        actor.getFlag?.(MODULE_ID, "defaultAttackId"),
+    ).directAttackId;
+    const selectedAttack = attacks.find((attack) => attack?.id === selectedAttackId);
+    const selectedWeaponSkill = selectedAttack?.item?.type === "weapon"
+        && selectedAttack.item.system?.equipped !== false
+        && typeof selectedAttack.skill?.roll === "function"
+        ? selectedAttack.skill
+        : null;
+    if (selectedWeaponSkill && new Set(masterySkills).has(selectedWeaponSkill.id)) {
+        choices.push({
+            value: selectedWeaponSkill.id,
+            label: displayLabel(selectedWeaponSkill.label, selectedWeaponSkill.id),
+            roll: (options) => selectedWeaponSkill.roll(options),
+        });
     }
     return choices;
 }
@@ -311,22 +326,19 @@ async function chooseTickActionDuration({ id, title, label, options }) {
 async function chooseTickActionOption({ id, title, label, options }) {
     if (!options.length) return null;
     if (options.length === 1) return options[0];
-    const choices = options.map((option) => (
-        `<option value="${escapeAttr(option.value)}">${escapeHtml(option.label)}</option>`
-    )).join("");
     const result = await globalThis.foundry?.applications?.api?.DialogV2?.wait?.({
         id,
         window: { title },
-        position: { width: 420 },
-        content: `<form class="sf-tick-action-dialog"><div class="form-group"><label>${escapeHtml(label)}</label><select name="choice">${choices}</select></div></form>`,
+        position: { width: Math.min(720, Math.max(420, 160 + (options.length * 120))) },
+        content: `<p class="sf-tick-action-duration-prompt">${escapeHtml(label)}</p>`,
         buttons: [
-            {
-                action: "choose",
-                label: t("SMOOTHER_FIGHT.HUD.TickActionExecute"),
-                icon: "fa-solid fa-check",
-                callback: (_event, button) => button.form.elements.choice.value,
-                default: true,
-            },
+            ...options.map((option, index) => ({
+                action: `choice-${option.value}`,
+                label: option.label,
+                icon: "fa-solid fa-dice-d20",
+                callback: () => option.value,
+                default: index === 0,
+            })),
             {
                 action: "cancel",
                 label: t("SMOOTHER_FIGHT.Settings.Cancel"),

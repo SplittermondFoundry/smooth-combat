@@ -280,6 +280,11 @@
       "TickActionFilter": "Search actions",
       "TickActionFilterPlaceholder": "Filter actions …",
       "TickActionFilterEmpty": "No matching actions found.",
+      "FavoriteTickActions": "Favorite actions",
+      "SetFavoriteTickAction": "Mark “{action}” as a favorite",
+      "ClearFavoriteTickAction": "Remove “{action}” from favorites",
+      "FavoriteTickActionSet": "“{action}” was marked as a favorite action.",
+      "FavoriteTickActionCleared": "“{action}” is no longer a favorite action.",
       "TickActionName": "Action",
       "TickActionType": "Type",
       "TickActionDurationHeading": "Duration",
@@ -319,6 +324,7 @@
         "unavailable": "Not possible in combat"
       },
       "TickActionCategories": {
+        "favorites": "Favorite actions",
         "movement": "Movement actions",
         "melee": "Melee actions",
         "ranged": "Ranged actions",
@@ -329,7 +335,7 @@
       "TickActions": {
         "standUpProne": { "Name": "Stand up (prone)", "Description": "The character rises fully from a prone position." },
         "standUpKneeling": { "Name": "Stand up (sitting/kneeling)", "Description": "The character rises from a sitting or kneeling position." },
-        "disengage": { "Name": "Disengage", "Description": "The character leaves the immediate melee situation in a controlled manner.", "Special": "Acrobatics against Mind Resistance" },
+        "disengage": { "Name": "Disengage", "Description": "The character leaves the immediate melee situation in a controlled manner.", "Special": "Acrobatics or a combat skill with Retreat Fighting against Mind Resistance" },
         "dropProne": { "Name": "Drop prone", "Description": "The character immediately drops to the ground and is prone afterwards." },
         "crawl": { "Name": "Crawl", "Description": "The character moves along the ground by crawling.", "Special": "1 m" },
         "walk": { "Name": "Walk", "Description": "The character moves across the battlefield at a normal pace.", "Special": "speed in metres" },

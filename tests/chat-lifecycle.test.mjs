@@ -211,11 +211,22 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
             targetActorUuids: [fixture.targetA.actor.uuid, fixture.targetB.actor.uuid],
             targetNames: [fixture.targetA.name, fixture.targetB.name],
             actionKind: null,
+            outOfTurn: false,
             assignedUserId: fixture.assignedUser.id,
             runtimeControllerId: fixture.runtimeController.id,
             createdAt: context.createdAt,
         });
         assert.equal(callsOf("getTargetSelectionForUser").length, 1);
+    });
+
+    await t.test("an attack by a non-active combatant is marked as out of turn", async () => {
+        const fixture = createFixture({ diceActive: false });
+        game.combat.combatant = { id: "active-combatant" };
+
+        await onCreateChatMessage(fixture.message);
+
+        assert.equal(harness.contexts.get(fixture.message)?.combatantId, fixture.combatant.id);
+        assert.equal(harness.contexts.get(fixture.message)?.outOfTurn, true);
     });
 
     await t.test("with Dice So Nice disabled the existing processing remains immediate", async () => {

@@ -90,11 +90,14 @@ export function resolveCombatEventOpenIds(previousEventIds, previousOpenEventIds
     const eventCombatantId = mapValue(turn.eventCombatantIds, latestEventId);
     const eventActorId = mapValue(turn.eventActorIds, latestEventId);
     const currentActorId = turn.currentActorId ?? null;
+    const outOfTurn = new Set(turn.outOfTurnEventIds ?? []).has(latestEventId);
+    const newlyMarkedOutOfTurn = outOfTurn && !new Set(turn.previousOutOfTurnEventIds ?? []).has(latestEventId);
+    if (newlyMarkedOutOfTurn) return new Set([latestEventId]);
     if (!currentCombatantId && !currentActorId) return open;
 
     const belongsToCurrent = eventCombatantId === currentCombatantId
         || Boolean(eventActorId && eventActorId === currentActorId);
-    return belongsToCurrent ? open : new Set();
+    return belongsToCurrent || outOfTurn ? open : new Set();
 }
 
 export function combatActionHighlightState({

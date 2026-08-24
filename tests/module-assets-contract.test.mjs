@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "9bc16ba59d5612de1afc219296f111cbfe11fa8c68e662038a05cc2f9e513ef0",
+        "46ab96bc274d1779670869b74a804f729e2c992a6d128c501d5837c83fcb88e7",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -58,7 +58,9 @@ test("published DOM integration attributes remain available", () => {
     assert.match(assignmentTemplate, /data-role="assignment-warnings" open/u);
     assert.match(assignmentTemplate, /\{\{#if showSetupHint\}\}/u);
 
-    const hudView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "view.js"), "utf8");
+    const hudView = ["view.js", "tick-action-reference.js"]
+        .map((file) => fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", file), "utf8"))
+        .join("\n");
     const hudController = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "controller.js"), "utf8");
     const combatEventView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "combat-events", "view.js"), "utf8");
     const chatActions = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "chat", "actions.js"), "utf8");
@@ -74,7 +76,10 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /class="sf-tick-action-popover" role="region"/u);
     assert.match(hudView, /data-sf-tick-action-filter/u);
     assert.match(hudView, /data-sf-tick-action-row/u);
+    assert.match(hudView, /data-sf-action="toggle-favorite-tick-action"/u);
+    assert.match(hudView, /data-sf-tick-action-category="\$\{escapeAttr\(action\.displayCategory\)\}"/u);
     assert.match(hudController, /bindTickActionReferenceFilters/u);
+    assert.match(hudController, /case "toggle-favorite-tick-action"/u);
     assert.doesNotMatch(hudView, /sf-tick-action-tooltip/u);
     assert.doesNotMatch(hudView, /role="tooltip"[^`]*data-sf-action="share-tick-action"/u);
     assert.match(hudView, /data-sf-action="share-tick-action"/u);
@@ -147,7 +152,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "abb237efdc474eaa2fe26e694c4d2e528a8988d2cc86a7b78310d3c9c6cd2d95",
+        "238a26566f7ea22e0c4dce3bd733edbd8ed2a8c1beafab34fdf5558afaefff41",
     );
 });
 

@@ -5,8 +5,10 @@ import { services } from "../../core/services.js";
 import {
     actionRequiresTarget,
     attackReadiness,
+    COMBAT_TICK_ACTIONS,
     isTargetDependentDifficulty,
     toggleFavoriteSkillId,
+    toggleFavoriteTickActionId,
     visibleCanvasCenterY,
 } from "../../combat-rules.js";
 
@@ -100,6 +102,24 @@ export async function toggleFavoriteSkill(context, skillId) {
     await context.actor.setFlag(MODULE_ID, "favoriteSkillIds", result.ids);
     ui.notifications.info(t(result.added ? "SMOOTHER_FIGHT.HUD.FavoriteSkillSet" : "SMOOTHER_FIGHT.HUD.FavoriteSkillCleared", {
         skill: displayLabel(skill.label, skill.id),
+    }));
+    services.scheduleRender(0);
+}
+
+export async function toggleFavoriteTickAction(context, actionId) {
+    const action = COMBAT_TICK_ACTIONS.find((candidate) => candidate.id === actionId);
+    if (!action) return;
+    const result = toggleFavoriteTickActionId(
+        context.actor.getFlag?.(MODULE_ID, "favoriteTickActionIds"),
+        actionId,
+        COMBAT_TICK_ACTIONS.map((candidate) => candidate.id)
+    );
+    if (!result.changed) return;
+    await context.actor.setFlag(MODULE_ID, "favoriteTickActionIds", result.ids);
+    ui.notifications.info(t(result.added
+        ? "SMOOTHER_FIGHT.HUD.FavoriteTickActionSet"
+        : "SMOOTHER_FIGHT.HUD.FavoriteTickActionCleared", {
+        action: t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Name`),
     }));
     services.scheduleRender(0);
 }

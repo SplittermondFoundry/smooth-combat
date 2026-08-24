@@ -49,10 +49,10 @@ function buildEventGroup(group, isLatest, hudContext) {
         : "";
     const targetBadge = buildEventTargetBadge(context);
     const belongsToActiveCombatant = messageBelongsToCombatant(primary, hudContext.combatant, context);
-    const open = isLatest && belongsToActiveCombatant && !combatEventState.cardsCollapsed ? "open" : "";
+    const open = isLatest && (belongsToActiveCombatant || context?.outOfTurn) && !combatEventState.cardsCollapsed ? "open" : "";
     const hasDamage = group.damages.length > 0;
     const eventActorId = primary.speaker?.actor ?? "";
-    return `<details class="sf-event-group ${defenseAlert ? "is-defense-alert" : ""}" data-event-id="${escapeAttr(primary.id)}" data-event-combatant-id="${escapeAttr(context?.combatantId ?? "")}" data-event-actor-id="${escapeAttr(eventActorId)}" ${open}>
+    return `<details class="sf-event-group ${defenseAlert ? "is-defense-alert" : ""}" data-event-id="${escapeAttr(primary.id)}" data-event-combatant-id="${escapeAttr(context?.combatantId ?? "")}" data-event-actor-id="${escapeAttr(eventActorId)}" data-event-out-of-turn="${Boolean(context?.outOfTurn)}" ${open}>
         <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}${defenseBadge}${targetBadge}<i class="fa-solid fa-chevron-down"></i></summary>
         <div class="sf-event-body">
             ${group.defenses.map((message) => buildAssociatedEvent(message, {

@@ -98,10 +98,10 @@ export function requestCombatEventExpansion(request) {
     return true;
 }
 
-export function syncSystemActionBar(hudVisible) {
+export function syncSystemActionBar(hudVisible, minimized = false) {
     const bar = document.querySelector("#token-action-bar");
     if (!bar) return;
-    const shouldHide = hudVisible && getSetting("hideSystemBar", true);
+    const shouldHide = hudVisible && !minimized && getSetting("hideSystemBar", true);
     bar.classList.toggle("sf-system-bar-hidden", shouldHide);
 }
 
@@ -112,12 +112,11 @@ export function syncMinimizedHudPosition(hud, minimized) {
     hud.style.removeProperty("--sf-minimized-top");
     if (!minimized) return;
 
-    const actionBarSelectors = [
-        "#token-action-bar:not(.sf-system-bar-hidden) .token-action-bar",
+    const hotbarSelectors = [
         "#custom-hotbar",
         "#hotbar",
     ];
-    const bounds = actionBarSelectors
+    const bounds = hotbarSelectors
         .map((selector) => document.querySelector(selector))
         .filter((element) => element && window.getComputedStyle(element).display !== "none")
         .map((element) => element.getBoundingClientRect())

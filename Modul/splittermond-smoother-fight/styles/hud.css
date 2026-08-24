@@ -777,6 +777,42 @@
     text-transform: uppercase;
 }
 
+#splittermond-smoother-fight-hud .sf-tick-action-popover .sf-tick-action-category.is-favorites th {
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.13);
+}
+
+#splittermond-smoother-fight-hud .sf-tick-action-favorite-heading,
+#splittermond-smoother-fight-hud .sf-tick-action-favorite-cell {
+    width: 34px;
+    padding: 2px;
+    color: var(--sf-muted);
+    text-align: center;
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-favorite-tick-action-toggle {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    display: grid;
+    place-items: center;
+    margin: 0 auto;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    color: var(--sf-muted);
+    background: transparent;
+}
+
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-favorite-tick-action-toggle:hover,
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-favorite-tick-action-toggle:focus-visible,
+#splittermond-smoother-fight-hud .sf-combat-controls .sf-favorite-tick-action-toggle.is-favorite {
+    border: 0;
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.13);
+}
+
 #splittermond-smoother-fight-hud .sf-tick-action-popover .sf-tick-action-empty {
     color: var(--sf-muted);
     font-style: italic;

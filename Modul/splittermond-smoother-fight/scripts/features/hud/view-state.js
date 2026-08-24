@@ -8,20 +8,28 @@ import {
 
 export function captureHudViewState(root) {
     const scroller = root?.querySelector?.(".sf-event-scroller");
-    if (!scroller) return null;
-    const groups = Array.from(scroller.querySelectorAll(".sf-event-group[data-event-id]"));
-    const subevents = Array.from(scroller.querySelectorAll(".sf-associated-card[data-subevent-id]"));
+    const tickActionReference = root?.querySelector?.(".sf-tick-action-reference");
+    if (!scroller && !tickActionReference) return null;
+    const groups = Array.from(scroller?.querySelectorAll(".sf-event-group[data-event-id]") ?? []);
+    const subevents = Array.from(scroller?.querySelectorAll(".sf-associated-card[data-subevent-id]") ?? []);
+    const tickActionPopover = tickActionReference?.querySelector(":scope > .sf-tick-action-popover");
+    const tickActionFilter = tickActionPopover?.querySelector("[data-sf-tick-action-filter]");
     return {
-        scrollTop: scroller.scrollTop,
+        scrollTop: scroller?.scrollTop ?? 0,
         eventIds: new Set(groups.map((group) => group.dataset.eventId)),
         openEventIds: new Set(groups.filter((group) => group.open).map((group) => group.dataset.eventId)),
+        outOfTurnEventIds: new Set(groups.filter((group) => group.dataset.eventOutOfTurn === "true").map((group) => group.dataset.eventId)),
         subeventIds: new Set(subevents.map((subevent) => subevent.dataset.subeventId)),
         openSubeventIds: new Set(subevents.filter((subevent) => subevent.open).map((subevent) => subevent.dataset.subeventId)),
+        tickActionReferenceOpen: Boolean(tickActionReference?.open),
+        tickActionFilter: tickActionFilter?.value ?? "",
+        tickActionScrollTop: tickActionPopover?.scrollTop ?? 0,
     };
 }
 
 export function restoreHudViewState(root, state, { forceLatestEvent = false } = {}) {
     if (!state) return;
+    restoreTickActionReferenceState(root, state);
     const scroller = root?.querySelector?.(".sf-event-scroller");
     if (!scroller) return;
 
@@ -29,11 +37,14 @@ export function restoreHudViewState(root, state, { forceLatestEvent = false } = 
     const currentEventIds = groups.map((group) => group.dataset.eventId);
     const eventCombatantIds = new Map(groups.map((group) => [group.dataset.eventId, group.dataset.eventCombatantId || null]));
     const eventActorIds = new Map(groups.map((group) => [group.dataset.eventId, group.dataset.eventActorId || null]));
+    const outOfTurnEventIds = new Set(groups.filter((group) => group.dataset.eventOutOfTurn === "true").map((group) => group.dataset.eventId));
     const openEventIds = resolveCombatEventOpenIds(state.eventIds, state.openEventIds, currentEventIds, {
         currentCombatantId: root.dataset.activeCombatantId || null,
         currentActorId: root.dataset.activeActorId || null,
         eventCombatantIds,
         eventActorIds,
+        outOfTurnEventIds,
+        previousOutOfTurnEventIds: state.outOfTurnEventIds,
         forceLatestEvent,
     });
     groups.forEach((group) => {
@@ -70,6 +81,23 @@ export function restoreHudViewState(root, state, { forceLatestEvent = false } = 
             ? scroller.scrollTop + damageRect.bottom - scrollerRect.top - scroller.clientHeight
             : 0;
         scroller.scrollTop = Math.min(Math.max(state.scrollTop, damageBottom), maximum);
+    };
+    restoreScroll();
+    requestAnimationFrame(restoreScroll);
+}
+
+function restoreTickActionReferenceState(root, state) {
+    const disclosure = root?.querySelector?.(".sf-tick-action-reference");
+    if (!disclosure) return;
+    disclosure.open = Boolean(state.tickActionReferenceOpen);
+    const popover = disclosure.querySelector(":scope > .sf-tick-action-popover");
+    const filter = popover?.querySelector("[data-sf-tick-action-filter]");
+    if (filter && state.tickActionFilter) {
+        filter.value = state.tickActionFilter;
+        filter.dispatchEvent(new Event("input"));
+    }
+    const restoreScroll = () => {
+        if (popover?.isConnected) popover.scrollTop = state.tickActionScrollTop ?? 0;
     };
     restoreScroll();
     requestAnimationFrame(restoreScroll);

@@ -89,9 +89,29 @@ export function selectPersonalCombatantFromMenu(activeContext, combatantId) {
     if (!selected) return;
     hudState.personalCombatId = activeContext.combat.id;
     hudState.personalCombatantId = selected.combatant.id;
-    const tokenObject = selected.token?.object ?? canvas?.tokens?.get?.(selected.token?.id);
+    const tokenObject = selected.token?.object ?? globalThis.canvas?.tokens?.get?.(selected.token?.id);
     tokenObject?.control?.({ releaseOthers: true });
     services.scheduleRender(0);
+}
+
+export function syncActiveCombatantTokenSelection(combat = game.combat) {
+    if (!combat) return false;
+    const combatant = combat.combatant ?? combat.turns?.[0] ?? null;
+    const actor = combatant?.actor ?? null;
+    if (!combatant || !actor?.isOwner || services.getRuntimeController(combatant)?.id !== game.user?.id) return false;
+
+    const resolvedToken = combatant.token ?? services.resolveCombatantToken(combatant);
+    const token = resolvedToken?.document ?? resolvedToken;
+    const tokenObject = token?.object ?? globalThis.canvas?.tokens?.get?.(token?.id);
+    if (!token || !tokenObject?.control) return false;
+
+    hudState.personalCombatId = combat.id;
+    hudState.personalCombatantId = combatant.id;
+    const controlledToken = services.getControlledTokenDocument();
+    const controlledReference = services.tokenUuid(controlledToken) ?? controlledToken?.id ?? null;
+    const activeReference = services.tokenUuid(token) ?? token.id ?? null;
+    if (controlledReference !== activeReference) tokenObject.control({ releaseOthers: true });
+    return true;
 }
 
 export function resetPersonalCombatantSelection() {

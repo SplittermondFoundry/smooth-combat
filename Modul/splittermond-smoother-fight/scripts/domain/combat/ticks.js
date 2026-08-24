@@ -44,6 +44,24 @@ export function combatTickActionsFor(ticks = "custom") {
         : action.ticks === requested);
 }
 
+export function normalizeFavoriteTickActionIds(value, availableActionIds = COMBAT_TICK_ACTIONS.map((action) => action.id)) {
+    const available = new Set(Array.from(availableActionIds ?? [], (id) => String(id)));
+    const source = Array.isArray(value) ? value : [];
+    return Array.from(new Set(source.map((id) => String(id))))
+        .filter((id) => available.has(id));
+}
+
+export function toggleFavoriteTickActionId(value, actionId, availableActionIds = COMBAT_TICK_ACTIONS.map((action) => action.id)) {
+    const available = new Set(Array.from(availableActionIds ?? [], (id) => String(id)));
+    const id = String(actionId ?? "");
+    const ids = normalizeFavoriteTickActionIds(value, available);
+    if (!id || !available.has(id)) return { ids, changed: false, added: false };
+    if (ids.includes(id)) {
+        return { ids: ids.filter((candidate) => candidate !== id), changed: true, added: false };
+    }
+    return { ids: [...ids, id], changed: true, added: true };
+}
+
 export function tickAdvanceConfirmed(previousInitiative, currentInitiative) {
     const before = Number(previousInitiative);
     const after = Number(currentInitiative);

@@ -39,6 +39,7 @@ import {
     normalizeAudioFeedbackProfile,
     normalizeActorUserLinks,
     normalizeFavoriteSkillIds,
+    normalizeFavoriteTickActionIds,
     normalizeSearchText,
     normalizeTargetReferences,
     normalizeTargetSelection,
@@ -56,6 +57,7 @@ import {
     tokenDocumentCenter,
     totalDegreesOfSuccess,
     toggleFavoriteSkillId,
+    toggleFavoriteTickActionId,
     uniqueTokensByReference,
     visibleCanvasCenterY,
     withTemporarySetValues,
@@ -401,6 +403,30 @@ test("skill favorites can be reordered before or after another favorite", () => 
     assert.deepEqual(reorderFavoriteSkillIds(["a", "b"], "missing", "b"), ["a", "b"]);
 });
 
+test("tick-action favorites are normalized and toggle without a category limit", () => {
+    const available = ["walk", "shieldBash", "coordinate"];
+    assert.deepEqual(normalizeFavoriteTickActionIds(["walk", "stale"]), ["walk"]);
+    assert.deepEqual(normalizeFavoriteTickActionIds(
+        ["shieldBash", "stale", "walk", "shieldBash"],
+        available
+    ), ["shieldBash", "walk"]);
+    assert.deepEqual(toggleFavoriteTickActionId(["walk"], "coordinate", available), {
+        ids: ["walk", "coordinate"],
+        changed: true,
+        added: true,
+    });
+    assert.deepEqual(toggleFavoriteTickActionId(["walk", "coordinate"], "walk", available), {
+        ids: ["coordinate"],
+        changed: true,
+        added: false,
+    });
+    assert.deepEqual(toggleFavoriteTickActionId(["walk"], "walk"), {
+        ids: [],
+        changed: true,
+        added: false,
+    });
+});
+
 test("personal HUD controls use the selected owned token or the only owned combatant", () => {
     const first = { id: "first", tokenId: "token-a", tokenUuid: "Scene.scene.Token.token-a", owned: true };
     const second = { id: "second", tokenId: "token-b", tokenUuid: "Scene.scene.Token.token-b", owned: true };
@@ -711,6 +737,23 @@ test("a new combat event closes older cards and opens only the newest event", ()
     assert.deepEqual(
         [...resolveCombatEventOpenIds(["attack-1", "spell-2"], ["attack-1"], ["attack-1", "spell-2"])],
         ["attack-1"]
+    );
+});
+
+test("a newly recognized out-of-turn attack opens independently of the active combatant", () => {
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["attack-old", "opportunity"],
+            [],
+            ["attack-old", "opportunity"],
+            {
+                currentCombatantId: "active",
+                eventCombatantIds: new Map([["opportunity", "reacting"]]),
+                outOfTurnEventIds: new Set(["opportunity"]),
+                previousOutOfTurnEventIds: new Set(),
+            }
+        )],
+        ["opportunity"]
     );
 });
 

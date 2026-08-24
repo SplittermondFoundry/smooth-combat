@@ -16,10 +16,13 @@ import {
 } from "./movement.js";
 
 import {
+    buildTickActionReference,
+} from "./tick-action-reference.js";
+
+import {
     attackControlSelection,
     attackControlState,
     attackReadiness,
-    combatTickActionsFor,
     isPlayersTurn,
     mayViewTargetDefenses,
     mayViewTargetResources,
@@ -313,7 +316,7 @@ function buildAdvanceButtons(context, includeActorName = false) {
     const label = includeActorName
         ? `${t("SMOOTHER_FIGHT.HUD.Advance")} · ${context.actor.name}`
         : t("SMOOTHER_FIGHT.HUD.Advance");
-    return `<div class="sf-tick-buttons"><span class="sf-tick-label">${escapeHtml(label)}</span>${tickButtons}${buildAdvanceButton("custom")}${buildTickActionReference()}</div>`;
+    return `<div class="sf-tick-buttons"><span class="sf-tick-label">${escapeHtml(label)}</span>${tickButtons}${buildAdvanceButton("custom")}${buildTickActionReference(context.actor)}</div>`;
 }
 
 function buildAdvanceButton(ticks) {
@@ -323,83 +326,6 @@ function buildAdvanceButton(ticks) {
         : t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks });
     return `<button type="button" data-sf-action="add-ticks" data-ticks="${escapeAttr(ticks)}" aria-label="${escapeAttr(label)}">${custom ? "+X" : `+${escapeHtml(ticks)} T`}</button>`;
 }
-function buildTickActionReference() {
-    const actions = combatTickActionsFor("custom");
-    const columnCount = 4;
-    const heading = t("SMOOTHER_FIGHT.HUD.TickActionReferenceAll");
-    const triggerLabel = t("SMOOTHER_FIGHT.HUD.TickActionReferenceOpen");
-    let currentCategory = null;
-    const rows = actions.map((action) => {
-        const categoryLabel = t(`SMOOTHER_FIGHT.HUD.TickActionCategories.${action.category}`);
-        const category = action.category === currentCategory ? "" : `
-            <tr class="sf-tick-action-category" data-sf-tick-action-category="${escapeAttr(action.category)}"><th colspan="${columnCount}">${escapeHtml(categoryLabel)}</th></tr>`;
-        currentCategory = action.category;
-        const durationLabel = tickActionDuration(action);
-        const duration = `<td>${escapeHtml(durationLabel)}</td>`;
-        const special = action.special
-            ? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Special`)
-            : t("SMOOTHER_FIGHT.HUD.TickActionDash");
-        const kindLabel = t(`SMOOTHER_FIGHT.HUD.TickActionKinds.${action.kind}`);
-        const actionName = t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Name`);
-        const shareLabel = t("SMOOTHER_FIGHT.HUD.TickActionShare", { action: actionName });
-        const advanceTicks = tickActionAdvanceValue(action, "custom");
-        const actionControl = action.actionable === false ? `<span class="sf-tick-action-name">${escapeHtml(actionName)}</span>` : `<button type="button" class="sf-tick-action-link" data-sf-action="share-tick-action" data-tick-action-id="${escapeAttr(action.id)}" data-tick-action-ticks="custom" data-tick-action-advance="${escapeAttr(advanceTicks)}" title="${escapeAttr(shareLabel)}" aria-label="${escapeAttr(shareLabel)}">${escapeHtml(actionName)}</button>`;
-        const sourceLabel = action.source ? t("SMOOTHER_FIGHT.HUD.TickActionSource", action.source) : "";
-        const source = sourceLabel ? `<small class="sf-tick-action-source">${escapeHtml(sourceLabel)}</small>` : "";
-        const searchValue = [actionName, categoryLabel, kindLabel, durationLabel, special, sourceLabel].join(" ");
-        return `${category}<tr data-sf-tick-action-row data-sf-tick-action-category="${escapeAttr(action.category)}" data-sf-search="${escapeAttr(searchValue)}">
-            <td>${actionControl}${source}</td>
-            <td>${escapeHtml(kindLabel)}</td>
-            ${duration}
-            <td>${escapeHtml(special)}</td>
-        </tr>`;
-    }).join("");
-    const body = rows || `<tr><td colspan="${columnCount}" class="sf-tick-action-empty">${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionEmpty", { ticks: "–" }))}</td></tr>`;
-    return `<details class="sf-tick-action-reference">
-        <summary title="${escapeAttr(triggerLabel)}" aria-label="${escapeAttr(triggerLabel)}"><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionReferenceButton"))}</span><i class="fa-solid fa-chevron-down sf-chevron" aria-hidden="true"></i></summary>
-        <div class="sf-tick-action-popover" role="region" aria-label="${escapeAttr(heading)}">
-            <strong>${escapeHtml(heading)}</strong>
-            <label class="sf-tick-action-filter">
-                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                <input type="search" data-sf-tick-action-filter autocomplete="off" spellcheck="false" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.TickActionFilter"))}" placeholder="${escapeAttr(t("SMOOTHER_FIGHT.HUD.TickActionFilterPlaceholder"))}">
-            </label>
-            <table>
-                <thead><tr>
-                    <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionName"))}</th>
-                    <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionType"))}</th>
-                    <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionDurationHeading"))}</th>
-                    <th>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSpecial"))}</th>
-                </tr></thead>
-                <tbody>${body}<tr data-sf-tick-action-filter-empty hidden><td colspan="${columnCount}" class="sf-tick-action-empty" aria-live="polite">${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionFilterEmpty"))}</td></tr></tbody>
-            </table>
-        </div>
-    </details>`;
-}
-
-function tickActionAdvanceValue(action, selectedTicks) {
-    if (selectedTicks !== "custom") return selectedTicks;
-    if (Number.isFinite(Number(action.ticks))) return action.ticks;
-    return action.ticks === "unavailable" ? "none" : "custom";
-}
-
-function tickActionDuration(action) {
-    if (Array.isArray(action.ticks)) {
-        return t("SMOOTHER_FIGHT.HUD.TickActionDurationRange", {
-            first: action.ticks[0],
-            last: action.ticks.at(-1),
-        });
-    }
-    if (Number.isFinite(Number(action.ticks))) {
-        return t("SMOOTHER_FIGHT.HUD.TickActionDuration", { ticks: action.ticks });
-    }
-    const suffix = action.ticks === "wgs"
-        ? "Wgs"
-        : action.ticks === "spell"
-            ? "Spell"
-            : "Unavailable";
-    return t(`SMOOTHER_FIGHT.HUD.TickActionDuration${suffix}`);
-}
-
 async function buildPersonalControls(activeContext) {
     const candidates = getPersonalHudCandidates(activeContext);
     const context = getPersonalHudContext(activeContext);

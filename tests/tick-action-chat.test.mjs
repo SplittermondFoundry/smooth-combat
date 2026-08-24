@@ -206,37 +206,54 @@ test("aiming and searching for an opening choose 2, 4, or 6 ticks and scale the 
     assert.deepEqual(order, ["ticks:4", "card"]);
 });
 
-test("disengaging offers Acrobatics and an eligible wielded retreat-fighting skill before advancing ticks", async () => {
+test("disengaging offers rollable combat skills with Retreat Fighting even though actor.skills excludes fighting skills", async () => {
     const order = [];
-    let dialogContent = "";
+    let dialogConfig;
     const target = { name: "Rattling", uuid: "Token.rattling", actor: { name: "Rattling" } };
     installTickActionGlobals(target);
     globalThis.CONFIG = { splittermond: { skillGroups: { fighting: ["blades", "staffs"] } } };
     globalThis.foundry = { applications: { api: { DialogV2: {
         wait: async (config) => {
-            dialogContent = config.content;
-            return config.buttons[0].callback(null, { form: { elements: { choice: { value: "blades" } } } });
+            dialogConfig = config;
+            return config.buttons.find((button) => button.action === "choice-staffs").callback();
         },
     } } } };
     const context = tickActionContext({
         skills: {
             acrobatics: { id: "acrobatics", label: "Akrobatik" },
-            blades: { id: "blades", label: "Klingenwaffen" },
-            staffs: { id: "staffs", label: "Stangenwaffen" },
         },
         attacks: [
-            { item: { type: "weapon", system: { equipped: true } }, skill: { id: "blades" } },
+            {
+                id: "blade-attack",
+                item: { type: "weapon", system: { equipped: true } },
+                skill: {
+                    id: "blades",
+                    label: "Klingenwaffen",
+                    roll: async () => assert.fail("the unselected combat skill must not be rolled"),
+                },
+            },
+            {
+                id: "staff-attack",
+                item: { type: "weapon", system: { equipped: true } },
+                skill: {
+                    id: "staffs",
+                    label: "Stangenwaffen",
+                    roll: async (options) => {
+                        order.push("roll");
+                        assert.equal(options.difficulty, "GW");
+                        return { id: "roll-message", flags: { splittermond: { check: { succeeded: true } } } };
+                    },
+                },
+            },
         ],
+        getFlag: (scope, key) => scope === "splittermond-smoother-fight" && key === "defaultAttackId"
+            ? "staff-attack"
+            : null,
         items: [
             { type: "mastery", name: "Rückzugsgefecht", system: { skill: "blades" } },
-            { type: "mastery", name: "Rückzugsgefecht", system: { skill: "staffs" } },
+            { type: "mastery", name: "Rückzugsgefecht", system: { skill: { id: "staffs" } } },
         ],
-        rollSkill: async (skillId, options) => {
-            order.push("roll");
-            assert.equal(skillId, "blades");
-            assert.equal(options.difficulty, "GW");
-            return { id: "roll-message", flags: { splittermond: { check: { succeeded: true } } } };
-        },
+        rollSkill: async () => assert.fail("choosing a combat skill must not roll Acrobatics"),
     });
     services.withTemporarySystemTargets = async (targets, operation) => {
         assert.deepEqual(targets, [target]);
@@ -246,7 +263,7 @@ test("disengaging offers Acrobatics and an eligible wielded retreat-fighting ski
         order.push("card");
         assert.equal(actionId, "disengage");
         assert.equal(ticks, 5);
-        assert.equal(options.special, "Klingenwaffen gegen den GW von Rattling");
+        assert.equal(options.special, "Stangenwaffen gegen den GW von Rattling");
         return { id: "action-card" };
     };
     services.addCombatTicks = async (_context, ticks) => {
@@ -255,10 +272,48 @@ test("disengaging offers Acrobatics and an eligible wielded retreat-fighting ski
     };
 
     assert.equal(await performTickAction(context, "disengage", "5"), true);
-    assert.match(dialogContent, /Akrobatik/u);
-    assert.match(dialogContent, /Klingenwaffen/u);
-    assert.doesNotMatch(dialogContent, /Stangenwaffen/u, "a mastery without a wielded associated weapon is ineligible");
+    assert.doesNotMatch(dialogConfig.content, /<select/u);
+    assert.deepEqual(dialogConfig.buttons.map((button) => button.label), ["Akrobatik", "Stangenwaffen", "Abbrechen"]);
+    assert.deepEqual(dialogConfig.buttons.map((button) => button.action), ["choice-acrobatics", "choice-staffs", "cancel"]);
+    assert.equal(dialogConfig.buttons.some((button) => button.label === "Klingenwaffen"), false);
     assert.deepEqual(order, ["roll", "card", "ticks"]);
+});
+
+test("disengaging excludes Retreat Fighting when no matching weapon attack is selected", async () => {
+    const target = { name: "Rattling", uuid: "Token.rattling", actor: { name: "Rattling" } };
+    installTickActionGlobals(target);
+    globalThis.CONFIG = { splittermond: { skillGroups: { fighting: ["blades", "staffs"] } } };
+    globalThis.foundry = { applications: { api: { DialogV2: {
+        wait: async () => assert.fail("Acrobatics must run directly when no matching weapon is selected"),
+    } } } };
+    let rolledSkill;
+    const context = tickActionContext({
+        skills: { acrobatics: { id: "acrobatics", label: "Akrobatik" } },
+        attacks: [
+            {
+                id: "blade-attack",
+                item: { type: "weapon", system: { equipped: true } },
+                skill: { id: "blades", label: "Klingenwaffen", roll: async () => assert.fail("wrong weapon skill") },
+            },
+            {
+                id: "staff-shield-attack",
+                item: { type: "shield", system: { equipped: true } },
+                skill: { id: "staffs", label: "Stangenwaffen", roll: async () => assert.fail("a shield is not a weapon") },
+            },
+        ],
+        getFlag: () => "blade-attack",
+        items: [{ type: "mastery", name: "Rückzugsgefecht", system: { skill: "staffs" } }],
+        rollSkill: async (skillId) => {
+            rolledSkill = skillId;
+            return { id: "acrobatics-roll", flags: { splittermond: { check: { succeeded: true } } } };
+        },
+    });
+    services.withTemporarySystemTargets = async (_targets, operation) => operation();
+    services.createTickActionChatCard = async () => ({ id: "action-card" });
+    services.addCombatTicks = async (_context, ticks) => ticks;
+
+    assert.equal(await performTickAction(context, "disengage", "5"), true);
+    assert.equal(rolledSkill, "acrobatics");
 });
 
 test("shield bash delegates to the equipped Splittermond shield attack without an extra card or tick movement", async () => {

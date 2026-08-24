@@ -23,6 +23,7 @@ export {
     toggleDefaultAttack,
     toggleEquipped,
     toggleFavoriteSkill,
+    toggleFavoriteTickAction,
     toggleTokenHidden,
 } from "./actions.js";
 

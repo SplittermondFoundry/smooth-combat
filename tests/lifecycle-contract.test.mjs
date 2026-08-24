@@ -30,6 +30,7 @@ const EXPECTED_HOOKS = [
     "createActor",
     "deleteActor",
     "targetToken",
+    "updateCombatant",
     "combatTurn",
     "combatStart",
     "createChatMessage",
@@ -67,6 +68,10 @@ const serviceStubs = {
     publishOwnTarget: (...args) => record("publishOwnTarget", args),
     announceTurnFeedback: (...args) => record("announceTurnFeedback", args),
     resetPersonalCombatantSelection: (...args) => record("resetPersonalCombatantSelection", args),
+    syncActiveCombatantTokenSelection: (...args) => {
+        record("syncActiveCombatantTokenSelection", args);
+        return behavior.syncActiveCombatantTokenSelection?.(...args);
+    },
     setLastTurnCombatantId: (...args) => record("setLastTurnCombatantId", args),
     onCreateChatMessage: (...args) => {
         record("onCreateChatMessage", args);
@@ -229,10 +234,30 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
 
         callLog.length = 0;
+        const previousCombatant = { id: "previous-combatant" };
+        const nextCombatant = { id: "next-combatant" };
+        const tickCombat = { id: "tick-combat", combatant: previousCombatant };
+        const updatedCombatant = { id: "updated-combatant", parent: tickCombat };
+        const selectedCombatantIds = [];
+        behavior.syncActiveCombatantTokenSelection = (currentCombat) => {
+            selectedCombatantIds.push(currentCombat.combatant?.id);
+        };
+        handlersFor(hookRegistrations, "updateCombatant")[1](updatedCombatant);
+        assert.deepEqual(callsOf("syncActiveCombatantTokenSelection"), []);
+        assert.deepEqual(callsOf("announceTurnFeedback"), []);
+        tickCombat.combatant = nextCombatant;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(callsOf("syncActiveCombatantTokenSelection"), [[tickCombat]]);
+        assert.deepEqual(callsOf("announceTurnFeedback"), [[tickCombat]]);
+        assert.deepEqual(selectedCombatantIds, [nextCombatant.id]);
+
+        callLog.length = 0;
+        delete behavior.syncActiveCombatantTokenSelection;
         const combat = { id: "new-combat" };
         for (const callback of handlersFor(hookRegistrations, "combatStart")) callback(combat);
         assert.deepEqual(callsOf("resetPersonalCombatantSelection"), [[]]);
         assert.deepEqual(callsOf("setLastTurnCombatantId"), [[null]]);
+        assert.deepEqual(callsOf("syncActiveCombatantTokenSelection"), [[combat]]);
         assert.deepEqual(callsOf("announceTurnFeedback"), [[combat]]);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
 

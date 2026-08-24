@@ -280,6 +280,11 @@
       "TickActionFilter": "Handlungen durchsuchen",
       "TickActionFilterPlaceholder": "Handlungen filtern …",
       "TickActionFilterEmpty": "Keine passenden Handlungen gefunden.",
+      "FavoriteTickActions": "Favorisierte Handlungen",
+      "SetFavoriteTickAction": "„{action}“ als Favorit markieren",
+      "ClearFavoriteTickAction": "„{action}“ aus den Favoriten entfernen",
+      "FavoriteTickActionSet": "„{action}“ wurde als Handlungsfavorit markiert.",
+      "FavoriteTickActionCleared": "„{action}“ ist nicht mehr als Handlungsfavorit markiert.",
       "TickActionName": "Handlung",
       "TickActionType": "Art",
       "TickActionDurationHeading": "Dauer",
@@ -319,6 +324,7 @@
         "unavailable": "Im Kampf nicht möglich"
       },
       "TickActionCategories": {
+        "favorites": "Favorisierte Handlungen",
         "movement": "Bewegungshandlungen",
         "melee": "Nahkampfhandlungen",
         "ranged": "Fernkampfhandlungen",
@@ -329,7 +335,7 @@
       "TickActions": {
         "standUpProne": { "Name": "Aufstehen (liegend)", "Description": "Der Handelnde steht aus einer liegenden Position vollständig auf." },
         "standUpKneeling": { "Name": "Aufstehen (sitzend/kniend)", "Description": "Der Handelnde steht aus einer sitzenden oder knienden Position auf." },
-        "disengage": { "Name": "Aus dem Kampf lösen", "Description": "Der Handelnde verlässt kontrolliert die unmittelbare Nahkampfsituation.", "Special": "Akrobatik gegen GW" },
+        "disengage": { "Name": "Aus dem Kampf lösen", "Description": "Der Handelnde verlässt kontrolliert die unmittelbare Nahkampfsituation.", "Special": "Akrobatik oder Kampffertigkeit mit Rückzugsgefecht gegen GW" },
         "dropProne": { "Name": "Fallenlassen", "Description": "Der Handelnde lässt sich sofort zu Boden fallen und gilt anschließend als liegend." },
         "crawl": { "Name": "Kriechen", "Description": "Der Handelnde bewegt sich am Boden kriechend fort.", "Special": "1 m" },
         "walk": { "Name": "Laufen", "Description": "Der Handelnde bewegt sich mit normalem Tempo über das Schlachtfeld.", "Special": "GSW in m" },

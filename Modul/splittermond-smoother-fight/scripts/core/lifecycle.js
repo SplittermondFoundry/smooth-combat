@@ -63,13 +63,23 @@ export function registerHooks() {
         services.scheduleRender();
     });
 
+    Hooks.on("updateCombatant", (combatant) => {
+        const combat = combatant?.parent ?? game.combat;
+        setTimeout(() => {
+            services.syncActiveCombatantTokenSelection(combat);
+            services.announceTurnFeedback(combat);
+        }, 0);
+    });
+
     Hooks.on("combatTurn", (combat) => {
+        services.syncActiveCombatantTokenSelection(combat);
         services.announceTurnFeedback(combat);
         services.scheduleRender();
     });
     Hooks.on("combatStart", (combat) => {
         services.resetPersonalCombatantSelection();
         services.setLastTurnCombatantId(null);
+        services.syncActiveCombatantTokenSelection(combat);
         services.announceTurnFeedback(combat);
     });
 

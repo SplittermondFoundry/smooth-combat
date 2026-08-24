@@ -41,7 +41,9 @@ export {
     actionRequiresTarget,
     COMBAT_TICK_ACTIONS,
     combatTickActionsFor,
+    normalizeFavoriteTickActionIds,
     tickAdvanceConfirmed,
+    toggleFavoriteTickActionId,
 } from "./domain/combat/ticks.js";
 
 export {

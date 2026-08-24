@@ -1,6 +1,7 @@
 export {
     getHudContext,
     resetPersonalCombatantSelection,
+    syncActiveCombatantTokenSelection,
 } from "./context.js";
 
 export {

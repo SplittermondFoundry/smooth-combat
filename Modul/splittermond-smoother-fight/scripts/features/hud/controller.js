@@ -184,7 +184,7 @@ class SmootherFightHud {
         this.element.classList.toggle("sf-theme-light", getSetting("theme", "dark") === "light");
         applyHudAppearance(this.element);
         this.element.classList.toggle("is-hidden", !visible);
-        syncSystemActionBar(visible);
+        syncSystemActionBar(visible, minimized);
         syncMinimizedHudPosition(this.element, minimized);
         if (!visible) {
             services.clearCombatEventDeletionPending();
@@ -293,6 +293,12 @@ class SmootherFightHud {
                         requestActionMenuExpansion(context, target, "skills");
                         return services.toggleFavoriteSkill(context, target.dataset.skillId);
                     });
+                    break;
+                case "toggle-favorite-tick-action":
+                    await services.requireOwner(context, () => services.toggleFavoriteTickAction(
+                        context,
+                        target.dataset.tickActionId
+                    ));
                     break;
                 case "attack":
                     await services.requireOwner(context, () => services.performAttack(context, target.dataset.attackId));

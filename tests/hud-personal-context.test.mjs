@@ -8,11 +8,15 @@ import {
     getPersonalHudContext,
     resetPersonalCombatantSelection,
     selectPersonalCombatantFromMenu,
+    syncActiveCombatantTokenSelection,
 } from "../Modul/splittermond-smoother-fight/scripts/features/hud/context.js";
+import { buildTickActionReference } from "../Modul/splittermond-smoother-fight/scripts/features/hud/tick-action-reference.js";
 import { buildHud } from "../Modul/splittermond-smoother-fight/scripts/features/hud/view.js";
+import { toggleFavoriteTickAction } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
 
 const harness = {
     controlledToken: null,
+    controlCalls: [],
     movementTracking: true,
     player: null,
     revealTargetDefenses: false,
@@ -58,7 +62,10 @@ function combatant(id, controller, { owner = false } = {}) {
         uuid: `Scene.scene.Token.token-${id}`,
         name: `Token ${id}`,
         actor,
-        object: { control: () => {} },
+        object: { control: (options) => {
+            harness.controlCalls.push({ id, options });
+            harness.controlledToken = token;
+        } },
     };
     return {
         id,
@@ -74,6 +81,7 @@ function combatant(id, controller, { owner = false } = {}) {
 function installFixture() {
     resetPersonalCombatantSelection();
     harness.controlledToken = null;
+    harness.controlCalls = [];
     harness.movementTracking = true;
     harness.revealTargetDefenses = false;
     harness.revealTargetResources = false;
@@ -146,6 +154,74 @@ test("the personal combatant menu selects HUD controls outside the player's turn
     assert.equal(activeContext.combatant, active);
     assert.equal(personalContext?.combatant, first);
     assert.equal(personalContext?.personal, true);
+    assert.equal(harness.renderCalls, 1);
+});
+
+test("the active owned combatant becomes the player's selected canvas token", () => {
+    const { combat, first, second } = installFixture();
+    combat.combatant = first;
+    harness.controlledToken = second.token;
+
+    assert.equal(syncActiveCombatantTokenSelection(combat), true);
+    assert.deepEqual(harness.controlCalls, [{ id: first.id, options: { releaseOthers: true } }]);
+    assert.equal(getPersonalHudContext(getHudContext())?.combatant, first);
+});
+
+test("the active GM-controlled combatant becomes the GM's selected canvas token", () => {
+    const { combat, first, second } = installFixture();
+    const gm = { id: "gm", isGM: true, name: "GM" };
+    globalThis.game.user = gm;
+    first.runtimeController = gm;
+    combat.combatant = first;
+    harness.controlledToken = second.token;
+
+    assert.equal(syncActiveCombatantTokenSelection(combat), true);
+    assert.deepEqual(harness.controlCalls, [{ id: first.id, options: { releaseOthers: true } }]);
+});
+
+test("successive tick turns keep switching the selected canvas token", () => {
+    const { combat, first, second } = installFixture();
+
+    for (const current of [first, second, first]) {
+        combat.combatant = current;
+        assert.equal(syncActiveCombatantTokenSelection(combat), true);
+    }
+
+    assert.deepEqual(harness.controlCalls, [
+        { id: first.id, options: { releaseOthers: true } },
+        { id: second.id, options: { releaseOthers: true } },
+        { id: first.id, options: { releaseOthers: true } },
+    ]);
+});
+
+test("favorite tick actions are pinned once above the regular categories", () => {
+    installFixture();
+    const html = buildTickActionReference({
+        getFlag: (_moduleId, key) => key === "favoriteTickActionIds" ? ["shieldBash", "walk"] : null,
+    });
+
+    assert.ok(html.indexOf("TickActionCategories.favorites") < html.indexOf("TickActionCategories.movement"));
+    assert.equal((html.match(/data-tick-action-id="shieldBash"/gu) ?? []).length, 2, "one action control and one favorite toggle");
+    assert.match(html, /data-sf-action="toggle-favorite-tick-action"/u);
+    assert.match(html, /data-sf-tick-action-category="favorites"/u);
+});
+
+test("toggling a tick-action favorite persists the actor-specific order", async () => {
+    installFixture();
+    const writes = [];
+    const actor = {
+        getFlag: () => ["walk"],
+        setFlag: async (...args) => writes.push(args),
+    };
+    globalThis.ui = { notifications: { info: () => {} } };
+
+    await toggleFavoriteTickAction({ actor }, "shieldBash");
+
+    assert.deepEqual(writes, [[
+        "splittermond-smoother-fight",
+        "favoriteTickActionIds",
+        ["walk", "shieldBash"],
+    ]]);
     assert.equal(harness.renderCalls, 1);
 });
 

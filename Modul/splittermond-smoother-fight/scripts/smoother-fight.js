@@ -52,6 +52,7 @@ Hooks.once("ready", async () => {
     registerHooks();
     registerSocket();
     publishOwnTarget();
+    hudApi.syncActiveCombatantTokenSelection(game.combat);
     setLastTurnCombatantId(game.combat?.combatant?.id ?? null);
     window.addEventListener("pointerdown", unlockFeedbackAudio, { once: true, capture: true });
     await renderHud();
