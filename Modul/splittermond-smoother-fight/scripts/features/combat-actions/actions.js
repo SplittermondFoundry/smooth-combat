@@ -32,7 +32,7 @@ import {
     revertTokenMovementApplication,
 } from "./applications.js";
 
-export async function performAttack(context, attackId, rollOptions = {}) {
+export async function performAttack(context, attackId, rollOptions = {}, rollAttack = null) {
     context = liveRuntimeActionContext(context);
     if (!context) return false;
     const attack = context.actor.attacks?.find((candidate) => candidate.id === attackId);
@@ -53,7 +53,9 @@ export async function performAttack(context, attackId, rollOptions = {}) {
         try {
             const success = await services.withTemporarySystemTargets(
                 [context.target],
-                () => context.actor.rollAttack(attackId, rollOptions)
+                () => typeof rollAttack === "function"
+                    ? rollAttack(attack, rollOptions)
+                    : context.actor.rollAttack(attackId, rollOptions)
             );
             if (success && readiness.prepared) await clearPreparationApplication(context.actor, "attack");
             else if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);

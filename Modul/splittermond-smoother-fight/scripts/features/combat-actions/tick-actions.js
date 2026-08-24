@@ -19,6 +19,10 @@ import {
 } from "../../shared/values.js";
 
 const SELECTABLE_DURATION_ACTIONS = new Set(["aim", "searchOpening"]);
+const SHIELD_BASH_MANEUVERS = Object.freeze([]);
+const WRONG_HAND_TICK_PENALTY = 2;
+const STRONG_SHIELD_ARM_KEYS = new Set(["starkerschildarmi", "starkerschildarm1", "strongshieldarmi"]);
+const TWO_WEAPON_FIGHTING_KEYS = new Set(["kampfmitzweiwaffen", "twoweaponfighting"]);
 
 export async function performTickAction(context, actionId, requestedTicks = "custom") {
     const action = COMBAT_TICK_ACTIONS.find((candidate) => candidate.id === actionId);
@@ -121,7 +125,119 @@ async function performShieldBash(context, action) {
         : options[0];
     if (!choice) return false;
     const attack = shieldAttacks.find((candidate) => candidate.id === choice.value);
-    return services.performAttack(context, attack.id);
+    return services.performAttack(
+        context,
+        attack.id,
+        { title: actionName(action) },
+        (systemAttack, rollOptions) => rollShieldBashAttack(context.actor, systemAttack, rollOptions),
+    );
+}
+
+async function rollShieldBashAttack(actor, attack, rollOptions) {
+    // Skill is a system DataModel in current Splittermond releases. Its methods use
+    // private state and therefore must keep the original instance as their receiver.
+    const restoreManeuvers = temporarilyOverrideOwnValue(
+        attack.skill,
+        "maneuvers",
+        SHIELD_BASH_MANEUVERS,
+    );
+    try {
+        return await createShieldBashAttackView(actor, attack).roll(rollOptions);
+    } finally {
+        restoreManeuvers();
+    }
+}
+
+function createShieldBashAttackView(actor, attack) {
+    const wrongHandPenalty = shieldBashWrongHandPenalty(actor, attack.skill?.id);
+    const derivedAttack = Object.create(attack);
+    Object.defineProperties(derivedAttack, {
+        weaponSpeed: {
+            configurable: false,
+            enumerable: true,
+            value: shieldBashWeaponSpeedView(attack, wrongHandPenalty),
+            writable: false,
+        },
+        weaponSpeedAsync: {
+            configurable: false,
+            enumerable: false,
+            value: () => calculateShieldBashWeaponSpeed(attack, wrongHandPenalty),
+            writable: false,
+        },
+    });
+    return derivedAttack;
+}
+
+function shieldBashWeaponSpeedView(attack, penalty) {
+    const systemSpeed = attack.weaponSpeed;
+    const displayedSpeed = numericValue(systemSpeed) + penalty;
+    if (typeof systemSpeed !== "object" || systemSpeed === null) return displayedSpeed;
+    return Object.freeze({
+        calculationValue: displayedSpeed,
+        calculate: () => calculateShieldBashWeaponSpeed(attack, penalty),
+        calculateSync: () => calculateShieldBashWeaponSpeedSync(systemSpeed, penalty),
+        display: displayedSpeed,
+        value: displayedSpeed,
+    });
+}
+
+async function calculateShieldBashWeaponSpeed(attack, penalty) {
+    const systemSpeed = typeof attack.weaponSpeedAsync === "function"
+        ? await attack.weaponSpeedAsync()
+        : typeof attack.weaponSpeed?.calculate === "function"
+            ? await attack.weaponSpeed.calculate()
+            : attack.weaponSpeed;
+    return numericValue(systemSpeed) + penalty;
+}
+
+function calculateShieldBashWeaponSpeedSync(systemSpeed, penalty) {
+    if (typeof systemSpeed.calculateSync !== "function") return numericValue(systemSpeed) + penalty;
+    try {
+        return numericValue(systemSpeed.calculateSync()) + penalty;
+    } catch {
+        return numericValue(systemSpeed) + penalty;
+    }
+}
+
+function temporarilyOverrideOwnValue(object, key, value) {
+    const ownDescriptor = Object.getOwnPropertyDescriptor(object, key);
+    Object.defineProperty(object, key, {
+        configurable: true,
+        enumerable: ownDescriptor?.enumerable ?? false,
+        value,
+        writable: false,
+    });
+    return () => {
+        if (ownDescriptor) Object.defineProperty(object, key, ownDescriptor);
+        else delete object[key];
+    };
+}
+
+function shieldBashWrongHandPenalty(actor, skillId) {
+    const normalizedSkillId = String(skillId ?? "").trim().toLocaleLowerCase("de-DE");
+    const avoidsPenalty = Array.from(actor.items ?? []).some((item) => {
+        if (item?.type !== "mastery") return false;
+        if (matchesRule(item, STRONG_SHIELD_ARM_KEYS)) return true;
+        if (!matchesRule(item, TWO_WEAPON_FIGHTING_KEYS)) return false;
+        const rawSkill = item.system?.skill;
+        const masterySkillId = typeof rawSkill === "string" ? rawSkill : rawSkill?.id;
+        return String(masterySkillId ?? "").trim().toLocaleLowerCase("de-DE") === normalizedSkillId;
+    });
+    return avoidsPenalty ? 0 : WRONG_HAND_TICK_PENALTY;
+}
+
+function matchesRule(item, keys) {
+    return [item.system?.id, item.name].some((value) => keys.has(ruleKey(value)));
+}
+
+function ruleKey(value) {
+    return String(value ?? "")
+        .normalize("NFKD")
+        .replace(/\p{Mark}/gu, "")
+        .replace(/\s*\([^)]*\)\s*$/u, "")
+        .toLocaleLowerCase("de-DE")
+        .replace(/ß/gu, "ss")
+        .replace(/[^\p{Letter}\p{Number}]+/gu, "");
 }
 
 async function performEvasiveLeap(context, action) {

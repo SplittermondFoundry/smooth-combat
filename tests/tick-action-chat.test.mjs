@@ -316,32 +316,144 @@ test("disengaging excludes Retreat Fighting when no matching weapon attack is se
     assert.equal(rolledSkill, "acrobatics");
 });
 
-test("shield bash delegates to the equipped Splittermond shield attack without an extra card or tick movement", async () => {
+test("shield bash derives a maneuver-free wrong-hand attack without mutating the system shield", async () => {
     const order = [];
     const target = { name: "Ork", uuid: "Token.orc", actor: { name: "Ork" } };
     installTickActionGlobals(target);
+    const masteryManeuvers = [{ name: "Ausfall" }];
+    let rolledAttack = null;
     const shieldAttack = {
         id: "shield-attack",
         name: "Großschild",
+        weaponSpeed: 7,
         item: { type: "shield", system: { equipped: true } },
-        skill: { id: "blades" },
+        skill: { id: "blades", maneuvers: masteryManeuvers },
+        async roll(options) {
+            order.push("roll");
+            rolledAttack = this;
+            assert.equal(options.title, "Schildstoß");
+            assert.equal(this.weaponSpeed, 9);
+            assert.equal(this.skill.id, "blades");
+            assert.deepEqual(this.skill.maneuvers, []);
+            return true;
+        },
     };
     const context = tickActionContext({
         skills: { blades: { id: "blades", label: "Klingenwaffen" } },
         attacks: [shieldAttack],
     });
-    services.performAttack = async (_context, attackId, options) => {
-        order.push("roll");
+    services.performAttack = async (_context, attackId, options, rollAttack) => {
         assert.equal(attackId, shieldAttack.id);
-        assert.equal(options, undefined);
-        return true;
+        assert.equal(options.title, "Schildstoß");
+        return rollAttack(shieldAttack, options);
     };
-    services.getAttackSpeed = async () => assert.fail("shield bash must not calculate its own tick cost");
     services.createTickActionChatCard = async () => assert.fail("shield bash must not create an extra chat card");
     services.addCombatTicks = async () => assert.fail("shield bash must not move the combatant itself");
 
     assert.equal(await performTickAction(context, "shieldBash", "7"), true);
     assert.deepEqual(order, ["roll"]);
+    assert.notEqual(rolledAttack, shieldAttack);
+    assert.equal(rolledAttack.skill, shieldAttack.skill);
+    assert.equal(shieldAttack.weaponSpeed, 7);
+    assert.equal(shieldAttack.skill.maneuvers, masteryManeuvers);
+});
+
+test("shield bash keeps branded system skill receivers and supports calculated weapon speed", async () => {
+    const target = { name: "Ork", uuid: "Token.orc", actor: { name: "Ork" } };
+    installTickActionGlobals(target);
+    class BrandedSkill {
+        #value = 12;
+
+        constructor() {
+            this.id = "blades";
+        }
+
+        get maneuvers() {
+            return [{ name: "Ausfall" }];
+        }
+
+        toObject() {
+            return { id: this.id, value: this.#value };
+        }
+    }
+    const skill = new BrandedSkill();
+    const systemSpeed = {
+        display: 7,
+        async calculate() {
+            return 7;
+        },
+    };
+    const shieldAttack = {
+        id: "shield-attack",
+        name: "Großschild",
+        weaponSpeed: systemSpeed,
+        weaponSpeedAsync: async () => 7,
+        item: { type: "shield", system: { equipped: true } },
+        skill,
+        async roll() {
+            assert.deepEqual(this.skill.toObject(), { id: "blades", value: 12 });
+            assert.deepEqual(this.skill.maneuvers, []);
+            assert.equal(this.weaponSpeed.display, 9);
+            assert.equal(await this.weaponSpeed.calculate(), 9);
+            assert.equal(await this.weaponSpeedAsync(), 9);
+            return true;
+        },
+    };
+    const context = tickActionContext({ attacks: [shieldAttack] });
+    services.performAttack = async (_context, _attackId, options, rollAttack) => (
+        rollAttack(shieldAttack, options)
+    );
+
+    assert.equal(await performTickAction(context, "shieldBash", "7"), true);
+    assert.equal(shieldAttack.weaponSpeed, systemSpeed);
+    assert.deepEqual(skill.maneuvers, [{ name: "Ausfall" }]);
+});
+
+test("shield bash waives the wrong-hand surcharge only for its two rule exceptions", async () => {
+    const target = { name: "Ork", uuid: "Token.orc", actor: { name: "Ork" } };
+    const cases = [
+        {
+            name: "unrelated two-weapon mastery",
+            items: [{ type: "mastery", name: "Kampf mit zwei Waffen", system: { skill: "staffs" } }],
+            expectedSpeed: 9,
+        },
+        {
+            name: "matching two-weapon mastery",
+            items: [{ type: "mastery", name: "Localized mastery", system: { id: "kampf-mit-zwei-waffen", skill: { id: "blades" } } }],
+            expectedSpeed: 7,
+        },
+        {
+            name: "strong shield arm",
+            items: [{ type: "mastery", name: "Starker Schildarm I", system: { skill: "endurance" } }],
+            expectedSpeed: 7,
+        },
+    ];
+
+    for (const scenario of cases) {
+        installTickActionGlobals(target);
+        const shieldAttack = {
+            id: "shield-attack",
+            name: "Großschild",
+            weaponSpeed: 7,
+            item: { type: "shield", system: { equipped: true } },
+            skill: { id: "blades", maneuvers: [{ name: "Ausfall" }] },
+            async roll() {
+                assert.equal(this.weaponSpeed, scenario.expectedSpeed, scenario.name);
+                assert.deepEqual(this.skill.maneuvers, [], scenario.name);
+                return true;
+            },
+        };
+        const context = tickActionContext({
+            attacks: [shieldAttack],
+            items: scenario.items,
+        });
+        services.performAttack = async (_context, _attackId, options, rollAttack) => (
+            rollAttack(shieldAttack, options)
+        );
+
+        assert.equal(await performTickAction(context, "shieldBash", "7"), true, scenario.name);
+        assert.equal(shieldAttack.weaponSpeed, 7, scenario.name);
+    }
 });
 
 test("evasive leap reports its degree-scaled damage reduction and only then advances ticks", async () => {
@@ -608,6 +720,53 @@ test("single-target attack mechanics use the primary target without losing secon
     assert.deepEqual([...systemTargets], [tokenObjectA, tokenObjectB]);
     assert.deepEqual(getPendingOffenseKind(actor.id).targetTokenUuids, [targetA.uuid, targetB.uuid]);
     assert.equal(getPendingOffenseKind(actor.id).primaryTargetTokenUuid, targetB.uuid);
+});
+
+test("attack mechanics can execute a scoped attack view without bypassing target handling", async () => {
+    const target = {
+        id: "target",
+        uuid: "Scene.scene.Token.target",
+        actor: { uuid: "Actor.target" },
+    };
+    const attack = { id: "shield", name: "Schild", isRanged: false };
+    let directRolls = 0;
+    let scopedRolls = 0;
+    const actor = {
+        id: "shield-user",
+        attacks: [attack],
+        getFlag: () => null,
+        rollAttack: async () => {
+            directRolls += 1;
+            return true;
+        },
+        setFlag: async () => {},
+    };
+    const user = { id: "user", isGM: true, active: true };
+    globalThis.game = { user };
+    globalThis.ui = { notifications: { warn: () => assert.fail("the scoped attack has a target") } };
+    services.getRuntimeController = () => user;
+    services.getTargetSelectionForUser = () => ({
+        target,
+        targets: [target],
+        primaryTargetTokenUuid: target.uuid,
+        primaryTargetActorUuid: target.actor.uuid,
+    });
+    services.withTemporarySystemTargets = async (targets, operation) => {
+        assert.deepEqual(targets, [target]);
+        return operation();
+    };
+    services.scheduleRender = () => {};
+
+    const completed = await performAttack({ actor, target }, attack.id, { title: "Schildstoß" }, async (resolved, options) => {
+        scopedRolls += 1;
+        assert.equal(resolved, attack);
+        assert.deepEqual(options, { title: "Schildstoß" });
+        return true;
+    });
+
+    assert.equal(completed, true);
+    assert.equal(scopedRolls, 1);
+    assert.equal(directRolls, 0);
 });
 
 test("temporary Splittermond system targets are restored when a roll fails", async () => {
