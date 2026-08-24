@@ -26,7 +26,7 @@ export function getTargetSelectionForUser(user) {
     }
     const targets = selection.targetTokenUuids
         .map(resolveToken)
-        .filter((target) => target && (game.user.isGM || !target.hidden));
+        .filter((target) => isTokenPerceivableByUser(target, game.user));
     const target = targets.find((candidate) => candidate.uuid === selection.primaryTargetTokenUuid)
         ?? targets.at(-1)
         ?? null;
@@ -71,7 +71,7 @@ export function rememberTargetReferences(
 export function getSceneTokens() {
     const scene = canvas?.scene;
     if (!scene) return [];
-    return Array.from(scene.tokens ?? []).filter((token) => game.user.isGM || !token.hidden);
+    return Array.from(scene.tokens ?? []).filter((token) => isTokenPerceivableByUser(token, game.user));
 }
 
 export function getAllSceneTokens() {
@@ -82,8 +82,23 @@ export function getTargetSceneTokens(combat) {
     const sceneId = canvas?.scene?.id;
     const combatTokens = Array.from(combat.combatants ?? [])
         .map((combatant) => combatant.token ?? resolveCombatantToken(combatant))
-        .filter((token) => token && (!sceneId || token.parent?.id === sceneId) && (game.user.isGM || !token.hidden));
+        .filter((token) => token && (!sceneId || token.parent?.id === sceneId) && isTokenPerceivableByUser(token, game.user));
     return uniqueTokensByReference([...combatTokens, ...getSceneTokens()]);
+}
+
+export function isTokenPerceivableByUser(tokenOrDocument, user = game.user) {
+    const token = tokenOrDocument?.document ?? tokenOrDocument;
+    if (!token || !user) return false;
+    if (user.isGM) return true;
+    if (token.hidden) return false;
+
+    const currentUserId = globalThis.game?.user?.id;
+    if (currentUserId && user.id !== currentUserId) return false;
+
+    const object = tokenOrDocument?.document
+        ? tokenOrDocument
+        : token.object ?? globalThis.canvas?.tokens?.get?.(token.id) ?? null;
+    return object?.isVisible === true;
 }
 
 export function resolveCombatantToken(combatant) {
@@ -109,7 +124,7 @@ export async function setTargetFromQuickMenu(context, uuid, { additive = false, 
     }
     if (!canChooseTarget(context, recipient)) return false;
     const token = resolveToken(uuid);
-    if (!token) return false;
+    if (!isTokenPerceivableByUser(token, game.user)) return false;
     const liveContext = recipient.id === context.runtimeController?.id
         ? context
         : services.getTargetSelectionForUser(recipient);

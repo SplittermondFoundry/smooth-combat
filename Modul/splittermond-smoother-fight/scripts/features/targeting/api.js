@@ -6,6 +6,7 @@ export {
     getSceneTokens,
     getTargetSceneTokens,
     getTargetSelectionForUser,
+    isTokenPerceivableByUser,
     publishOwnTarget,
     removeTargetFromQuickMenu,
     rememberTargetReferences,

@@ -36,6 +36,7 @@ export function registerHooks() {
     rerenderHooks.forEach((hook) => Hooks.on(hook, () => services.scheduleRender()));
     Hooks.on("controlToken", () => services.scheduleRender(0));
     Hooks.on("userConnected", () => services.scheduleRender(0));
+    Hooks.on("sightRefresh", () => services.scheduleRender(0));
     Hooks.on("updateToken", (token, changes) => {
         if (Object.hasOwn(changes ?? {}, "hidden")) services.scheduleRender(0);
         if (hasTokenPositionUpdate(changes)) services.scheduleRenderAfterTokenMovement(token);

@@ -193,6 +193,7 @@ function token(index, name = `Token ${index + 1}`, actorName = `Actor ${index + 
         uuid: `Token.${index + 1}`,
         name,
         texture: { src: `token-${index + 1}.webp` },
+        object: { isVisible: true },
         actor: { name: actorName, img: `actor-${index + 1}.webp`, type: index % 2 === 0 ? "character" : "npc" },
     };
 }

@@ -45,6 +45,10 @@ export function announceMessageFeedback(message) {
         ?? messageContext?.defenderTokenUuid
         ?? messageContext?.attackerTokenUuid
         ?? null;
+    const token = services.resolveToken(tokenUuid);
+    const mayObserve = Boolean(speakerActor?.testUserPermission?.(game.user, "OBSERVER"));
+    if (!game.user?.isGM && token && !services.isTokenPerceivableByUser(token, game.user)) return;
+    if (!game.user?.isGM && tokenUuid && !token && !mayObserve) return;
     triggerFeedback(kind, { tokenUuid, actorUuid: speakerActor?.uuid ?? null });
 }
 
@@ -190,6 +194,7 @@ export function receivePublishedFeedback(kind, { tokenUuid = null, actorUuid = n
     const token = services.resolveToken(tokenUuid);
     const actor = token?.actor ?? globalThis.fromUuidSync?.(actorUuid) ?? null;
     const mayObserve = Boolean(actor?.testUserPermission?.(game.user, "OBSERVER"));
+    if (!game.user?.isGM && token && !services.isTokenPerceivableByUser(token, game.user)) return;
     if (!game.user?.isGM && !token && !mayObserve) return;
     triggerFeedback(kind, { tokenUuid: token?.uuid ?? null, actorUuid: actor?.uuid ?? actorUuid });
 }
@@ -202,6 +207,7 @@ export function announceTurnFeedback(combat) {
     const actor = combatant.actor;
     const token = combatant.token ?? services.resolveCombatantToken(combatant);
     if (!actor || !isCombatantVisibleToUser(game.user?.isGM, combatant.hidden, token?.hidden)) return;
+    if (token && !services.isTokenPerceivableByUser(token, game.user)) return;
     const ownTurn = services.getCurrentTurnController(combat)?.id === game.user?.id;
     if (ownTurn) triggerFeedback("turn", { tokenUuid: token?.uuid ?? null, actorUuid: actor.uuid });
 }

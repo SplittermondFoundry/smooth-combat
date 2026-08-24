@@ -94,14 +94,23 @@ function buildEventTargetBadge(context) {
     return `<span class="sf-event-target" title="${escapeAttr(label)}"><i class="fa-solid fa-crosshairs"></i>${escapeHtml(label)}</span>`;
 }
 
-function getMessageTargetName(context) {
+export function getMessageTargetName(context) {
     const target = services.resolveMessageTarget(context);
+    if (!mayViewMessageTarget(context, target)) return "";
     return context?.primaryTargetName
         ?? context?.targetName
         ?? target?.token?.name
         ?? target?.actor?.name
         ?? context?.targetNames?.at?.(-1)
         ?? "";
+}
+
+function mayViewMessageTarget(context, target) {
+    if (game.user?.isGM) return true;
+    if (primaryTargetTokenUuid(context)) {
+        return services.isTokenPerceivableByUser(target?.token, game.user);
+    }
+    return Boolean(target?.actor?.testUserPermission?.(game.user, "OBSERVER"));
 }
 
 function primaryTargetTokenUuid(context) {

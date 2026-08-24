@@ -3,7 +3,9 @@ import test from "node:test";
 
 import { services } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
 import {
+    getTargetSceneTokens,
     getTargetSelectionForUser,
+    isTokenPerceivableByUser,
     rememberTargetReferences,
     removeTargetFromQuickMenu,
     setTargetFromQuickMenu,
@@ -15,11 +17,13 @@ function createToken(id) {
         id,
         uuid: `Scene.scene.Token.${id}`,
         documentName: "Token",
+        hidden: false,
         name: `Ziel ${id.toUpperCase()}`,
         actor,
     };
     token.object = {
         document: token,
+        isVisible: true,
         setTarget: (targeted, options) => targetingHarness.targetCalls.push([token.uuid, targeted, options?.releaseOthers ?? false]),
     };
     return token;
@@ -63,6 +67,7 @@ test("quick targeting selects a primary target normally and adds secondary targe
     assert.equal(initial.primaryTargetTokenUuid, targetB.uuid);
     assert.equal(initial.targetTokenUuid, targetB.uuid);
     assert.equal(initial.primaryTargetActorUuid, targetB.actor.uuid);
+    assert.equal(isTokenPerceivableByUser(targetB, user), true);
 
     const context = { actor: { isOwner: true }, runtimeController: user, target: targetB, targets: [targetA, targetB] };
     await setTargetFromQuickMenu(context, targetA.uuid);
@@ -96,6 +101,50 @@ test("quick targeting selects a primary target normally and adds secondary targe
     assert.deepEqual(targetingHarness.targetCalls, [[targetA.uuid, false, false]]);
     assert.deepEqual(targetingHarness.socketPayloads.at(-1).targetTokenUuids, [targetC.uuid]);
     assert.equal(targetingHarness.socketPayloads.at(-1).primaryTargetTokenUuid, targetC.uuid);
+
+    targetB.hidden = true;
+    targetC.object.isVisible = false;
+    user.targets = new Set([targetA.object, targetB.object, targetC.object]);
+    const concealedSelection = getTargetSelectionForUser(user);
+    assert.deepEqual(concealedSelection.targetTokenUuids, [targetA.uuid]);
+    assert.equal(concealedSelection.primaryTargetTokenUuid, targetA.uuid);
+
+    targetingHarness.targetCalls.length = 0;
+    targetingHarness.socketPayloads.length = 0;
+    assert.equal(await setTargetFromQuickMenu(context, targetB.uuid), false);
+    assert.equal(await setTargetFromQuickMenu(context, targetC.uuid), false);
+    assert.deepEqual(targetingHarness.targetCalls, []);
+    assert.deepEqual(targetingHarness.socketPayloads, []);
+});
+
+test("quick-target candidates follow Foundry visibility and retain the GM bypass", () => {
+    const visible = createToken("visible");
+    const hidden = createToken("hidden");
+    const outsideVision = createToken("outside-vision");
+    hidden.hidden = true;
+    outsideVision.object.isVisible = false;
+    for (const token of [visible, hidden, outsideVision]) token.parent = { id: "scene" };
+
+    const player = { id: "player-visibility", isGM: false };
+    globalThis.game = { user: player };
+    globalThis.canvas = {
+        scene: { id: "scene", tokens: [visible, hidden, outsideVision] },
+        tokens: { get: () => null },
+    };
+    const combat = { combatants: [
+        { token: visible },
+        { token: hidden },
+        { token: outsideVision },
+    ] };
+
+    assert.deepEqual(getTargetSceneTokens(combat).map((token) => token.uuid), [visible.uuid]);
+
+    globalThis.game.user = { id: "gm-visibility", isGM: true };
+    assert.deepEqual(getTargetSceneTokens(combat).map((token) => token.uuid), [
+        visible.uuid,
+        hidden.uuid,
+        outsideVision.uuid,
+    ]);
 });
 
 test("an active GM substitutes locally without sending target operations to an offline player", async () => {
