@@ -2189,27 +2189,6 @@ body > .sf-spell-tooltip footer {
     line-height: 1.25;
 }
 
-#splittermond-smoother-fight-hud .sf-defense-pills {
-    display: none;
-    align-items: center;
-    gap: 5px;
-    padding: 0 8px;
-    border-left: 1px solid var(--sf-line);
-}
-
-#splittermond-smoother-fight-hud .sf-defense-pills span {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    color: var(--sf-muted);
-    font-size: var(--sf-font-meta);
-}
-
-#splittermond-smoother-fight-hud .sf-defense-pills b {
-    color: var(--sf-text);
-    font-size: 15px;
-}
-
 #splittermond-smoother-fight-hud .sf-owner-note {
     min-height: 49px;
     display: flex;

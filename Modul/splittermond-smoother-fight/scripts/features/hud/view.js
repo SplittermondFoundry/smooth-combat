@@ -443,11 +443,6 @@ async function buildActionBar(context) {
             defenseButton(actor, "bodyresist", "KW"),
             defenseButton(actor, "mindresist", "GW"),
         ].join(""), `sf-defense-menu${defenseAlert ? " is-defense-alert" : ""}`)}
-        <div class="sf-defense-pills" aria-label="VTD, KW, GW">
-            <span>VTD <b>${escapeHtml(getDerivedValue(actor, "defense"))}</b></span>
-            <span>KW <b>${escapeHtml(getDerivedValue(actor, "bodyresist"))}</b></span>
-            <span>GW <b>${escapeHtml(getDerivedValue(actor, "mindresist"))}</b></span>
-        </div>
         ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
     </nav>`;
 }

@@ -106,7 +106,6 @@ test("published DOM integration attributes remain available", () => {
     assert.equal((hudView.match(/data-sf-action="toggle-token-hidden"/gu) ?? []).length, 1);
     assert.equal((hudView.match(/data-sf-action="toggle-combatant-hidden"/gu) ?? []).length, 1);
     assert.equal((hudView.match(/data-sf-action="toggle-combatant-visibility"/gu) ?? []).length, 1);
-    assert.doesNotMatch(hudView, /sf-defense-pills" aria-hidden="true"/u);
     assert.match(combatEventView, /data-subevent-actor-id/u);
     assert.match(hudView, /buildAttackControlMarkup\(context\.actor, \{ meleeOnly: true \}\)/u);
     assert.match(hudView, /filter\(\(attack\) => !meleeOnly \|\| !services\.isRangedAttack\(attack\)\)/u);
@@ -160,7 +159,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "816dbf9cd3d2ac1eef97e70da485e8fe4dc8c1aeaa9bec38d7bd5e8782b6e3c9",
+        "c51b81016697ca271fc7c959cd1e5ad93901d81d8fd2af749aa921ec920ae777",
     );
 });
 
