@@ -8,6 +8,7 @@ Dieses Update macht mehrstufige Kampfvorgänge ausfallsicherer. Begonnene und er
 
 - Angriffe sowie Waffen und Schilde im Bereich **Ausrüstung** besitzen jetzt einen kompakten Tooltip nach dem Vorbild der Zauber. Er zeigt Fertigkeit, WGS, Schaden, Merkmale, bei Fernkampfangriffen die Reichweite und relevante Zustände wie **Standardangriff**, **vorbereitet** oder **ausgerüstet**. Ausgerüstete Gegenstände verwenden die aktuell berechneten Angriffswerte, nicht ausgerüstete Gegenstände ihre hinterlegten Basiswerte; der Tooltip ist per Mauszeiger und Tastaturfokus erreichbar.
 - Bei mehr als acht Zaubern erhält das Zaubermenü automatisch eine Suche über Name, Magieschule, Grad, Fokuskosten und Zauberdauer. Zusätzlich kann nach ausreichendem Fokus sowie – sofern mehrere Werte vorhanden sind – nach Magieschule und Grad gefiltert werden. Suchbegriff, Filterauswahl und Scrollposition bleiben bei einer Neudarstellung des HUDs erhalten.
+- **Zielen** und **Lücke suchen** werden nun als kampfgebundene Vorbereitungen im HUD fortgeführt. Nach einer frei gewählten Dauer von 2, 4 oder 6 Ticks erscheint der Bonus von +1 bis +3 beim passenden Folgeangriff als vorausgewählter, benannter Modifikator und wird erst nach dem tatsächlich ausgeführten Angriff verbraucht. **Zielen** bleibt dabei an die vorbereitete Fernkampfwaffe und das angesagte Ziel gebunden; **Lücke suchen** gilt für den nächsten Nahkampfangriff.
 
 ## Verbesserungen und Fehlerbehebungen
 
@@ -25,6 +26,8 @@ Dieses Update macht mehrstufige Kampfvorgänge ausfallsicherer. Begonnene und er
 - Die Zuordnungseinstellungen trennen nun klar zwischen der dauerhaften Zuordnung (**direktes Token → Bogen → Foundry-OWNER**) und der vorübergehenden Laufzeitsteuerung (**aktiver zugeordneter Benutzer → aktiver Primary GM → anderer aktiver GM**).
 - Greift diese vorübergehende Vertretungsregel, erhält der vertretende GM jetzt auch die Hervorhebung für die sinnvoll nächste Handlung auf den zugehörigen Kampf- und Abwehrkarten.
 - Die Zuordnungseinstellungen warnen jetzt bereits bei der Auswahl, wenn einem zugeordneten Spieler die erforderliche Foundry-**OWNER**-Berechtigung für den Bogen oder das direkt zugewiesene Token fehlt. Die Warnung bietet einen direkten Link zum betroffenen Bogen; Berechtigungen werden weiterhin nicht automatisch verändert.
+- Nicht verbrauchte Boni aus **Zielen** und **Lücke suchen** werden beim Kampfende sowie beim Entfernen des zugehörigen Kampfteilnehmers zuverlässig gelöscht und können nicht in einen späteren Kampf übernommen werden.
+- Fehlt der auswählbare Systemeintrag für die Meisterschaft **Verteidiger**, wird der Malus von −3 im Abwehrdialog dynamisch als vorausgewählter Modifikator mit eindeutiger Herkunft angezeigt. Nach dem Würfelwurf oder dem Abbruch des Dialogs wird der temporäre Eintrag wieder entfernt.
 - Neue automatisierte Tests decken erfolgreiche Anwendungen, sicher erkennbare Fehlschläge, unklare Ergebnisse, Wiederholungsversuche und konkurrierende Aufrufe ab.
 
 ## Installation
