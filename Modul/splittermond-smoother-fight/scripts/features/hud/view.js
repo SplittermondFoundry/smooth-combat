@@ -1,6 +1,9 @@
-import { hudState } from "./state.js";
 import { activeDefenseOptionSummaries } from "./defense-options.js";
 import { services } from "../../core/services.js";
+
+import {
+    spellFocusCosts,
+} from "./action-tooltips.js";
 
 import {
     getPersonalHudCandidates,
@@ -553,7 +556,7 @@ function buildAttackMenuBody(attacks, equipment, attackStates, attackSpeeds, def
                 ? "SMOOTHER_FIGHT.HUD.ClearDefaultAttack"
                 : "SMOOTHER_FIGHT.HUD.SetDefaultAttack");
         return `<div class="sf-attack-option ${isDefault ? "is-default" : ""}">
-            <button type="button" class="sf-attack-option-roll ${attackStates.get(attack.id)?.prepared ? "is-prepared" : ""}" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
+            <button type="button" class="sf-attack-option-roll ${attackStates.get(attack.id)?.prepared ? "is-prepared" : ""}" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}">
                 <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small></span>
                 <b>${escapeHtml(attackStates.get(attack.id)?.prepared ? displayValue(attack.damage, "–") : `${attackSpeeds.get(attack.id) ?? "–"} T`)}</b>
             </button>
@@ -561,7 +564,7 @@ function buildAttackMenuBody(attacks, equipment, attackStates, attackSpeeds, def
         </div>`;
     }).join("") || emptyMenuText();
     const equipmentOptions = equipment.length
-        ? `<h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Equip"))}</h4>${equipment.map((item) => `<button type="button" data-sf-action="toggle-equipped" data-item-id="${escapeAttr(item.id)}" class="${item.system?.equipped ? "is-equipped" : "is-unequipped"}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}">
+        ? `<h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Equip"))}</h4>${equipment.map((item) => `<button type="button" data-sf-action="toggle-equipped" data-item-id="${escapeAttr(item.id)}" class="${item.system?.equipped ? "is-equipped" : "is-unequipped"}">
             <img src="${escapeAttr(item.img)}" alt=""><span>${escapeHtml(item.name)}</span><i class="fa-solid ${item.system?.equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i>
         </button>`).join("")}`
         : "";
@@ -614,111 +617,6 @@ function preparedAttackMenu(attack) {
         </button>
         <button type="button" class="sf-prepared-spell-cancel" data-sf-action="cancel-prepared-attack" title="${escapeAttr(cancel)}" aria-label="${escapeAttr(cancel)}"><i class="fa-solid fa-xmark"></i></button>
     </div>`;
-}
-
-function spellFocusCosts(spell) {
-    return displayLabel(spell?.costs ?? spell?.system?.costs, "–");
-}
-
-export function resolveActionItem(actor, element) {
-    const spellId = element?.dataset?.spellId;
-    if (spellId) {
-        return actor?.spells?.find((spell) => spell.id === spellId)
-            ?? actor?.items?.get?.(spellId)
-            ?? null;
-    }
-
-    const attackId = element?.dataset?.attackId;
-    if (attackId) {
-        const attack = actor?.attacks?.find((candidate) => candidate.id === attackId);
-        return attack?.item ?? actor?.items?.get?.(attackId) ?? null;
-    }
-
-    const itemId = element?.dataset?.itemId;
-    return itemId ? actor?.items?.get?.(itemId) ?? null : null;
-}
-
-export function bindSpellTooltips(root, context) {
-    for (const button of root.querySelectorAll("[data-spell-id]")) {
-        const spell = resolveActionItem(context.actor, button);
-        if (!spell) continue;
-        button.addEventListener("mouseenter", () => showSpellTooltip(button, spell));
-        button.addEventListener("mouseleave", () => clearSpellTooltip(button));
-        button.addEventListener("focus", () => showSpellTooltip(button, spell));
-        button.addEventListener("blur", () => clearSpellTooltip(button));
-    }
-}
-
-function showSpellTooltip(anchor, spell) {
-    if (hudState.spellTooltip?.anchor === anchor) return;
-    clearSpellTooltip();
-
-    const description = itemPlainText(spell.description ?? spell.system?.description);
-    const enhancement = itemPlainText(spell.enhancementDescription ?? spell.system?.enhancementDescription);
-    const enhancementCosts = displayLabel(spell.enhancementCosts ?? spell.system?.enhancementCosts, "–");
-    const tooltip = document.createElement("aside");
-    tooltip.id = `${MODULE_ID}-spell-tooltip`;
-    tooltip.className = "sf-spell-tooltip";
-    tooltip.setAttribute("role", "tooltip");
-    tooltip.innerHTML = `
-        <header>
-            <img src="${escapeAttr(spell.img ?? "icons/svg/book.svg")}" alt="">
-            <span><strong>${escapeHtml(spell.name)}</strong><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.FocusCosts", { costs: spellFocusCosts(spell) }))}</small></span>
-        </header>
-        <section>
-            <h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SpellDescription"))}</h4>
-            <p>${escapeHtml(description || t("SMOOTHER_FIGHT.HUD.NoSpellDescription"))}</p>
-        </section>
-        <section>
-            <h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SpellEnhancement"))}<span>${escapeHtml(enhancementCosts)}</span></h4>
-            <p>${escapeHtml(enhancement || t("SMOOTHER_FIGHT.HUD.NoSpellEnhancement"))}</p>
-        </section>
-        <footer><i class="fa-solid fa-arrow-pointer"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.OpenItemHint"))}</footer>
-    `;
-    document.body.append(tooltip);
-    anchor.setAttribute("aria-describedby", tooltip.id);
-    hudState.spellTooltip = { anchor, element: tooltip };
-
-    const anchorRect = anchor.getBoundingClientRect();
-    const tooltipRect = tooltip.getBoundingClientRect();
-    const gap = 10;
-    const viewportGap = 8;
-    let left = anchorRect.right + gap;
-    if (left + tooltipRect.width > window.innerWidth - viewportGap) {
-        left = anchorRect.left - tooltipRect.width - gap;
-    }
-    left = Math.max(viewportGap, Math.min(left, window.innerWidth - tooltipRect.width - viewportGap));
-    const top = Math.max(
-        viewportGap,
-        Math.min(anchorRect.top, window.innerHeight - tooltipRect.height - viewportGap),
-    );
-    tooltip.style.left = `${Math.round(left)}px`;
-    tooltip.style.top = `${Math.round(top)}px`;
-    tooltip.classList.add("is-visible");
-}
-
-export function clearSpellTooltip(anchor = null) {
-    const state = hudState.spellTooltip;
-    if (!state || (anchor && state.anchor !== anchor)) return;
-    hudState.spellTooltip = null;
-    state.anchor?.removeAttribute?.("aria-describedby");
-    state.element?.remove?.();
-}
-
-function itemPlainText(value) {
-    const source = String(value ?? "").trim();
-    if (!source) return "";
-    const template = document.createElement("template");
-    template.innerHTML = source
-        .replace(/<br\s*\/?\s*>/giu, "\n")
-        .replace(/<\/(?:p|div|li|h[1-6])>/giu, "\n");
-    return String(template.content.textContent ?? "")
-        .replace(/\u00a0/gu, " ")
-        .replace(/[ \t]+\n/gu, "\n")
-        .replace(/\n[ \t]+/gu, "\n")
-        .replace(/\n{3,}/gu, "\n\n")
-        .replace(/[ \t]{2,}/gu, " ")
-        .trim();
 }
 
 function defenseButton(actor, type, abbreviation) {

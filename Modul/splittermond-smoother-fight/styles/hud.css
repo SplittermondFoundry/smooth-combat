@@ -2089,7 +2089,7 @@
     letter-spacing: 0.08em;
 }
 
-body > .sf-spell-tooltip {
+body > .sf-action-tooltip {
     position: fixed;
     z-index: 200;
     width: min(390px, calc(100vw - 16px));
@@ -2108,12 +2108,12 @@ body > .sf-spell-tooltip {
     transition: opacity 90ms ease, transform 90ms ease;
 }
 
-body > .sf-spell-tooltip.is-visible {
+body > .sf-action-tooltip.is-visible {
     opacity: 1;
     transform: translateY(0);
 }
 
-body > .sf-spell-tooltip header {
+body > .sf-action-tooltip header {
     display: grid;
     grid-template-columns: 42px minmax(0, 1fr);
     align-items: center;
@@ -2122,7 +2122,7 @@ body > .sf-spell-tooltip header {
     border-bottom: 1px solid rgba(117, 191, 186, 0.2);
 }
 
-body > .sf-spell-tooltip header img {
+body > .sf-action-tooltip header img {
     width: 42px;
     height: 42px;
     border: 0;
@@ -2130,29 +2130,29 @@ body > .sf-spell-tooltip header img {
     object-fit: cover;
 }
 
-body > .sf-spell-tooltip header span {
+body > .sf-action-tooltip header span {
     display: flex;
     flex-direction: column;
     min-width: 0;
 }
 
-body > .sf-spell-tooltip header strong {
+body > .sf-action-tooltip header strong {
     color: #f2ce87;
     font: 700 17px/1.2 var(--font-secondary, serif);
 }
 
-body > .sf-spell-tooltip header small {
+body > .sf-action-tooltip header small {
     margin-top: 4px;
     color: #75bfb8;
     font-size: 12px;
     line-height: 1.25;
 }
 
-body > .sf-spell-tooltip section {
+body > .sf-action-tooltip section {
     margin-top: 11px;
 }
 
-body > .sf-spell-tooltip h4 {
+body > .sf-action-tooltip h4 {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -2164,12 +2164,12 @@ body > .sf-spell-tooltip h4 {
     text-transform: uppercase;
 }
 
-body > .sf-spell-tooltip h4 span {
+body > .sf-action-tooltip h4 span {
     color: #f2ce87;
     text-transform: none;
 }
 
-body > .sf-spell-tooltip p {
+body > .sf-action-tooltip p {
     margin: 0;
     color: #d6dfdd;
     font-size: 13px;
@@ -2177,7 +2177,41 @@ body > .sf-spell-tooltip p {
     white-space: pre-line;
 }
 
-body > .sf-spell-tooltip footer {
+body > .sf-action-tooltip .sf-attack-tooltip-stats {
+    display: grid;
+    gap: 0;
+    margin: 7px 0 0;
+}
+
+body > .sf-action-tooltip .sf-attack-tooltip-stats div {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(117, 191, 186, 0.12);
+}
+
+body > .sf-action-tooltip .sf-attack-tooltip-stats div:last-child {
+    border-bottom: 0;
+}
+
+body > .sf-action-tooltip .sf-attack-tooltip-stats dt {
+    color: #d8a85d;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+body > .sf-action-tooltip .sf-attack-tooltip-stats dd {
+    min-width: 0;
+    margin: 0;
+    color: #d6dfdd;
+    font-size: 13px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+body > .sf-action-tooltip footer {
     display: flex;
     align-items: center;
     gap: 5px;

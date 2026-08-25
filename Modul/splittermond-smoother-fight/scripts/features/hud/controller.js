@@ -17,11 +17,14 @@ import {
 } from "./view-state.js";
 
 import {
-    bindSpellTooltips,
     buildHud,
-    clearSpellTooltip,
-    resolveActionItem,
 } from "./view.js";
+
+import {
+    bindActionTooltips,
+    clearActionTooltip,
+    resolveActionItem,
+} from "./action-tooltips.js";
 
 import {
     bindQuickTargetSearch,
@@ -191,7 +194,7 @@ class SmootherFightHud {
             delete this.element.dataset.activeCombatantId;
             delete this.element.dataset.activeActorId;
             services.clearHoveredToken();
-            clearSpellTooltip();
+            clearActionTooltip();
             this.element.replaceChildren();
             return;
         }
@@ -199,7 +202,7 @@ class SmootherFightHud {
         const html = await buildHud(context);
         if (generation !== this.renderGeneration) return;
         services.clearHoveredToken();
-        clearSpellTooltip();
+        clearActionTooltip();
         this.element.innerHTML = html;
         this.element.dataset.activeCombatantId = context.combatant.id ?? "";
         this.element.dataset.activeActorId = context.actor?.id ?? "";
@@ -210,7 +213,7 @@ class SmootherFightHud {
         this.quickTargetViewStateRequest = null;
         bindQuickTargetSearch(this.element);
         bindTickActionReferenceFilters(this.element);
-        bindSpellTooltips(this.element, context);
+        bindActionTooltips(this.element, context);
         restoreHudViewState(this.element, viewState, { forceLatestEvent });
         if (forceLatestEvent) services.clearCombatEventDeletionPending();
         applyCombatEventExpansionRequest(this.element);
@@ -234,7 +237,7 @@ class SmootherFightHud {
         if (!item?.sheet) return;
         event.preventDefault();
         event.stopPropagation();
-        clearSpellTooltip();
+        clearActionTooltip();
         item.sheet.render({ force: true });
     }
 

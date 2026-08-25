@@ -2,7 +2,8 @@
 export const hudState = {
     hud: null,
     renderTimer: null,
-    spellTooltip: null,
+    actionTooltip: null,
+    actionTooltipRequest: null,
     hiddenByShortcut: false,
     actionMenuExpansionRequest: null,
     personalCombatId: null,
