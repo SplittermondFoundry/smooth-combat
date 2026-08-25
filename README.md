@@ -43,7 +43,7 @@ Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github
 
 ## Ersteinrichtung
 
-Nach dem Aktivieren werden die Zuordnungen unter **Einstellungen → Moduleinstellungen → Spieler, Bögen und Tokens verknüpfen** festgelegt. Eine direkte Token-Zuordnung hat Vorrang vor der Zuordnung des Charakter- oder NSC-Bogens. Danach greifen der festgelegte Haupt-GM und zuletzt die normalen Owner-Rechte.
+Nach dem Aktivieren werden die Zuordnungen unter **Einstellungen → Moduleinstellungen → Spieler, Bögen und Tokens verknüpfen** festgelegt. Die dauerhafte Zuordnung wird in dieser Reihenfolge ermittelt: direkte Token-Zuordnung → Bogen-Zuordnung → Foundry-OWNER. Für die Laufzeitsteuerung gilt separat: aktiver zugeordneter Benutzer → aktiver Primary GM → anderer aktiver GM.
 
 Unter **Darstellung und Medien** lassen sich Theme, Animationen, Hintergründe und ein eigenes Icon-Verzeichnis konfigurieren. **Audiohinweise** steuert die Signale für Zugbeginn, Aktive Abwehr, Schaden, Zauber und Fernkampf.
 

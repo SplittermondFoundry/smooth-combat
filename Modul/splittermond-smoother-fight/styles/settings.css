@@ -632,13 +632,15 @@
 }
 
 .sf-assignment-source.is-sheet,
-.sf-assignment-priority .is-sheet {
+.sf-assignment-priority .is-sheet,
+.sf-assignment-priority .is-assigned-user {
     border-color: rgba(40, 111, 109, 0.75);
     color: var(--sf-teal);
 }
 
 .sf-assignment-source.is-primary-gm,
-.sf-assignment-priority .is-primary-gm {
+.sf-assignment-priority .is-primary-gm,
+.sf-assignment-priority .is-active-gm {
     color: #6f477e;
 }
 
@@ -1984,13 +1986,15 @@
 }
 
 .smoother-fight.sf-settings .sf-assignment-source.is-sheet,
-.smoother-fight.sf-settings .sf-assignment-priority .is-sheet {
+.smoother-fight.sf-settings .sf-assignment-priority .is-sheet,
+.smoother-fight.sf-settings .sf-assignment-priority .is-assigned-user {
     color: var(--sf-sheet);
     background: rgba(74, 143, 139, 0.16);
 }
 
 .smoother-fight.sf-settings .sf-assignment-source.is-primary-gm,
-.smoother-fight.sf-settings .sf-assignment-priority .is-primary-gm {
+.smoother-fight.sf-settings .sf-assignment-priority .is-primary-gm,
+.smoother-fight.sf-settings .sf-assignment-priority .is-active-gm {
     color: var(--sf-primary-gm);
     background: rgba(135, 87, 151, 0.14);
 }

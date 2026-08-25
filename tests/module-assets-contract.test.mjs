@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "b1aa2e5e2566e014d80acf4529feefd8ed406fbb590a13ebb9603371e4767624",
+        "9d2ffe5ee979b2c5f587da94f25b59d580f21e51ba07a38a14a976cd79e5337f",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -54,7 +54,12 @@ test("published DOM integration attributes remain available", () => {
     assert.match(assignmentTemplate, /data-overview-token-select/u);
     assert.match(assignmentTemplate, /data-role="player-assignment-status"/u);
     assert.match(assignmentTemplate, /<details class="sf-assignment-help">/u);
-    assert.match(assignmentTemplate, /is-direct[\s\S]*is-sheet[\s\S]*is-primary-gm[\s\S]*is-owner/u);
+    const priorityRows = [...assignmentTemplate.matchAll(/<div class="sf-assignment-priority"[\s\S]*?<\/div>/gu)]
+        .map((match) => match[0]);
+    assert.equal(priorityRows.length, 2);
+    assert.match(priorityRows[0], /PersistentAssignmentLabel[\s\S]*is-direct[\s\S]*is-sheet[\s\S]*is-owner/u);
+    assert.doesNotMatch(priorityRows[0], /is-primary-gm/u);
+    assert.match(priorityRows[1], /RuntimeControlLabel[\s\S]*is-assigned-user[\s\S]*is-primary-gm[\s\S]*is-active-gm/u);
     assert.match(assignmentTemplate, /data-role="assignment-warnings" open/u);
     assert.match(assignmentTemplate, /\{\{#if showSetupHint\}\}/u);
 
@@ -152,7 +157,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "b3a2259e8db4693a22f0e47551b97066a9527bc3e2434d39f0809053bcd91f83",
+        "816dbf9cd3d2ac1eef97e70da485e8fe4dc8c1aeaa9bec38d7bd5e8782b6e3c9",
     );
 });
 

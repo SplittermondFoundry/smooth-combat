@@ -32,15 +32,21 @@
             </summary>
             <div class="sf-assignment-help-content">
                 <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.LinksHint"}}</p>
-                <div class="sf-assignment-priority" aria-label="{{localize "SMOOTHER_FIGHT.Settings.PriorityLabel"}}">
-                    <strong>{{localize "SMOOTHER_FIGHT.Settings.PriorityLabel"}}</strong>
+                <div class="sf-assignment-priority" aria-label="{{localize "SMOOTHER_FIGHT.Settings.PersistentAssignmentLabel"}}">
+                    <strong>{{localize "SMOOTHER_FIGHT.Settings.PersistentAssignmentLabel"}}</strong>
                     <span class="is-direct"><i class="fa-solid fa-chess-pawn"></i> {{localize "SMOOTHER_FIGHT.Settings.DirectTokenAssignment"}}</span>
                     <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
                     <span class="is-sheet"><i class="fa-solid fa-address-card"></i> {{localize "SMOOTHER_FIGHT.Settings.SheetAssignment"}}</span>
                     <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
-                    <span class="is-primary-gm"><i class="fa-solid fa-user-tie"></i> {{localize "SMOOTHER_FIGHT.Settings.PrimaryGmAssignment"}}</span>
-                    <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
                     <span class="is-owner"><i class="fa-solid fa-key"></i> {{localize "SMOOTHER_FIGHT.Settings.OwnerAssignment"}}</span>
+                </div>
+                <div class="sf-assignment-priority" aria-label="{{localize "SMOOTHER_FIGHT.Settings.RuntimeControlLabel"}}">
+                    <strong>{{localize "SMOOTHER_FIGHT.Settings.RuntimeControlLabel"}}</strong>
+                    <span class="is-assigned-user"><i class="fa-solid fa-user-check"></i> {{localize "SMOOTHER_FIGHT.Settings.ActiveAssignedUser"}}</span>
+                    <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
+                    <span class="is-primary-gm"><i class="fa-solid fa-user-tie"></i> {{localize "SMOOTHER_FIGHT.Settings.ActivePrimaryGm"}}</span>
+                    <i class="fa-solid fa-angle-right" aria-hidden="true"></i>
+                    <span class="is-active-gm"><i class="fa-solid fa-user-shield"></i> {{localize "SMOOTHER_FIGHT.Settings.OtherActiveGm"}}</span>
                 </div>
                 <p class="notes">{{localize "SMOOTHER_FIGHT.Settings.PrimaryGmHint"}}</p>
                 <section class="sf-assignment-summary" aria-label="{{localize "SMOOTHER_FIGHT.Settings.Overview"}}">
