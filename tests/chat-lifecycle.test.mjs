@@ -126,7 +126,7 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
         actor,
         token: attackerToken,
     };
-    const currentUser = { id: "current-user", targets: new Set() };
+    const currentUser = { id: "current-user", targets: new Set([targetA]) };
     const message = {
         id: "attack-message",
         type: "attackRollMessage",
@@ -152,7 +152,7 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
     };
     globalThis.Hooks = hooks.api;
 
-    return { actor, attackerToken, assignedUser, combatant, hooks, message, runtimeController, targetA, targetB };
+    return { actor, attackerToken, assignedUser, combatant, currentUser, hooks, message, runtimeController, targetA, targetB };
 }
 
 async function waitForDiceHook(hooks) {
@@ -185,7 +185,7 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
 
     await t.test("A and B remain selected while B is frozen as the primary target", async () => {
         const fixture = createFixture();
-        fixture.runtimeController.targets = new Set([fixture.targetA, fixture.targetB]);
+        fixture.currentUser.targets = new Set([fixture.targetA, fixture.targetB]);
         harness.primaryTargetUuid = fixture.targetB.uuid;
         const processing = onCreateChatMessage(fixture.message);
 
@@ -215,6 +215,23 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
             createdAt: context.createdAt,
         });
         assert.equal(callsOf("getTargetSelectionForUser").length, 1);
+    });
+
+    await t.test("a manual GM roll uses the author's targets instead of an online runtime controller's targets", async () => {
+        const fixture = createFixture({ diceActive: false });
+        fixture.currentUser.isGM = true;
+        fixture.currentUser.targets = new Set([fixture.targetB]);
+        fixture.runtimeController.targets = new Set([fixture.targetA]);
+        harness.primaryTargetUuid = fixture.targetB.uuid;
+
+        await onCreateChatMessage(fixture.message);
+
+        const context = harness.contexts.get(fixture.message);
+        assert.equal(context?.primaryTargetTokenUuid, fixture.targetB.uuid);
+        assert.deepEqual(context?.targetTokenUuids, [fixture.targetB.uuid]);
+        assert.equal(context?.assignedUserId, fixture.assignedUser.id);
+        assert.equal(context?.runtimeControllerId, fixture.runtimeController.id);
+        assert.equal(callsOf("getTargetSelectionForUser")[0]?.args[0], fixture.currentUser);
     });
 
     await t.test("an attack by a non-active combatant is marked as out of turn", async () => {

@@ -120,7 +120,10 @@ async function attachCombatContext(message) {
     const actor = speakerCombatant?.actor ?? (message.speaker?.actor ? game.actors.get(message.speaker.actor) : null);
     const assignedUser = speakerCombatant && actor ? services.getAssignedUser(speakerCombatant) : game.user;
     const runtimeController = speakerCombatant && actor ? services.getRuntimeController(speakerCombatant) : game.user;
-    const targetSelection = services.getTargetSelectionForUser(runtimeController);
+    const author = message.author
+        ?? game.users?.get?.(message.user?.id ?? message.user)
+        ?? game.user;
+    const targetSelection = services.getTargetSelectionForUser(author);
     const pendingKind = services.claimPendingOffenseKind(actor?.id);
     const targetContext = combatTargetContext(
         pendingKind?.expiresAt >= createdAt ? pendingKind : null,
