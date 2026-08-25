@@ -44,3 +44,30 @@ test("fumble ownership follows the character assignment instead of broad actor o
     globalThis.game.combat.combatants = [];
     assert.equal(isMessageSpeakerAssignedToCurrentUser(message), false);
 });
+
+test("message action highlighting follows an active runtime substitute", () => {
+    const currentUser = { id: "primary-gm", isGM: true };
+    const assignedUser = { id: "inactive-player", isGM: false };
+    const actor = {
+        id: "actor",
+        isOwner: true,
+        testUserPermission: () => true,
+    };
+    const combatant = {
+        actorId: actor.id,
+        assignedUser,
+        runtimeController: currentUser,
+    };
+    const message = { actor };
+    globalThis.game = {
+        combat: { combatants: [combatant] },
+        user: currentUser,
+    };
+
+    contexts.set(message, {
+        assignedUserId: assignedUser.id,
+        runtimeControllerId: currentUser.id,
+    });
+
+    assert.equal(isMessageSpeakerAssignedToCurrentUser(message), true);
+});

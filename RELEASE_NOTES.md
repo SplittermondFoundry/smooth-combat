@@ -23,6 +23,7 @@ Dieses Update macht mehrstufige Kampfvorgänge ausfallsicherer. Begonnene und er
 - Nicht mehr verwendete Zusatzanzeigen für **VTD, KW und GW** wurden aus dem Kampf-HUD entfernt. Die Abwehrwerte bleiben weiterhin im Actor-Portrait und im Menü **Aktive Abwehr** verfügbar.
 - Die Zielanzeige berücksichtigt nun durchgehend die Wahrnehmung des aktuellen Benutzers. Verborgene oder durch Sichtlinie, Beleuchtung und Fog of War nicht sichtbare Tokens erscheinen für Spieler weder in der Schnellzielauswahl noch als gespeicherte Primär- oder Sekundärziele, in Kampfereignissen oder im Feedback; die Spielleitung sieht weiterhin alle Tokens.
 - Die Zuordnungseinstellungen trennen nun klar zwischen der dauerhaften Zuordnung (**direktes Token → Bogen → Foundry-OWNER**) und der vorübergehenden Laufzeitsteuerung (**aktiver zugeordneter Benutzer → aktiver Primary GM → anderer aktiver GM**).
+- Greift diese vorübergehende Vertretungsregel, erhält der vertretende GM jetzt auch die Hervorhebung für die sinnvoll nächste Handlung auf den zugehörigen Kampf- und Abwehrkarten.
 - Die Zuordnungseinstellungen warnen jetzt bereits bei der Auswahl, wenn einem zugeordneten Spieler die erforderliche Foundry-**OWNER**-Berechtigung für den Bogen oder das direkt zugewiesene Token fehlt. Die Warnung bietet einen direkten Link zum betroffenen Bogen; Berechtigungen werden weiterhin nicht automatisch verändert.
 - Neue automatisierte Tests decken erfolgreiche Anwendungen, sicher erkennbare Fehlschläge, unklare Ergebnisse, Wiederholungsversuche und konkurrierende Aufrufe ab.
 

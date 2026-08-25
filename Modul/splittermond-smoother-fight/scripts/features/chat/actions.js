@@ -519,7 +519,7 @@ function getAssociatedDamageMessages(element, message) {
 
 export function isMessageSpeakerAssignedToCurrentUser(message) {
     const context = services.getMessageContext(message);
-    if (context?.assignedUserId) return context.assignedUserId === game.user?.id;
+    if (context?.assignedUserId === game.user?.id) return true;
     const token = services.resolveToken(
         (services.isDefenseMessage(message) ? context?.defenderTokenUuid : context?.attackerTokenUuid)
         ?? services.speakerTokenUuid(message)
@@ -528,7 +528,7 @@ export function isMessageSpeakerAssignedToCurrentUser(message) {
     const actor = services.resolveSpeakerActor(message);
     const combatant = Array.from(game.combat?.combatants ?? []).find((candidate) => candidate.actorId === actor?.id);
     const assignedUser = services.getAssignedUser?.(combatant ?? actor);
-    if (assignedUser) return assignedUser.id === game.user?.id;
+    if (assignedUser?.id === game.user?.id) return true;
     if (combatant && actor) {
         const runtimeController = services.getRuntimeController(combatant);
         if (runtimeController) return runtimeController.id === game.user?.id;
