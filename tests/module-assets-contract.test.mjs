@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "e99e7fc0aa56f20e00a1398f4ff3a42b1ce9e58b5620b881360d936307278ff8",
+        "d48cd2d76fd395b740ee6bc2cee63ced3ed0fe1129e89e0e7206fd10facee841",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -84,9 +84,14 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /class="sf-tick-action-popover" role="region"/u);
     assert.match(hudView, /data-sf-tick-action-filter/u);
     assert.match(hudView, /data-sf-tick-action-row/u);
+    assert.match(hudView, /data-sf-spell-search/u);
+    assert.match(hudView, /data-sf-spell-availability/u);
+    assert.match(hudView, /data-sf-spell-school/u);
+    assert.match(hudView, /data-sf-spell-level/u);
     assert.match(hudView, /data-sf-action="toggle-favorite-tick-action"/u);
     assert.match(hudView, /data-sf-tick-action-category="\$\{escapeAttr\(action\.displayCategory\)\}"/u);
     assert.match(hudController, /bindTickActionReferenceFilters/u);
+    assert.match(hudController, /bindSpellListFilters/u);
     assert.match(hudController, /case "toggle-favorite-tick-action"/u);
     assert.doesNotMatch(hudView, /sf-tick-action-tooltip/u);
     assert.doesNotMatch(hudView, /role="tooltip"[^`]*data-sf-action="share-tick-action"/u);
@@ -159,7 +164,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "f70eb38f7eeb675c243d364559ba3b11a969e9a0399f3919a90acc619732f936",
+        "b1dd269fff934de2335105efccf2dd4673e5b9ff212c4635a960125b06168132",
     );
 });
 

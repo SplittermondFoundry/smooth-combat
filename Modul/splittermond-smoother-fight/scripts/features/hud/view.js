@@ -15,6 +15,13 @@ import {
 } from "./quick-targets.js";
 
 import {
+    isSpellListFilterable,
+    spellFilterDetails,
+    spellFilterOptions,
+    spellSearchValue,
+} from "./spell-filters.js";
+
+import {
     buildMovementTracker,
 } from "./movement.js";
 
@@ -422,25 +429,15 @@ async function buildActionBar(context) {
     const preparedSpell = spells.find((spell) => spell.id === preparedSpellId) ?? null;
     const availableSpells = spells.filter((spell) => spell.enoughFocus !== false).length;
     const spellLabel = `${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells})`;
+    const spellControlMarkup = preparedSpell
+        ? preparedSpellMenu(preparedSpell, availableSpells)
+        : buildSpellMenu(spellLabel, spells, availableSpells);
     const attackControlMarkup = await buildAttackControlMarkup(actor);
     return `<nav class="sf-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
         ${preparationApplicationMarkup(preparationStatus)}
         ${skillControlMarkup}
         ${attackControlMarkup}
-        ${preparedSpell ? preparedSpellMenu(preparedSpell, availableSpells) : actionMenu("fa-solid fa-wand-sparkles", spellLabel, spells.map((spell) => {
-            const preparing = services.isPreparingSpell(spell.id);
-            const skillLabel = displayLabel(spell.skill?.label);
-            const skillValue = displayValue(spell.skill?.value, "");
-            const skill = [skillLabel, skillValue].filter((value) => value !== "").join(" ");
-            const focus = t("SMOOTHER_FIGHT.HUD.FocusCosts", { costs: spellFocusCosts(spell) });
-            const status = preparing
-                ? t("SMOOTHER_FIGHT.HUD.Preparing")
-                : displayValue(spell.castDuration, "–");
-            return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="sf-spell-action ${preparing ? "is-preparing" : ""}" ${spell.enoughFocus === false || preparing ? 'aria-disabled="true"' : ""}>
-                <img src="${escapeAttr(spell.img)}" alt=""><span>${escapeHtml(spell.name)}<small>${escapeHtml([skill, focus].filter(Boolean).join(" · "))}</small></span>
-                <b>${escapeHtml(status)}</b>
-            </button>`;
-        }).join("") || emptyMenuText())}
+        ${spellControlMarkup}
         ${actionMenu("fa-solid fa-shield-halved", t("SMOOTHER_FIGHT.HUD.Defense"), [
             defenseButton(actor, "defense", "VTD"),
             defenseButton(actor, "bodyresist", "KW"),
@@ -448,6 +445,63 @@ async function buildActionBar(context) {
         ].join(""), `sf-defense-menu${defenseAlert ? " is-defense-alert" : ""}`)}
         ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
     </nav>`;
+}
+
+function buildSpellMenu(label, spells, availableSpells) {
+    const filterable = isSpellListFilterable(spells);
+    const rows = spells.map((spell) => {
+        const preparing = services.isPreparingSpell(spell.id);
+        const skillLabel = displayLabel(spell.skill?.label);
+        const skillValue = displayValue(spell.skill?.value, "");
+        const skill = [skillLabel, skillValue].filter((value) => value !== "").join(" ");
+        const focus = t("SMOOTHER_FIGHT.HUD.FocusCosts", { costs: spellFocusCosts(spell) });
+        const status = preparing
+            ? t("SMOOTHER_FIGHT.HUD.Preparing")
+            : displayValue(spell.castDuration, "–");
+        const { schoolId, level } = spellFilterDetails(spell);
+        const filterAttributes = filterable
+            ? ` data-sf-spell-row data-sf-search="${escapeAttr(spellSearchValue(spell))}" data-sf-enough-focus="${spell.enoughFocus !== false}" data-sf-spell-school="${escapeAttr(schoolId)}" data-sf-spell-level="${escapeAttr(level)}"`
+            : "";
+        return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="sf-spell-action ${preparing ? "is-preparing" : ""}"${filterAttributes} ${spell.enoughFocus === false || preparing ? 'aria-disabled="true"' : ""}>
+            <img src="${escapeAttr(spell.img)}" alt=""><span>${escapeHtml(spell.name)}<small>${escapeHtml([skill, focus].filter(Boolean).join(" · "))}</small></span>
+            <b>${escapeHtml(status)}</b>
+        </button>`;
+    }).join("") || emptyMenuText();
+    return spellActionMenu(label, filterable ? buildSpellFilterBody(spells, rows, availableSpells) : rows, filterable);
+}
+
+function buildSpellFilterBody(spells, rows, availableSpells) {
+    const { schools, levels } = spellFilterOptions(spells);
+    const schoolFilter = schools.length > 1 ? `<label><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SpellSchool"))}</span><select data-sf-spell-school>
+        <option value="all">${escapeHtml(t("SMOOTHER_FIGHT.HUD.AllSpellSchools"))}</option>
+        ${schools.map(({ id, label }) => `<option value="${escapeAttr(id)}">${escapeHtml(label)}</option>`).join("")}
+    </select></label>` : "";
+    const levelFilter = levels.length > 1 ? `<label><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SpellLevel"))}</span><select data-sf-spell-level>
+        <option value="all">${escapeHtml(t("SMOOTHER_FIGHT.HUD.AllSpellLevels"))}</option>
+        ${levels.map((level) => `<option value="${escapeAttr(level)}">${escapeHtml(t("SMOOTHER_FIGHT.HUD.SpellLevelValue", { level }))}</option>`).join("")}
+    </select></label>` : "";
+    return `<label class="sf-spell-search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input type="search" data-sf-spell-search autocomplete="off" spellcheck="false" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.SpellSearch"))}" placeholder="${escapeAttr(t("SMOOTHER_FIGHT.HUD.SpellSearchPlaceholder"))}">
+    </label>
+    <div class="sf-spell-availability-filters" role="group" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.SpellAvailabilityFilter"))}">
+        <button type="button" data-sf-spell-availability="all" aria-pressed="true"><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.AllSpells"))}</span><b>${spells.length}</b></button>
+        <button type="button" data-sf-spell-availability="focus" aria-pressed="false"${availableSpells ? "" : " disabled"}><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.AffordableSpells"))}</span><b>${availableSpells}</b></button>
+    </div>
+    ${schoolFilter || levelFilter ? `<div class="sf-spell-secondary-filters">${schoolFilter}${levelFilter}</div>` : ""}
+    <div class="sf-spell-results" data-sf-spell-results>
+        ${rows}
+        <p class="sf-spell-filter-empty" data-sf-spell-filter-empty hidden>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoMatchingSpells"))}</p>
+    </div>`;
+}
+
+function spellActionMenu(label, body, filterable) {
+    const popoverClass = filterable ? "sf-action-popover sf-spell-popover" : "sf-action-popover";
+    const filterAttribute = filterable ? " data-sf-spell-filterable" : "";
+    return `<details class="sf-action-menu" data-sf-menu="spells">
+        <summary title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid fa-wand-sparkles" aria-hidden="true"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron" aria-hidden="true"></i></summary>
+        <div class="${popoverClass}"${filterAttribute}>${body}</div>
+    </details>`;
 }
 
 function preparationApplicationMarkup({ state, record }) {

@@ -1,23 +1,30 @@
-# Splittermond Smoother Fight 0.5.0
+# Splittermond Smoother Fight 0.6.0
 
-Dieses Update erweitert die Aktive Abwehr um den Einsatz von Splitterpunkten und verbessert die Bedienung sowie den Schutz nicht freigegebener Kampfwerte im HUD.
+> In Vorbereitung – noch nicht veröffentlicht.
+
+Dieses Update macht mehrstufige Kampfvorgänge ausfallsicherer. Begonnene und erfolgreich abgeschlossene Anwendungen werden nun getrennt behandelt, damit ein bestätigter Fehlschlag keinen dauerhaft gesperrten Zustand hinterlässt.
 
 ## Neue Funktionen
 
-- Bei Angriffen gegen die VTD kann der Besitzer des Ziels direkt über die Angriffskarte einen **Splitterpunkt für +3 VTD** einsetzen. Der Punkt wird automatisch abgezogen und die Angriffskarte mit dem neuen Verteidigungswert aktualisiert.
-- Ab Heldengrad 3 kann ein anderer berechtigter Kampfteilnehmer eine **Splitterpunkt-Resonanz für weitere +2 VTD** beisteuern. Pro Angriff ist höchstens eine Resonanz möglich.
-- Splitterpunkte und Aktive Abwehr lassen sich in beliebiger Reihenfolge einsetzen. Bereits gewährte Boni bleiben bei der Neuberechnung erhalten; die aktualisierten Angriffskarten und eigene Chatkarten dokumentieren das Ergebnis.
-- Die vollständige Handlungsübersicht im Kampf-HUD besitzt jetzt eine Suche. Sie filtert unter anderem nach Handlung, Kategorie, Art, Dauer, Besonderheit und Quelle.
-- Eine neue Welteinstellung erlaubt Spielleitungen, **LP und FO fremder Ziele offenzulegen**. Die Einstellung ist standardmäßig deaktiviert.
+- Angriffe sowie Waffen und Schilde im Bereich **Ausrüstung** besitzen jetzt einen kompakten Tooltip nach dem Vorbild der Zauber. Er zeigt Fertigkeit, WGS, Schaden, Merkmale, bei Fernkampfangriffen die Reichweite und relevante Zustände wie **Standardangriff**, **vorbereitet** oder **ausgerüstet**. Ausgerüstete Gegenstände verwenden die aktuell berechneten Angriffswerte, nicht ausgerüstete Gegenstände ihre hinterlegten Basiswerte; der Tooltip ist per Mauszeiger und Tastaturfokus erreichbar.
+- Bei mehr als acht Zaubern erhält das Zaubermenü automatisch eine Suche über Name, Magieschule, Grad, Fokuskosten und Zauberdauer. Zusätzlich kann nach ausreichendem Fokus sowie – sofern mehrere Werte vorhanden sind – nach Magieschule und Grad gefiltert werden. Suchbegriff, Filterauswahl und Scrollposition bleiben bei einer Neudarstellung des HUDs erhalten.
 
 ## Verbesserungen und Fehlerbehebungen
 
-- Das Kampf-HUD blendet VTD, KW, GW, LP und FO des aktiven Kämpfers nun ebenfalls aus, wenn einem Spieler die nötigen Rechte oder Weltfreigaben fehlen.
-- Ein **temporärer Kompatibilitäts-Hotfix für das Splittermond-System** verhindert, dass bei der Ausgabe eines Splitterpunkts für eine Aktive Abwehr das Merkmal **Defensiv** in der Neuberechnung verloren geht. Ohne den Hotfix konnte die neu berechnete VTD trotz des ausgegebenen Splitterpunkts niedriger ausfallen als zuvor. Das Modul rekonstruiert den fehlenden Merkmalswert und übernimmt ihn in die erneute Berechnung.
-- Die Schnellauswahl von Zielen verhält sich eindeutiger: Ein normaler Klick ersetzt die bisherige Auswahl und setzt das Primärziel, während **Umschalt + Klick** weitere Ziele ergänzt.
-- Bei der Mehrfachauswahl bleiben das geöffnete Zielmenü, der Suchbegriff, der gewählte Filter und die Scrollposition erhalten.
-- Gleichzeitige Abwehr- und Splitterpunktaktionen werden geordnet verarbeitet, damit keine Boni verloren gehen oder mehrfach angewendet werden.
-- Fehlgeschlagene Aktualisierungen rollen den abgezogenen Splitterpunkt sicher zurück.
+- Schadensanwendungen verwenden ein eindeutiges Zustandsmodell: **bereit → wird angewendet → abgeschlossen**. Ein begonnener Versuch gilt nicht länger automatisch als erfolgreich.
+- Kann sicher festgestellt werden, dass kein Schaden angewendet wurde – etwa weil das Ziel fehlt, nicht berechtigt ist oder Kosten nicht verbraucht werden konnten –, wird die Aktion für einen erneuten Versuch freigegeben.
+- Ist nach einem Fehler unklar, ob eine Änderung bereits wirksam wurde, bleibt der Vorgang vorsorglich gesperrt. Die Spielleitung kann ihn nach Prüfung erneut freigeben oder als abgeschlossen markieren.
+- Dasselbe Verhalten schützt den **Betäubungsschaden aus Aktiver Abwehr** sowie weitere mehrstufige Vorgänge: Splitterpunkte bei Aktiver Abwehr, Patzerfolgen, ältere Chatkarten mit Tickkosten, das Vorbereiten von Angriffen und Zaubern und das Rückgängigmachen von Bewegung.
+- Die **Splitterpunkt-Resonanz** richtet sich jetzt korrekt nach unterschiedlichen Splitterträgern statt nach deren Foundry-Benutzerzuordnung. Dadurch können auch zwei Figuren desselben Spielers oder mehrere von derselben Spielleitung gesteuerte NSC einander regelkonform unterstützen.
+- Wird ein Angriffs- oder Zauberwurf im Systemdialog abgebrochen, wird der zwischengespeicherte Angriffs- und Zielkontext sofort verworfen. Ein anschließender Wurf derselben Figur kann dadurch weder die alte Angriffsart noch alte Ziele übernehmen; gleichzeitig laufende Würfe räumen nur ihren jeweils eigenen Kontext auf.
+- Bei manuellen offensiven Würfen außerhalb des Kampf-HUDs wird der Zielkontext jetzt vom Würfelautor übernommen. Würfelt die Spielleitung vom Bogen eines online kontrollierten Spielercharakters, wird damit das auf dem GM-Client verwendete Ziel gespeichert und nicht versehentlich das Ziel des Spielers.
+- Gleichzeitige Klicks und wiederholte Anfragen werden während einer laufenden Anwendung abgefangen, ohne einen Fehlversuch fälschlich als Erfolg zu speichern.
+- Die HUD-Handlung **Schildstoß** verwendet jetzt die besonderen Regelwerte: 1W6+1 Schaden, 7 Ticks Grunddauer und freie Manöver, aber keine Meisterschafts-Manöver. Die falsche Hand wird einschließlich ihrer Ausnahmen durch **Kampf mit zwei Waffen** und **Starker Schildarm I** berücksichtigt; der allgemeine Tick-Zuschlag aus Ausrüstung bleibt wirksam.
+- Nicht mehr verwendete Zusatzanzeigen für **VTD, KW und GW** wurden aus dem Kampf-HUD entfernt. Die Abwehrwerte bleiben weiterhin im Actor-Portrait und im Menü **Aktive Abwehr** verfügbar.
+- Die Zielanzeige berücksichtigt nun durchgehend die Wahrnehmung des aktuellen Benutzers. Verborgene oder durch Sichtlinie, Beleuchtung und Fog of War nicht sichtbare Tokens erscheinen für Spieler weder in der Schnellzielauswahl noch als gespeicherte Primär- oder Sekundärziele, in Kampfereignissen oder im Feedback; die Spielleitung sieht weiterhin alle Tokens.
+- Die Zuordnungseinstellungen trennen nun klar zwischen der dauerhaften Zuordnung (**direktes Token → Bogen → Foundry-OWNER**) und der vorübergehenden Laufzeitsteuerung (**aktiver zugeordneter Benutzer → aktiver Primary GM → anderer aktiver GM**).
+- Die Zuordnungseinstellungen warnen jetzt bereits bei der Auswahl, wenn einem zugeordneten Spieler die erforderliche Foundry-**OWNER**-Berechtigung für den Bogen oder das direkt zugewiesene Token fehlt. Die Warnung bietet einen direkten Link zum betroffenen Bogen; Berechtigungen werden weiterhin nicht automatisch verändert.
+- Neue automatisierte Tests decken erfolgreiche Anwendungen, sicher erkennbare Fehlschläge, unklare Ergebnisse, Wiederholungsversuche und konkurrierende Aufrufe ab.
 
 ## Installation
 
@@ -27,4 +34,4 @@ In Foundry unter **Add-on-Module → Modul installieren** diese Manifest-URL ver
 https://github.com/SplittermondFoundry/smooth-combat/releases/latest/download/module.json
 ```
 
-Das Release enthält außerdem ein ZIP für die manuelle Installation.
+Das Release wird außerdem ein ZIP für die manuelle Installation enthalten.

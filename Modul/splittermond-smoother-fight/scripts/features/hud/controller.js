@@ -33,6 +33,10 @@ import {
 } from "./quick-targets.js";
 
 import {
+    bindSpellListFilters,
+} from "./spell-filters.js";
+
+import {
     scheduleRender,
     setHudMinimized,
     syncMinimizedHudPosition,
@@ -212,6 +216,7 @@ class SmootherFightHud {
         restoreQuickTargetViewState(this.element, this.quickTargetViewStateRequest);
         this.quickTargetViewStateRequest = null;
         bindQuickTargetSearch(this.element);
+        bindSpellListFilters(this.element);
         bindTickActionReferenceFilters(this.element);
         bindActionTooltips(this.element, context);
         restoreHudViewState(this.element, viewState, { forceLatestEvent });

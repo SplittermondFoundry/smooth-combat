@@ -6,10 +6,16 @@ import {
     resolveCombatEventOpenIds,
 } from "../../combat-rules.js";
 
+import {
+    captureSpellListViewState,
+    restoreSpellListViewState,
+} from "./spell-filters.js";
+
 export function captureHudViewState(root) {
     const scroller = root?.querySelector?.(".sf-event-scroller");
     const tickActionReference = root?.querySelector?.(".sf-tick-action-reference");
-    if (!scroller && !tickActionReference) return null;
+    const spellList = captureSpellListViewState(root);
+    if (!scroller && !tickActionReference && !spellList) return null;
     const groups = Array.from(scroller?.querySelectorAll(".sf-event-group[data-event-id]") ?? []);
     const subevents = Array.from(scroller?.querySelectorAll(".sf-associated-card[data-subevent-id]") ?? []);
     const tickActionPopover = tickActionReference?.querySelector(":scope > .sf-tick-action-popover");
@@ -24,12 +30,17 @@ export function captureHudViewState(root) {
         tickActionReferenceOpen: Boolean(tickActionReference?.open),
         tickActionFilter: tickActionFilter?.value ?? "",
         tickActionScrollTop: tickActionPopover?.scrollTop ?? 0,
+        spellListActorId: root?.dataset?.activeActorId ?? null,
+        spellList,
     };
 }
 
 export function restoreHudViewState(root, state, { forceLatestEvent = false } = {}) {
     if (!state) return;
     restoreTickActionReferenceState(root, state);
+    if (state.spellListActorId === (root?.dataset?.activeActorId ?? null)) {
+        restoreSpellListViewState(root, state.spellList);
+    }
     const scroller = root?.querySelector?.(".sf-event-scroller");
     if (!scroller) return;
 
