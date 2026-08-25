@@ -74,44 +74,46 @@
 
     <div class="sf-settings-list">
         <section class="sf-assignment-panel sf-overview-panel" data-tab-panel="overview">
-            {{#if hasWarnings}}
-                <details class="sf-assignment-warnings" data-role="assignment-warnings" open>
+            <details class="sf-assignment-warnings" data-role="assignment-warnings" {{#unless hasWarnings}}hidden{{/unless}} open>
                     <summary>
                         <span><i class="fa-solid fa-triangle-exclamation"></i> <strong data-role="warning-summary-label">{{localize "SMOOTHER_FIGHT.Settings.AssignmentsToCheck" count=summary.warningCount}}</strong></span>
                         <span class="sf-warning-toggle">{{localize "SMOOTHER_FIGHT.Settings.WarningDetails"}} <i class="fa-solid fa-chevron-down" aria-hidden="true"></i></span>
                     </summary>
-                    <ol class="sf-warning-item-list">
+                    <ol class="sf-warning-item-list" data-role="warning-list">
                         {{#each warningItems}}
-                            <li class="sf-warning-item {{this.typeClass}}" data-warning-item>
+                            <li class="sf-warning-item {{this.typeClass}}" data-warning-item {{#if this.isOwnerPermission}}data-owner-permission-warning{{/if}}>
                                 <i class="{{this.icon}}" aria-hidden="true"></i>
                                 <span class="sf-warning-token">
                                     <strong title="{{this.title}}">{{this.title}}</strong>
                                     <small title="{{this.context}}">{{this.context}}</small>
                                 </span>
                                 <small class="sf-warning-reason">{{this.reason}}</small>
-                                {{#if this.isUnresolvedToken}}
+                                {{#if this.hasActions}}
                                     <span class="sf-warning-actions">
                                         {{#if this.canOpenActor}}
                                             <button type="button" data-action="open-warning-actor" data-actor-uuid="{{this.actorUuid}}" title="{{localize "SMOOTHER_FIGHT.Settings.OpenWarningSheetHint"}}">
                                                 <i class="fa-solid fa-file-lines"></i> {{localize "SMOOTHER_FIGHT.Settings.OpenWarningSheet"}}
                                             </button>
                                         {{/if}}
-                                        {{#if this.canPromoteToSheet}}
-                                            <button type="button" data-action="resolve-warning" data-resolution="promote" data-token-uuid="{{this.tokenUuid}}" data-actor-uuid="{{this.actorUuid}}" data-user-id="{{this.assignedUserId}}" data-user-label="{{this.assignedUserLabel}}" title="{{localize "SMOOTHER_FIGHT.Settings.PromoteWarningAssignmentHint" user=this.assignedUserLabel}}">
-                                                <i class="fa-solid fa-address-card"></i> {{localize "SMOOTHER_FIGHT.Settings.PromoteWarningAssignment" user=this.assignedUserLabel}}
+                                        {{#if this.isUnresolvedToken}}
+                                            {{#if this.canPromoteToSheet}}
+                                                <button type="button" data-action="resolve-warning" data-resolution="promote" data-token-uuid="{{this.tokenUuid}}" data-actor-uuid="{{this.actorUuid}}" data-user-id="{{this.assignedUserId}}" data-user-label="{{this.assignedUserLabel}}" title="{{localize "SMOOTHER_FIGHT.Settings.PromoteWarningAssignmentHint" user=this.assignedUserLabel}}">
+                                                    <i class="fa-solid fa-address-card"></i> {{localize "SMOOTHER_FIGHT.Settings.PromoteWarningAssignment" user=this.assignedUserLabel}}
+                                                </button>
+                                            {{/if}}
+                                            <button type="button" data-action="resolve-warning" data-resolution="remove" data-token-uuid="{{this.tokenUuid}}" title="{{localize "SMOOTHER_FIGHT.Settings.RemoveWarningAssignmentHint"}}">
+                                                <i class="fa-solid fa-trash-can"></i> {{localize "SMOOTHER_FIGHT.Settings.RemoveWarningAssignment"}}
                                             </button>
                                         {{/if}}
-                                        <button type="button" data-action="resolve-warning" data-resolution="remove" data-token-uuid="{{this.tokenUuid}}" title="{{localize "SMOOTHER_FIGHT.Settings.RemoveWarningAssignmentHint"}}">
-                                            <i class="fa-solid fa-trash-can"></i> {{localize "SMOOTHER_FIGHT.Settings.RemoveWarningAssignment"}}
-                                        </button>
                                     </span>
+                                {{/if}}
+                                {{#if this.isUnresolvedToken}}
                                     <small class="sf-warning-pending" data-role="warning-pending" hidden></small>
                                 {{/if}}
                             </li>
                         {{/each}}
                     </ol>
-                </details>
-            {{/if}}
+            </details>
             {{#if showSetupHint}}
                 <aside class="sf-assignment-setup-hint">
                     <i class="fa-solid fa-compass" aria-hidden="true"></i>

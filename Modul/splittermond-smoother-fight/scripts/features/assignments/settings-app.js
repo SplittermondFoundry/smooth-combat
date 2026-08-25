@@ -26,6 +26,12 @@ import {
     t,
 } from "../../shared/values.js";
 
+import {
+    collectOwnerPermissionWarnings,
+    collectSelectedOwnerPermissionWarnings,
+    replaceOwnerPermissionWarningItems,
+} from "./warnings.js";
+
 export function registerSettingsMenu() {
     const Base = foundry.applications.api.HandlebarsApplicationMixin(foundry.applications.api.ApplicationV2);
 
@@ -55,6 +61,8 @@ export function registerSettingsMenu() {
             const links = normalizeUserTokenLinks(getSetting("userTokenLinks", {}), primaryGmId);
             const actorLinks = normalizeActorUserLinks(getSetting("actorUserLinks", {}));
             const allUsers = Array.from(game.users ?? []);
+            const worldActors = Array.from(game.actors ?? []);
+            const worldActorUuids = new Set(worldActors.map((actor) => actor.uuid));
             const validUserIds = new Set(allUsers.map((user) => user.id));
             const explicitOwnerByToken = new Map();
             const legacyOwnerByActor = new Map();
@@ -78,9 +86,8 @@ export function registerSettingsMenu() {
                 tokenNameTotals.set(key, (tokenNameTotals.get(key) ?? 0) + 1);
             }
             const tokenNameIndexes = new Map();
-            let ambiguousOwnerCount = 0;
-            let missingUserCount = 0;
             const warningItems = [];
+            const tokenPermissionAssignments = [];
             const tokens = sceneTokens.map((token) => {
                 const scene = token.parent ?? game.scenes?.get?.(token.parent?.id);
                 const actorUuid = actorAssignmentUuid(token.actor, token.actorId);
@@ -92,7 +99,6 @@ export function registerSettingsMenu() {
                 const storedDirectUserId = explicitOwnerByToken.get(token.uuid) ?? null;
                 const directUserId = validUserIds.has(storedDirectUserId) ? storedDirectUserId : null;
                 if (storedDirectUserId && !directUserId) {
-                    missingUserCount += 1;
                     warningItems.push({
                         typeClass: "is-missing-user",
                         icon: "fa-solid fa-user-slash",
@@ -104,6 +110,18 @@ export function registerSettingsMenu() {
                         reason: t("SMOOTHER_FIGHT.Settings.MissingUserWarningDetail", { user: storedDirectUserId }),
                     });
                 }
+                if (directUserId) tokenPermissionAssignments.push({
+                    actor: token.actor,
+                    user: allUsers.find((user) => user.id === directUserId),
+                    title: displayName,
+                    context: t("SMOOTHER_FIGHT.Settings.WarningTokenContext", {
+                        scene: scene?.name ?? t("SMOOTHER_FIGHT.Settings.UnknownScene"),
+                        actor: token.actor?.name ?? "–",
+                    }),
+                    reference: token.uuid,
+                    actorUuid,
+                    canOpenActor: worldActorUuids.has(actorUuid),
+                });
                 const legacyUserId = validUserIds.has(legacyOwnerByActor.get(actorUuid)) ? legacyOwnerByActor.get(actorUuid) : null;
                 const sheetUserId = validUserIds.has(displayActorLinks[actorUuid]) ? displayActorLinks[actorUuid] : null;
                 const ownerUsers = allUsers
@@ -112,7 +130,6 @@ export function registerSettingsMenu() {
                 const ownerUser = ownerUsers[0] ?? null;
                 const ownerAmbiguous = !legacyUserId && !sheetUserId && ownerUsers.length > 1;
                 if (ownerAmbiguous) {
-                    ambiguousOwnerCount += 1;
                     warningItems.push({
                         typeClass: "is-ambiguous-owner",
                         icon: "fa-solid fa-users",
@@ -182,26 +199,45 @@ export function registerSettingsMenu() {
                 active: user.active,
                 selected: user.id === primaryGmId,
             }));
-            const actors = Array.from(game.actors ?? [])
+            const sheetPermissionAssignments = [];
+            const actors = worldActors
                 .filter((actor) => ["character", "npc"].includes(actor.type))
                 .sort(sortByName)
-                .map((actor) => ({
-                    uuid: actor.uuid,
-                    name: actor.name,
-                    img: actor.img ?? "icons/svg/mystery-man.svg",
-                    type: actor.type,
-                    typeLabel: actor.type === "npc"
+                .map((actor) => {
+                    const typeLabel = actor.type === "npc"
                         ? t("SMOOTHER_FIGHT.Settings.NpcSheet")
-                        : t("SMOOTHER_FIGHT.Settings.CharacterSheet"),
-                    tokenCount: tokens.filter((token) => token.actorUuid === actor.uuid).length,
-                    users: allUsers.map((user) => ({
-                        id: user.id,
-                        name: user.name,
-                        isGM: user.isGM,
-                        active: user.active,
-                        selected: displayActorLinks[actor.uuid] === user.id,
-                    })),
-                }));
+                        : t("SMOOTHER_FIGHT.Settings.CharacterSheet");
+                    const assignedUser = allUsers.find((user) => user.id === displayActorLinks[actor.uuid]);
+                    if (assignedUser) sheetPermissionAssignments.push({
+                        actor,
+                        user: assignedUser,
+                        title: actor.name,
+                        context: t("SMOOTHER_FIGHT.Settings.WarningSheetContext", { type: typeLabel }),
+                        reference: actor.uuid,
+                        actorUuid: actor.uuid,
+                        canOpenActor: true,
+                    });
+                    return {
+                        uuid: actor.uuid,
+                        name: actor.name,
+                        img: actor.img ?? "icons/svg/mystery-man.svg",
+                        type: actor.type,
+                        typeLabel,
+                        tokenCount: tokens.filter((token) => token.actorUuid === actor.uuid).length,
+                        users: allUsers.map((user) => ({
+                            id: user.id,
+                            name: user.name,
+                            isGM: user.isGM,
+                            active: user.active,
+                            selected: displayActorLinks[actor.uuid] === user.id,
+                        })),
+                    };
+                });
+            warningItems.push(...collectOwnerPermissionWarnings({
+                sheetAssignments: sheetPermissionAssignments,
+                tokenAssignments: tokenPermissionAssignments,
+                translate: t,
+            }));
             const actorGroups = [
                 {
                     id: "character",
@@ -247,7 +283,6 @@ export function registerSettingsMenu() {
                     cleanupTokenUuids.push(unresolvedLink.link.tokenUuid);
                 } else unresolvedWarnings.push(unresolvedLink);
             }
-            const unresolvedTokenCount = unresolvedWarnings.length;
             for (const { userId, link } of unresolvedWarnings) {
                 const assignedUser = allUsers.find((user) => user.id === userId);
                 const assignedUserLabel = assignedUser?.name
@@ -267,10 +302,11 @@ export function registerSettingsMenu() {
                     assignedUserLabel,
                     canOpenActor: Boolean(linkedActor),
                     canPromoteToSheet: Boolean(linkedActor && assignedUser),
+                    hasActions: true,
                 });
             }
             warningItems.sort((left, right) => left.title.localeCompare(right.title, undefined, { sensitivity: "base" }));
-            const warningCount = ambiguousOwnerCount + missingUserCount + unresolvedTokenCount;
+            const warningCount = warningItems.length;
             const hasMeaningfulConfiguration = Boolean(
                 primaryGmId
                 || Object.keys(actorLinks).length > 0
@@ -328,6 +364,10 @@ export function registerSettingsMenu() {
             const actorAssignmentSelects = () => Array.from(this.element.querySelectorAll('select[data-actor-uuid]'));
             const tokenAssignmentSelects = () => Array.from(this.element.querySelectorAll('select[data-token-uuid]'));
             const userById = new Map(Array.from(game.users ?? [], (user) => [user.id, user]));
+            const actorByUuid = new Map(Array.from(game.actors ?? [], (actor) => [actor.uuid, actor]));
+            const sceneTokenByUuid = new Map(services.getAllSceneTokens().map((token) => [token.uuid, token]));
+            const actorContextByUuid = new Map(context.actors.map((actor) => [actor.uuid, actor]));
+            const tokenContextByUuid = new Map(context.tokens.map((token) => [token.uuid, token]));
             const userName = (userId) => userById.get(userId)?.name ?? t("SMOOTHER_FIGHT.Settings.Unassigned");
             const runtimeControllerId = (assignedUserId) => {
                 const assignedUser = userById.get(assignedUserId);
@@ -549,6 +589,7 @@ export function registerSettingsMenu() {
                 refreshOverviewAssignments();
                 refreshTokenFilter();
                 refreshCounts();
+                refreshOwnerPermissionWarnings();
             };
             const tokenSearchInput = this.element.querySelector('[data-role="token-search"]');
             const tokenSceneSelect = this.element.querySelector('[data-role="token-scene"]');
@@ -618,6 +659,14 @@ export function registerSettingsMenu() {
                     playerUserIds.length > 0 && assignedPlayerCount < playerUserIds.length
                 );
             };
+            const refreshOwnerPermissionWarnings = () => {
+                const warnings = collectSelectedOwnerPermissionWarnings({
+                    actorSelects: actorAssignmentSelects(), tokenSelects: tokenAssignmentSelects(),
+                    actorByUuid, tokenByUuid: sceneTokenByUuid, actorContextByUuid, tokenContextByUuid, userById, translate: t,
+                });
+                replaceOwnerPermissionWarningItems(this.element, warnings, t);
+                refreshWarningCount();
+            };
             tokenSearchInput?.addEventListener("input", refreshTokenFilter);
             tokenSceneSelect?.addEventListener("change", refreshTokenFilter);
             showAllTokens?.addEventListener("change", refreshTokenFilter);
@@ -650,16 +699,16 @@ export function registerSettingsMenu() {
                 refreshPrimaryGmState();
                 refreshTokenRows();
             });
-            for (const button of this.element.querySelectorAll('[data-action="open-warning-actor"], [data-action="open-overview-actor"]')) {
-                button.addEventListener("click", async () => {
-                    const actor = await fromUuid(button.dataset.actorUuid).catch(() => null);
-                    if (!actor?.sheet) {
-                        ui.notifications.warn(t("SMOOTHER_FIGHT.Settings.WarningActorUnavailable"));
-                        return;
-                    }
-                    actor.sheet.render({ force: true });
-                });
-            }
+            this.element.addEventListener("click", async (event) => {
+                const button = event.target.closest?.('[data-action="open-warning-actor"], [data-action="open-overview-actor"]');
+                if (!button) return;
+                const actor = await fromUuid(button.dataset.actorUuid).catch(() => null);
+                if (!actor?.sheet) {
+                    ui.notifications.warn(t("SMOOTHER_FIGHT.Settings.WarningActorUnavailable"));
+                    return;
+                }
+                actor.sheet.render({ force: true });
+            });
             for (const button of this.element.querySelectorAll('[data-action="resolve-warning"]')) {
                 button.addEventListener("click", () => {
                     const row = button.closest("[data-warning-item]");

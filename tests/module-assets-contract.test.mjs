@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "9d2ffe5ee979b2c5f587da94f25b59d580f21e51ba07a38a14a976cd79e5337f",
+        "a146d388f143ee78755f9fed37e55fa392c9e89822c8f4d58740d86b86b3e433",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -60,7 +60,10 @@ test("published DOM integration attributes remain available", () => {
     assert.match(priorityRows[0], /PersistentAssignmentLabel[\s\S]*is-direct[\s\S]*is-sheet[\s\S]*is-owner/u);
     assert.doesNotMatch(priorityRows[0], /is-primary-gm/u);
     assert.match(priorityRows[1], /RuntimeControlLabel[\s\S]*is-assigned-user[\s\S]*is-primary-gm[\s\S]*is-active-gm/u);
-    assert.match(assignmentTemplate, /data-role="assignment-warnings" open/u);
+    assert.match(assignmentTemplate, /data-role="assignment-warnings"[^>]*open/u);
+    assert.match(assignmentTemplate, /\{\{#unless hasWarnings\}\}hidden\{\{\/unless\}\}/u);
+    assert.match(assignmentTemplate, /data-role="warning-list"/u);
+    assert.match(assignmentTemplate, /data-owner-permission-warning/u);
     assert.match(assignmentTemplate, /\{\{#if showSetupHint\}\}/u);
 
     const hudView = ["view.js", "tick-action-reference.js"]
