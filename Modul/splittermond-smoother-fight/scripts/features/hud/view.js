@@ -410,6 +410,7 @@ function getSkillActionData(actor) {
 function buildPersonalActionBar(actor, leadingControl = "", meleeAttackControl = "") {
     const { favoriteSkills, skillControlMarkup } = getSkillActionData(actor);
     return `<nav class="sf-actions sf-personal-skill-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
+        ${attackPreparationMarkup(actor)}
         ${leadingControl}
         ${skillControlMarkup}
         ${meleeAttackControl}
@@ -434,6 +435,7 @@ async function buildActionBar(context) {
         : buildSpellMenu(spellLabel, spells, availableSpells);
     const attackControlMarkup = await buildAttackControlMarkup(actor);
     return `<nav class="sf-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
+        ${attackPreparationMarkup(actor)}
         ${preparationApplicationMarkup(preparationStatus)}
         ${skillControlMarkup}
         ${attackControlMarkup}
@@ -445,6 +447,24 @@ async function buildActionBar(context) {
         ].join(""), `sf-defense-menu${defenseAlert ? " is-defense-alert" : ""}`)}
         ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
     </nav>`;
+}
+
+function attackPreparationMarkup(actor) {
+    const preparation = services.getAttackPreparation?.(actor, globalThis.game?.combat?.id);
+    if (!preparation) return "";
+    const action = t(`SMOOTHER_FIGHT.HUD.TickActions.${preparation.actionId}.Name`);
+    const status = t("SMOOTHER_FIGHT.HUD.AttackPreparationStatus", {
+        action,
+        bonus: preparation.bonus,
+    });
+    const target = preparation.actionId === "aim" && preparation.targetName
+        ? `<small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.AttackPreparationTarget", { target: preparation.targetName }))}</small>`
+        : "";
+    const clear = t("SMOOTHER_FIGHT.HUD.ClearAttackPreparation");
+    return `<div class="sf-attack-preparation-status" data-sf-attack-preparation-id="${escapeAttr(preparation.id)}" role="status">
+        <span><i class="fa-solid ${preparation.actionId === "aim" ? "fa-crosshairs" : "fa-magnifying-glass"}" aria-hidden="true"></i><strong>${escapeHtml(status)}</strong>${target}</span>
+        <button type="button" data-sf-action="clear-attack-preparation" title="${escapeAttr(clear)}" aria-label="${escapeAttr(clear)}"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>`;
 }
 
 function buildSpellMenu(label, spells, availableSpells) {

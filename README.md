@@ -34,7 +34,7 @@ Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github
 - übersichtliche Kampfereignisse für Angriff, Abwehr, Schaden und Patzer mit weiter nutzbaren Splittermond-Aktionen
 - Unterstützung der Meisterschaft **Verteidiger** einschließlich Reichweiten- und Abwehrprüfung
 - Ziel-Quickmenü, Mehrfachziele und zwischen Clients synchronisiertes Primärziel
-- durchsuchbare Handlungsübersicht, Tickbuttons, freie Tickeingabe, Abwartend, Bereithalten und Reaktivieren
+- durchsuchbare Handlungsübersicht, Tickbuttons, freie Tickeingabe, Abwartend, Bereithalten und Reaktivieren sowie fortgeführte Angriffsboni aus **Zielen** und **Lücke suchen**
 - dauerhafte Zuordnung von Charakteren, NSCs und einzelnen Tokens zu Benutzern
 - Rechteprüfung für Ressourcen, Verteidigungswerte und ausführbare Chatkarten-Aktionen
 - Dark-/Lightmode, anpassbare Hintergründe und Icons sowie optionale Audiohinweise

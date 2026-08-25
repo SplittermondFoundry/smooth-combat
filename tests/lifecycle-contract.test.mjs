@@ -34,6 +34,8 @@ const EXPECTED_HOOKS = [
     "updateCombatant",
     "combatTurn",
     "combatStart",
+    "deleteCombat",
+    "deleteCombatant",
     "createChatMessage",
     "updateChatMessage",
     "deleteChatMessage",
@@ -75,6 +77,12 @@ const serviceStubs = {
         return behavior.syncActiveCombatantTokenSelection?.(...args);
     },
     setLastTurnCombatantId: (...args) => record("setLastTurnCombatantId", args),
+    getActivePrimaryGm: (...args) => {
+        record("getActivePrimaryGm", args);
+        return behavior.getActivePrimaryGm(...args);
+    },
+    clearAttackPreparationsForCombat: async (...args) => record("clearAttackPreparationsForCombat", args),
+    clearAttackPreparationForCombatant: async (...args) => record("clearAttackPreparationForCombatant", args),
     onCreateChatMessage: (...args) => {
         record("onCreateChatMessage", args);
         return behavior.onCreateChatMessage(...args);
@@ -149,6 +157,7 @@ function resetHarness(gameStub) {
         resolveActorUuid: () => null,
         isDamageMessage: (message) => message?.type === "damageMessage",
         mayUserApplyDamageToActor: () => false,
+        getActivePrimaryGm: () => null,
         applyRemoteDamageApplication: async () => ({ state: "completed", error: null }),
         waitForChatMessage: () => null,
         normalizePendingDefense: (value) => value?.attackMessageId ? value : null,
@@ -274,6 +283,21 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         assert.deepEqual(callsOf("setLastTurnCombatantId"), [[null]]);
         assert.deepEqual(callsOf("syncActiveCombatantTokenSelection"), [[combat]]);
         assert.deepEqual(callsOf("announceTurnFeedback"), [[combat]]);
+        assert.deepEqual(callsOf("scheduleRender"), [[]]);
+
+        callLog.length = 0;
+        const primaryGm = { id: "primary-gm", isGM: true, active: true };
+        gameStub.user = primaryGm;
+        behavior.getActivePrimaryGm = () => primaryGm;
+        const endedCombat = { id: "ended-combat" };
+        for (const callback of handlersFor(hookRegistrations, "deleteCombat")) callback(endedCombat);
+        assert.deepEqual(callsOf("clearAttackPreparationsForCombat"), [[endedCombat]]);
+        assert.deepEqual(callsOf("scheduleRender"), [[]]);
+
+        callLog.length = 0;
+        const removedCombatant = { id: "removed-combatant", parent: endedCombat };
+        for (const callback of handlersFor(hookRegistrations, "deleteCombatant")) callback(removedCombatant);
+        assert.deepEqual(callsOf("clearAttackPreparationForCombatant"), [[removedCombatant]]);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
 
         callLog.length = 0;

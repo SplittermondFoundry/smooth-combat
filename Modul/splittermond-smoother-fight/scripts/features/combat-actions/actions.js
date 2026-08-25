@@ -32,6 +32,14 @@ import {
     revertTokenMovementApplication,
 } from "./applications.js";
 
+import {
+    clearAimPreparation,
+    consumeAttackPreparation,
+    getAttackPreparation,
+    prepareAttackPreparationRollOptions,
+    resolveAttackPreparationUse,
+} from "./attack-preparation.js";
+
 export async function performAttack(context, attackId, rollOptions = {}, rollAttack = null) {
     context = liveRuntimeActionContext(context);
     if (!context) return false;
@@ -43,6 +51,29 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
         return false;
     }
+    const preparation = getAttackPreparation(
+        context.actor,
+        context.combat?.id ?? globalThis.game?.combat?.id
+    );
+    const preparationUse = readiness.ready
+        ? resolveAttackPreparationUse(preparation, {
+            attackId: attack.id,
+            isRanged: isRangedAttack(attack),
+            target: context.target,
+        })
+        : { applies: false, consumeOnSuccess: false, mismatch: null };
+    if (preparationUse.mismatch) {
+        ui.notifications.warn(t(preparationUse.mismatch === "target"
+            ? "SMOOTHER_FIGHT.HUD.AimTargetMismatch"
+            : "SMOOTHER_FIGHT.HUD.AimAttackMismatch", {
+            target: preparation?.targetName ?? "–",
+        }));
+    }
+    const preparedRoll = preparationUse.applies
+        ? prepareAttackPreparationRollOptions(attack, rollOptions, preparation, {
+            includeAttackDefault: typeof rollAttack !== "function",
+        })
+        : { cleanup: () => {}, rollOptions };
     let completed = false;
     if (readiness.ready) {
         const pendingNonce = setPendingOffenseKind(
@@ -54,13 +85,17 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
             const success = await services.withTemporarySystemTargets(
                 [context.target],
                 () => typeof rollAttack === "function"
-                    ? rollAttack(attack, rollOptions)
-                    : context.actor.rollAttack(attackId, rollOptions)
+                    ? rollAttack(attack, preparedRoll.rollOptions)
+                    : context.actor.rollAttack(attackId, preparedRoll.rollOptions)
             );
             if (success && readiness.prepared) await clearPreparationApplication(context.actor, "attack");
             else if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
+            if (success && preparationUse.consumeOnSuccess) {
+                await consumeAttackPreparation(context.actor, preparation).catch(() => false);
+            }
             completed = Boolean(success);
         } finally {
+            preparedRoll.cleanup();
             clearPendingOffenseKind(context.actor.id, pendingNonce);
         }
     } else {
@@ -70,6 +105,7 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
             ticks: await getAttackSpeed(attack),
             label: `${localizeSystem("splittermond.attack", "Angriff")}: ${attack.name}`,
         });
+        if (completed && isRangedAttack(attack)) await clearAimPreparation(context.actor).catch(() => false);
     }
     services.scheduleRender();
     return completed;
@@ -77,6 +113,7 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
 
 export async function cancelPreparedAttack(context) {
     await clearPreparationApplication(context.actor, "attack");
+    await clearAimPreparation(context.actor).catch(() => false);
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.AttackCancelled"));
     services.scheduleRender(0);
 }

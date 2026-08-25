@@ -18,6 +18,10 @@ import {
     t,
 } from "../../shared/values.js";
 
+import {
+    setAttackPreparation,
+} from "./attack-preparation.js";
+
 const SELECTABLE_DURATION_ACTIONS = new Set(["aim", "searchOpening"]);
 const SHIELD_BASH_MANEUVERS = Object.freeze([]);
 const WRONG_HAND_TICK_PENALTY = 2;
@@ -61,6 +65,12 @@ function liveTickActionContext(context) {
 }
 
 async function performTimedPreparation(context, action) {
+    const preparedAttack = action.id === "aim" ? preparedRangedAttack(context.actor) : null;
+    if (action.id === "aim" && !preparedAttack) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.AimRequiresPreparedAttack"));
+        return false;
+    }
+    if (action.id === "aim" && !requireTarget(context)) return false;
     const choice = await chooseTickActionDuration({
         id: `${MODULE_ID}-${action.id}-duration`,
         title: actionName(action),
@@ -73,10 +83,29 @@ async function performTimedPreparation(context, action) {
     if (!choice) return false;
     const ticks = Number(choice.value);
     const bonus = Math.floor(ticks / 2);
-    return advanceThenCreateCard(context, action.id, ticks, {
-        description: t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.ChatDescription`, { ticks }),
+    const actualTicks = await services.addCombatTicks(context, ticks);
+    if (actualTicks === null) return false;
+    await setAttackPreparation(context, action.id, actualTicks, { attack: preparedAttack });
+    return Boolean(await services.createTickActionChatCard(context, action.id, actualTicks, {
+        bonus,
+        description: t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.ChatDescription`, {
+            ticks: actualTicks,
+            target: targetName(context),
+        }),
         special: t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.ChatSpecial`, { bonus }),
-    });
+        targetActorUuid: action.id === "aim" ? context.target?.actor?.uuid ?? null : null,
+        targetName: action.id === "aim" ? targetName(context) : null,
+        targetTokenUuid: action.id === "aim" ? context.target?.uuid ?? null : null,
+    }));
+}
+
+function preparedRangedAttack(actor) {
+    const preparedAttackId = actor?.getFlag?.("splittermond", "preparedAttack")
+        ?? actor?.flags?.splittermond?.preparedAttack;
+    return Array.from(actor?.attacks ?? []).find((attack) => (
+        attack?.id === preparedAttackId
+        && (services.isRangedAttack?.(attack) ?? Boolean(attack?.isRanged))
+    )) ?? null;
 }
 
 async function performDisengage(context, action) {
@@ -303,12 +332,6 @@ async function performReferenceAction(context, action, requestedTicks) {
         : "custom";
     if (shouldAdvance && actualTicks === null) return false;
     return Boolean(await services.createTickActionChatCard(context, action.id, actualTicks));
-}
-
-async function advanceThenCreateCard(context, actionId, ticks, options) {
-    const actualTicks = await services.addCombatTicks(context, ticks);
-    if (actualTicks === null) return false;
-    return Boolean(await services.createTickActionChatCard(context, actionId, actualTicks, options));
 }
 
 async function createCardThenAdvance(context, actionId, ticks, options) {

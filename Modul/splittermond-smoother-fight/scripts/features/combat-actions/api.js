@@ -37,3 +37,10 @@ export {
 export {
     performTickAction,
 } from "./tick-actions.js";
+
+export {
+    clearAttackPreparationForCombatant,
+    clearAttackPreparationsForCombat,
+    dismissAttackPreparation,
+    getAttackPreparation,
+} from "./attack-preparation.js";

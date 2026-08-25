@@ -329,6 +329,9 @@ class SmootherFightHud {
                 case "cancel-prepared-attack":
                     await services.requireOwner(context, () => services.cancelPreparedAttack(context));
                     break;
+                case "clear-attack-preparation":
+                    await services.requireOwner(context, () => services.dismissAttackPreparation(context));
+                    break;
                 case "recover-preparation":
                     await services.requireGm(() => services.recoverPreparationApplication(
                         context.actor,

@@ -13,6 +13,7 @@ import {
 import { buildTickActionReference } from "../Modul/splittermond-smoother-fight/scripts/features/hud/tick-action-reference.js";
 import { buildHud } from "../Modul/splittermond-smoother-fight/scripts/features/hud/view.js";
 import { toggleFavoriteTickAction } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
+import { getAttackPreparation } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/attack-preparation.js";
 
 const harness = {
     controlledToken: null,
@@ -35,6 +36,7 @@ configureServices({
     feedbackMarkup: () => "",
     getAttackSpeed: async (attack) => attack.weaponSpeed ?? 0,
     getAssignedUser: (combatant) => combatant.assignedUser ?? null,
+    getAttackPreparation,
     getControlledTokenDocument: () => harness.controlledToken,
     getRuntimeController: (combatant) => combatant.runtimeController ?? null,
     getTargetSelectionForUser: () => harness.targetSelection,
@@ -239,6 +241,34 @@ test("personal HUD controls expose melee attacks but not ranged attacks outside 
     assert.match(html, /data-attack-id="sword"/u);
     assert.doesNotMatch(html, /data-attack-id="bow"/u);
     assert.match(html, /SMOOTHER_FIGHT\.HUD\.TickActions\.meleeAttack\.Name/u);
+});
+
+test("a pending attack preparation is visible and dismissible in personal HUD controls", async () => {
+    const { first } = installFixture();
+    harness.controlledToken = first.token;
+    first.actor.getFlag = (namespace, key) => (
+        namespace === "splittermond-smoother-fight" && key === "attackPreparation"
+            ? {
+                id: "aim-1",
+                actionId: "aim",
+                ticks: 4,
+                bonus: 2,
+                combatId: "combat",
+                combatantId: "first",
+                attackId: "bow",
+                targetTokenUuid: "Scene.scene.Token.rattling",
+                targetActorUuid: "Actor.rattling",
+                targetName: "Rattling",
+            }
+            : null
+    );
+
+    const html = await buildHud(getHudContext());
+
+    assert.match(html, /class="sf-attack-preparation-status"/u);
+    assert.match(html, /data-sf-attack-preparation-id="aim-1"/u);
+    assert.match(html, /Rattling/u);
+    assert.match(html, /data-sf-action="clear-attack-preparation"/u);
 });
 
 test("movement tracking setting shows and hides the tracker for the active combatant", async () => {

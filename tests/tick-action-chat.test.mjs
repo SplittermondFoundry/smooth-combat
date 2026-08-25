@@ -19,6 +19,12 @@ import {
     performAttack,
     performSpell,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
+import {
+    clearAttackPreparationForCombatant,
+    clearAttackPreparationsForCombat,
+    getAttackPreparation,
+    resolveAttackPreparationUse,
+} from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/attack-preparation.js";
 import { performTickAction } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/tick-actions.js";
 import { services } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
 import { withTemporarySystemTargets } from "../Modul/splittermond-smoother-fight/scripts/features/targeting/targeting.js";
@@ -185,7 +191,7 @@ test("aiming and searching for an opening choose 2, 4, or 6 ticks and scale the 
             return config.buttons[1].callback();
         },
     } } } };
-    const context = tickActionContext({ skills: {} });
+    const context = tickActionContext({ skills: {}, ...actorFlagStore() });
     services.addCombatTicks = async (_context, ticks) => {
         order.push(`ticks:${ticks}`);
         return Number(ticks);
@@ -205,6 +211,344 @@ test("aiming and searching for an opening choose 2, 4, or 6 ticks and scale the 
     assert.deepEqual(dialogConfig.buttons.map((button) => button.label), ["2 Ticks", "4 Ticks", "6 Ticks"]);
     assert.equal(dialogConfig.buttons[0].default, true);
     assert.deepEqual(order, ["ticks:4", "card"]);
+    assert.deepEqual(getAttackPreparation(context.actor, context.combat.id), {
+        id: context.actor.flags["splittermond-smoother-fight"].attackPreparation.id,
+        actionId: "searchOpening",
+        attackKind: "melee",
+        ticks: 4,
+        bonus: 2,
+        combatId: "combat-1",
+        combatantId: "combatant-1",
+        createdAt: context.actor.flags["splittermond-smoother-fight"].attackPreparation.createdAt,
+    });
+});
+
+test("aim requires a readied ranged attack and binds its bonus to weapon and target", async () => {
+    const target = {
+        name: "Rattling",
+        uuid: "Scene.scene.Token.rattling",
+        actor: { name: "Rattling", uuid: "Actor.rattling" },
+    };
+    installTickActionGlobals(target);
+    globalThis.foundry = { applications: { api: { DialogV2: {
+        wait: async (config) => config.buttons[2].callback(),
+    } } } };
+    const flags = actorFlagStore({ splittermond: { preparedAttack: "bow" } });
+    const context = tickActionContext({
+        ...flags,
+        attacks: [{ id: "bow", name: "Kurzbogen", isRanged: true }],
+    });
+    let cardOptions = null;
+    services.addCombatTicks = async (_context, ticks) => Number(ticks);
+    services.createTickActionChatCard = async (_context, actionId, ticks, options) => {
+        assert.equal(actionId, "aim");
+        assert.equal(ticks, 6);
+        cardOptions = options;
+        return { id: "aim-card" };
+    };
+
+    assert.equal(await performTickAction(context, "aim", "custom"), true);
+    const preparation = getAttackPreparation(context.actor, context.combat.id);
+    assert.equal(preparation.actionId, "aim");
+    assert.equal(preparation.attackId, "bow");
+    assert.equal(preparation.bonus, 3);
+    assert.equal(preparation.targetTokenUuid, target.uuid);
+    assert.equal(preparation.targetActorUuid, target.actor.uuid);
+    assert.equal(preparation.targetName, target.name);
+    assert.match(cardOptions.description, /Rattling/u);
+    assert.equal(cardOptions.special, "+3 auf den vorbereiteten Fernkampfangriff gegen das gewählte Ziel");
+});
+
+test("aim is rejected before a ranged attack has been readied", async () => {
+    const warnings = [];
+    const target = { name: "Rattling", uuid: "Token.rattling", actor: { uuid: "Actor.rattling" } };
+    installTickActionGlobals(target);
+    globalThis.ui.notifications.warn = (message) => warnings.push(message);
+    const context = tickActionContext({
+        ...actorFlagStore(),
+        attacks: [{ id: "bow", name: "Kurzbogen", isRanged: true }],
+    });
+    services.addCombatTicks = async () => assert.fail("invalid aim must not advance ticks");
+
+    assert.equal(await performTickAction(context, "aim", "custom"), false);
+    assert.deepEqual(warnings, [german.SMOOTHER_FIGHT.HUD.AimRequiresPreparedAttack]);
+    assert.equal(getAttackPreparation(context.actor), null);
+});
+
+test("an attack preparation modifies the matching roll, survives cancellation, and is consumed after submission", async () => {
+    const target = {
+        name: "Rattling",
+        uuid: "Scene.scene.Token.rattling",
+        actor: { uuid: "Actor.rattling" },
+    };
+    installTickActionGlobals(target);
+    services.withTemporarySystemTargets = async (_targets, operation) => operation();
+    services.scheduleRender = () => {};
+    const storedPreparation = {
+        id: "opening-1",
+        actionId: "searchOpening",
+        attackKind: "melee",
+        ticks: 4,
+        bonus: 2,
+        combatId: "combat-1",
+        combatantId: "combatant-1",
+        createdAt: 1,
+    };
+    const actor = {
+        id: "actor-1",
+        name: "Arrou",
+        attacks: [{ id: "sword", name: "Schwert", isRanged: false }],
+        ...actorFlagStore({
+            splittermond: { preparedAttack: null },
+            "splittermond-smoother-fight": { attackPreparation: storedPreparation },
+        }),
+    };
+    const observedOptions = [];
+    let submitted = false;
+    const rollAttack = async (_attack, options) => {
+        observedOptions.push(options);
+        return submitted;
+    };
+    const context = { actor, combat: { id: "combat-1" }, target };
+
+    assert.equal(await performAttack(context, "sword", { modifier: 1 }, rollAttack), false);
+    assert.equal(getAttackPreparation(actor)?.id, "opening-1");
+    submitted = true;
+    assert.equal(await performAttack(context, "sword", { modifier: 1 }, rollAttack), true);
+    assert.equal(getAttackPreparation(actor), null);
+    assert.deepEqual(observedOptions, [{ modifier: 3 }, { modifier: 3 }]);
+});
+
+test("an attack preparation appears as a temporary preselected system modifier without double counting", async () => {
+    const target = {
+        name: "Rattling",
+        uuid: "Scene.scene.Token.rattling",
+        actor: { uuid: "Actor.rattling" },
+    };
+    installTickActionGlobals(target);
+    services.withTemporarySystemTargets = async (_targets, operation) => operation();
+    services.scheduleRender = () => {};
+
+    class AmountExpression {
+        constructor(amount) {
+            this.amount = amount;
+        }
+    }
+    const modifierManager = {
+        _modifier: new Map([["staffs", [{
+            attributes: { name: "Gegner kniend" },
+            groupId: "staffs",
+            selectable: true,
+            value: new AmountExpression(3),
+        }]]]),
+        add(path, attributes, value, selectable) {
+            const key = path.toLowerCase();
+            this._modifier.set(key, [...(this._modifier.get(key) ?? []), {
+                attributes,
+                groupId: path,
+                selectable,
+                value,
+            }]);
+        },
+    };
+    const skill = {
+        id: "staffs",
+        get selectableModifier() {
+            return [
+                ...(modifierManager._modifier.get("staffs") ?? []),
+                ...(modifierManager._modifier.get("skill.spear") ?? []),
+            ].filter((modifier) => modifier.selectable);
+        },
+    };
+    const attack = {
+        id: "spear",
+        item: { name: "Stangenwaffe" },
+        name: "Stangenwaffe",
+        isRanged: false,
+        skill,
+    };
+    let observedOptions = null;
+    const actor = {
+        id: "actor-named-opening",
+        name: "Arrou",
+        attacks: [attack],
+        modifier: modifierManager,
+        ...actorFlagStore({
+            splittermond: { preparedAttack: null },
+            "splittermond-smoother-fight": { attackPreparation: {
+                id: "opening-named",
+                actionId: "searchOpening",
+                attackKind: "melee",
+                ticks: 4,
+                bonus: 2,
+                combatId: "combat-1",
+                combatantId: "combatant-1",
+                createdAt: 1,
+            } },
+        }),
+        rollAttack: async (attackId, options) => {
+            assert.equal(attackId, attack.id);
+            observedOptions = options;
+            const namedModifier = modifierManager._modifier.get("skill.spear")
+                .find((modifier) => modifier.attributes.name === "Lücke suchen");
+            assert.equal(namedModifier.value.amount, 2);
+            return false;
+        },
+    };
+    attack.actor = actor;
+    skill.actor = actor;
+
+    assert.equal(await performAttack({ actor, combat: { id: "combat-1" }, target }, attack.id, {
+        modifier: 1,
+    }), false);
+    assert.deepEqual(observedOptions, {
+        modifier: 1,
+        preSelectedModifier: ["Stangenwaffe", "Lücke suchen"],
+    });
+    assert.equal(modifierManager._modifier.has("skill.spear"), false, "temporary modifier must be removed");
+    assert.equal(getAttackPreparation(actor)?.id, "opening-named", "a cancelled dialog must retain the state");
+});
+
+test("aim automatically modifies only its readied ranged attack and remains after a cancelled roll dialog", async () => {
+    const target = {
+        name: "Rattling",
+        uuid: "Scene.scene.Token.rattling",
+        actor: { uuid: "Actor.rattling" },
+    };
+    installTickActionGlobals(target);
+    services.withTemporarySystemTargets = async (_targets, operation) => operation();
+    services.scheduleRender = () => {};
+    const actor = {
+        id: "actor-aim",
+        name: "Arrou",
+        attacks: [{ id: "bow", name: "Kurzbogen", isRanged: true }],
+        ...actorFlagStore({
+            splittermond: { preparedAttack: "bow" },
+            "splittermond-smoother-fight": { attackPreparation: {
+                id: "aim-1",
+                actionId: "aim",
+                attackKind: "ranged",
+                ticks: 6,
+                bonus: 3,
+                combatId: "combat-1",
+                combatantId: "combatant-1",
+                createdAt: 1,
+                attackId: "bow",
+                targetTokenUuid: target.uuid,
+                targetActorUuid: target.actor.uuid,
+                targetName: target.name,
+            } },
+        }),
+    };
+    const observedOptions = [];
+    let submitted = false;
+    const rollAttack = async (_attack, options) => {
+        observedOptions.push(options);
+        return submitted;
+    };
+    const context = { actor, combat: { id: "combat-1" }, target };
+
+    assert.equal(await performAttack(context, "bow", {}, rollAttack), false);
+    assert.equal(getAttackPreparation(actor)?.id, "aim-1");
+    assert.equal(actor.getFlag("splittermond", "preparedAttack"), "bow");
+    submitted = true;
+    assert.equal(await performAttack(context, "bow", {}, rollAttack), true);
+    assert.equal(getAttackPreparation(actor), null);
+    assert.equal(actor.getFlag("splittermond", "preparedAttack"), null);
+    assert.deepEqual(observedOptions, [{ modifier: 3 }, { modifier: 3 }]);
+});
+
+test("attack preparation matching retains an opening through ranged fire and spends aim when its readied sequence ends", () => {
+    const target = { uuid: "Token.target", actor: { uuid: "Actor.target" } };
+    const aim = {
+        id: "aim-1",
+        actionId: "aim",
+        attackId: "bow",
+        targetTokenUuid: target.uuid,
+        targetActorUuid: target.actor.uuid,
+    };
+    const opening = { id: "opening-1", actionId: "searchOpening" };
+
+    assert.deepEqual(resolveAttackPreparationUse(aim, {
+        attackId: "sword",
+        isRanged: false,
+        target,
+    }), { applies: false, consumeOnSuccess: true, mismatch: null });
+    assert.deepEqual(resolveAttackPreparationUse(aim, {
+        attackId: "bow",
+        isRanged: true,
+        target: { uuid: "Token.other", actor: { uuid: "Actor.other" } },
+    }), { applies: false, consumeOnSuccess: true, mismatch: "target" });
+    assert.deepEqual(resolveAttackPreparationUse(aim, {
+        attackId: "crossbow",
+        isRanged: true,
+        target,
+    }), { applies: false, consumeOnSuccess: true, mismatch: "attack" });
+    assert.deepEqual(resolveAttackPreparationUse(opening, {
+        attackId: "bow",
+        isRanged: true,
+        target,
+    }), { applies: false, consumeOnSuccess: false, mismatch: null });
+    assert.deepEqual(resolveAttackPreparationUse(opening, {
+        attackId: "sword",
+        isRanged: false,
+        target,
+    }), { applies: true, consumeOnSuccess: true, mismatch: null });
+});
+
+test("ending combat clears aim and opening bonuses while combatant cleanup is strictly scoped", async () => {
+    services.scheduleRender = () => {};
+    const preparation = (id, actionId, combatId, combatantId) => ({
+        id,
+        actionId,
+        attackKind: actionId === "aim" ? "ranged" : "melee",
+        ticks: 4,
+        bonus: 2,
+        combatId,
+        combatantId,
+        createdAt: 1,
+        ...(actionId === "aim" ? {
+            attackId: "bow",
+            targetTokenUuid: "Scene.scene.Token.target",
+            targetActorUuid: "Actor.target",
+            targetName: "Rattling",
+        } : {}),
+    });
+    const preparedActor = (id, storedPreparation) => ({
+        id,
+        ...actorFlagStore({
+            "splittermond-smoother-fight": { attackPreparation: storedPreparation },
+        }),
+    });
+    const openingActor = preparedActor("opening", preparation("opening-1", "searchOpening", "combat-1", "combatant-1"));
+    const aimingActor = preparedActor("aiming", preparation("aim-1", "aim", "combat-1", "combatant-2"));
+    const otherCombatActor = preparedActor("other", preparation("opening-2", "searchOpening", "combat-2", "combatant-3"));
+
+    assert.equal(await clearAttackPreparationsForCombat({
+        id: "combat-1",
+        combatants: [
+            { id: "combatant-1", actor: openingActor },
+            { id: "combatant-2", actor: aimingActor },
+            { id: "combatant-3", actor: otherCombatActor },
+        ],
+    }), 2);
+    assert.equal(getAttackPreparation(openingActor), null);
+    assert.equal(getAttackPreparation(aimingActor), null);
+    assert.equal(getAttackPreparation(otherCombatActor)?.id, "opening-2");
+
+    const removedActor = preparedActor("removed", preparation("aim-removed", "aim", "combat-3", "combatant-4"));
+    assert.equal(await clearAttackPreparationForCombatant({
+        id: "different-combatant",
+        parent: { id: "combat-3" },
+        actor: removedActor,
+    }), false);
+    assert.equal(getAttackPreparation(removedActor)?.id, "aim-removed");
+    assert.equal(await clearAttackPreparationForCombatant({
+        id: "combatant-4",
+        parent: { id: "combat-3" },
+        actor: removedActor,
+    }), true);
+    assert.equal(getAttackPreparation(removedActor), null);
 });
 
 test("disengaging offers rollable combat skills with Retreat Fighting even though actor.skills excludes fighting skills", async () => {
@@ -621,6 +965,19 @@ function tickActionContext(actorData) {
         combatant: { id: "combatant-1", initiative: 10 },
         combat: { id: "combat-1" },
         token: { id: "token-1", uuid: "Token.arrou", name: "Arrou" },
+    };
+}
+
+function actorFlagStore(initial = {}) {
+    const flags = structuredClone(initial);
+    return {
+        flags,
+        getFlag: (namespace, key) => flags[namespace]?.[key] ?? null,
+        setFlag: async (namespace, key, value) => {
+            flags[namespace] ??= {};
+            flags[namespace][key] = value;
+            return true;
+        },
     };
 }
 

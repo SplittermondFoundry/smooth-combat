@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "d48cd2d76fd395b740ee6bc2cee63ced3ed0fe1129e89e0e7206fd10facee841",
+        "b1ad2854625843606e2a90bb406e7776b4c211fcf4986ce774a31763add301f8",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -89,10 +89,12 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /data-sf-spell-school/u);
     assert.match(hudView, /data-sf-spell-level/u);
     assert.match(hudView, /data-sf-action="toggle-favorite-tick-action"/u);
+    assert.match(hudView, /data-sf-action="clear-attack-preparation"/u);
     assert.match(hudView, /data-sf-tick-action-category="\$\{escapeAttr\(action\.displayCategory\)\}"/u);
     assert.match(hudController, /bindTickActionReferenceFilters/u);
     assert.match(hudController, /bindSpellListFilters/u);
     assert.match(hudController, /case "toggle-favorite-tick-action"/u);
+    assert.match(hudController, /case "clear-attack-preparation"/u);
     assert.doesNotMatch(hudView, /sf-tick-action-tooltip/u);
     assert.doesNotMatch(hudView, /role="tooltip"[^`]*data-sf-action="share-tick-action"/u);
     assert.match(hudView, /data-sf-action="share-tick-action"/u);
@@ -164,7 +166,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "b1dd269fff934de2335105efccf2dd4673e5b9ff212c4635a960125b06168132",
+        "3f677fbe9d4b0b26c1e80dadcbe1b071867eeb3efc196a5c890ea4ecb6e84140",
     );
 });
 

@@ -87,6 +87,12 @@ export function registerHooks() {
         services.syncActiveCombatantTokenSelection(combat);
         services.announceTurnFeedback(combat);
     });
+    Hooks.on("deleteCombat", (combat) => {
+        runAuthoritativeAttackPreparationCleanup(() => services.clearAttackPreparationsForCombat(combat));
+    });
+    Hooks.on("deleteCombatant", (combatant) => {
+        runAuthoritativeAttackPreparationCleanup(() => services.clearAttackPreparationForCombatant(combatant));
+    });
 
     Hooks.on("createChatMessage", (message) => {
         void services.onCreateChatMessage(message).finally(() => services.scheduleRender(0));
@@ -108,6 +114,11 @@ export function registerHooks() {
     Hooks.on("renderChatMessageHTML", (message, html) => services.prepareRenderedChatMessage(message, html));
     Hooks.on("renderChatMessage", (message, html) => services.prepareRenderedChatMessage(message, asElement(html)));
     Hooks.on("renderTokenHUD", (app, html) => services.renderTokenOwnerControl(app, html));
+}
+
+function runAuthoritativeAttackPreparationCleanup(operation) {
+    if (services.getActivePrimaryGm?.()?.id !== globalThis.game?.user?.id) return;
+    void operation().catch(() => false);
 }
 
 export function registerSocket() {

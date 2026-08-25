@@ -90,6 +90,15 @@ export async function createTickActionChatCard(context, actionId, selectedTicks 
     const source = action.source
         ? `<footer class="sf-tick-action-chat-source"><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSource", action.source))}</small></footer>`
         : "";
+    const bonus = Number(options.bonus);
+    const preparationData = Number.isInteger(bonus) && bonus > 0
+        ? {
+            bonus,
+            targetActorUuid: options.targetActorUuid ?? null,
+            targetName: options.targetName ?? null,
+            targetTokenUuid: options.targetTokenUuid ?? null,
+        }
+        : {};
     const content = `<section class="sf-tick-action-chat-card">
         <header>
             <i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>
@@ -114,6 +123,7 @@ export async function createTickActionChatCard(context, actionId, selectedTicks 
                     id: action.id,
                     ticks: selectedTicks,
                     tokenUuid: token?.uuid ?? null,
+                    ...preparationData,
                 },
             },
         },
