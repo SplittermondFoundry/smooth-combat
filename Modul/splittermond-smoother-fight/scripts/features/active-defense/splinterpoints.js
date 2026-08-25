@@ -89,14 +89,6 @@ export function getDefenseSplinterpointActions(message, user = game.user) {
     const appliedResonances = new Set(context.vtdSplinterpointResonanceActorUuids ?? []);
     if (appliedResonances.size > 0) return [];
     const combatants = Array.from(game.combat?.combatants ?? []);
-    const targetCombatant = combatants.find((combatant) => {
-        const token = combatantToken(combatant);
-        return actorUuid(combatantActor(combatant)) === targetActorUuid
-            || (target?.uuid && token?.uuid === target.uuid);
-    });
-    const targetPlayerId = targetCombatant
-        ? services.getAssignedUser(targetCombatant)?.id ?? services.getRuntimeController(targetCombatant)?.id ?? null
-        : null;
     const actions = [];
     const seenActors = new Set();
     for (const combatant of combatants) {
@@ -107,8 +99,6 @@ export function getDefenseSplinterpointActions(message, user = game.user) {
         if (Number(actor.system?.experience?.heroLevel) < 3 || availableSplinterpoints(actor) < 1) continue;
         if (!userOwnsActor(user, actor)) continue;
         const controller = services.getRuntimeController(combatant);
-        const playerId = services.getAssignedUser(combatant)?.id ?? controller?.id ?? null;
-        if (targetPlayerId && playerId === targetPlayerId) continue;
         if (!user.isGM && controller?.id !== user.id) continue;
         if (getDefenseSplinterpointApplicationStatus(message, uuid).state !== "idle") continue;
         actions.push({ kind: "resonance", actorUuid: uuid });

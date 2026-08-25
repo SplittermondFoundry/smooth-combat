@@ -639,7 +639,9 @@ test("resonance is offered only to another owned hero-level-three combatant", ()
     assert.deepEqual(getDefenseSplinterpointActions(attack, resonanceOwner), [
         { kind: "resonance", actorUuid: eligible.uuid },
     ]);
-    assert.deepEqual(getDefenseSplinterpointActions(attack, targetOwner), []);
+    assert.deepEqual(getDefenseSplinterpointActions(attack, targetOwner), [
+        { kind: "resonance", actorUuid: samePlayer.uuid },
+    ]);
 
     attack.flags[MODULE_ID].context = {
         ...attack.flags[MODULE_ID].context,
@@ -648,6 +650,42 @@ test("resonance is offered only to another owned hero-level-three combatant", ()
     };
     assert.deepEqual(getDefenseSplinterpointActions(attack, resonanceOwner), []);
     assert.deepEqual(getDefenseSplinterpointActions(attack, otherOwner), []);
+});
+
+test("different splinter bearers remain resonance partners under the same runtime GM fallback", () => {
+    resetHarness();
+    const target = createSplinterpointActor("target-gm-fallback");
+    const resonator = createSplinterpointActor("resonator-gm-fallback", { heroLevel: 3 });
+    const targetTokenUuid = "Token.target-gm-fallback";
+    harness.tokens.set(targetTokenUuid, {
+        uuid: targetTokenUuid,
+        name: "GM fallback target",
+        actor: target,
+    });
+    game.combat = {
+        combatants: [
+            {
+                actor: target,
+                token: { uuid: targetTokenUuid, actor: target },
+                runtimeController: game.user,
+            },
+            {
+                actor: resonator,
+                token: { uuid: "Token.resonator-gm-fallback", actor: resonator },
+                runtimeController: game.user,
+            },
+        ],
+    };
+    const attack = createAttack("attack-gm-fallback", attackReport(), {
+        primaryTargetTokenUuid: targetTokenUuid,
+        vtdSplinterpointActorUuid: target.uuid,
+        vtdSplinterpointBonus: 3,
+    });
+    attack.content = '<button data-localaction="activeDefense">Abwehr</button>';
+
+    assert.deepEqual(getDefenseSplinterpointActions(attack, game.user), [
+        { kind: "resonance", actorUuid: resonator.uuid },
+    ]);
 });
 
 test("only the first of two concurrent resonance attempts can affect an attack", async () => {
