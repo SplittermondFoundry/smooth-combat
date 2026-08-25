@@ -25,9 +25,11 @@ function callsOf(name) {
 configureServices({
     announceMessageFeedback: (message) => record("announceMessageFeedback", message),
     attachFumbleActions: async (message) => record("attachFumbleActions", message),
-    clearPendingOffenseKind: (actorId) => {
-        record("clearPendingOffenseKind", actorId);
+    claimPendingOffenseKind: (actorId) => {
+        record("claimPendingOffenseKind", actorId);
+        const pendingKind = harness.pendingKinds.get(actorId) ?? null;
         harness.pendingKinds.delete(actorId);
+        return pendingKind;
     },
     getAssignedUser: (combatant) => {
         record("getAssignedUser", combatant);
@@ -38,10 +40,6 @@ configureServices({
         return harness.runtimeController;
     },
     getMessageContext: (message) => harness.contexts.get(message) ?? null,
-    getPendingOffenseKind: (actorId) => {
-        record("getPendingOffenseKind", actorId);
-        return harness.pendingKinds.get(actorId);
-    },
     getTargetSelectionForUser: (user) => {
         record("getTargetSelectionForUser", user);
         const targets = Array.from(user?.targets ?? []);
@@ -257,7 +255,7 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
         assert.equal(callsOf("announceMessageFeedback").length, 1);
     });
 
-    await t.test("PendingOffenseKind is consumed once before delayed presentation", async () => {
+    await t.test("PendingOffenseKind is claimed once without clearing a successor", async () => {
         const pendingKind = {
             kind: "ranged",
             expiresAt: Date.now() + 60_000,
@@ -271,19 +269,21 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
         const fixture = createFixture({ pendingKind });
         const processing = onCreateChatMessage(fixture.message);
 
+        assert.equal(harness.pendingKinds.has(fixture.actor.id), false);
+        const successor = { kind: "spell", expiresAt: Date.now() + 60_000 };
+        harness.pendingKinds.set(fixture.actor.id, successor);
         await Promise.resolve();
 
-        assert.equal(harness.pendingKinds.has(fixture.actor.id), false);
         assert.equal(harness.contexts.get(fixture.message)?.actionKind, pendingKind.kind);
         assert.equal(harness.contexts.get(fixture.message)?.primaryTargetTokenUuid, pendingKind.primaryTargetTokenUuid);
         assert.deepEqual(harness.contexts.get(fixture.message)?.targetTokenUuids, pendingKind.targetTokenUuids);
-        assert.deepEqual(callsOf("clearPendingOffenseKind").map((entry) => entry.args), [[fixture.actor.id]]);
+        assert.equal(harness.pendingKinds.get(fixture.actor.id), successor);
 
         await completeDiceAnimation(fixture);
         await processing;
 
-        assert.equal(callsOf("getPendingOffenseKind").length, 1);
-        assert.equal(callsOf("clearPendingOffenseKind").length, 1);
+        assert.deepEqual(callsOf("claimPendingOffenseKind").map((entry) => entry.args), [[fixture.actor.id]]);
+        assert.equal(harness.pendingKinds.get(fixture.actor.id), successor);
         assert.equal(harness.contexts.get(fixture.message)?.actionKind, pendingKind.kind);
     });
 });

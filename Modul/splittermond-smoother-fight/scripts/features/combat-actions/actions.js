@@ -45,11 +45,11 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
     }
     let completed = false;
     if (readiness.ready) {
-        combatActionState.pendingOffenseKinds.set(context.actor.id, {
-            kind: isRangedAttack(attack) ? "ranged" : "attack",
-            expiresAt: Date.now() + 60_000,
-            ...snapshotTargetContext(context),
-        });
+        const pendingNonce = setPendingOffenseKind(
+            context.actor.id,
+            isRangedAttack(attack) ? "ranged" : "attack",
+            context
+        );
         try {
             const success = await services.withTemporarySystemTargets(
                 [context.target],
@@ -60,9 +60,8 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
             if (success && readiness.prepared) await clearPreparationApplication(context.actor, "attack");
             else if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
             completed = Boolean(success);
-        } catch (error) {
-            combatActionState.pendingOffenseKinds.delete(context.actor.id);
-            throw error;
+        } finally {
+            clearPendingOffenseKind(context.actor.id, pendingNonce);
         }
     } else {
         completed = await prepareCombatAction(context, {
@@ -148,17 +147,12 @@ export async function performSpell(context, spellId) {
         return;
     }
     if (prepared) {
-        combatActionState.pendingOffenseKinds.set(context.actor.id, {
-            kind: "spell",
-            expiresAt: Date.now() + 60_000,
-            ...snapshotTargetContext(context),
-        });
+        const pendingNonce = setPendingOffenseKind(context.actor.id, "spell", context);
         try {
             const success = await services.withTemporarySystemTargets([context.target], () => context.actor.rollSpell(spellId));
             if (success) await clearPreparationApplication(context.actor, "spell");
-        } catch (error) {
-            combatActionState.pendingOffenseKinds.delete(context.actor.id);
-            throw error;
+        } finally {
+            clearPendingOffenseKind(context.actor.id, pendingNonce);
         }
     } else {
         combatActionState.preparingSpellId = spellId;
@@ -195,8 +189,28 @@ export function getPendingOffenseKind(actorId) {
     return combatActionState.pendingOffenseKinds.get(actorId);
 }
 
-export function clearPendingOffenseKind(actorId) {
+export function claimPendingOffenseKind(actorId) {
+    const pendingKind = combatActionState.pendingOffenseKinds.get(actorId);
+    if (!pendingKind) return null;
     combatActionState.pendingOffenseKinds.delete(actorId);
+    return pendingKind;
+}
+
+function clearPendingOffenseKind(actorId, nonce = undefined) {
+    const pendingKind = combatActionState.pendingOffenseKinds.get(actorId);
+    if (!pendingKind || (nonce !== undefined && pendingKind.nonce !== nonce)) return false;
+    return combatActionState.pendingOffenseKinds.delete(actorId);
+}
+
+function setPendingOffenseKind(actorId, kind, context) {
+    const nonce = Symbol("pendingOffense");
+    combatActionState.pendingOffenseKinds.set(actorId, {
+        kind,
+        nonce,
+        expiresAt: Date.now() + 60_000,
+        ...snapshotTargetContext(context),
+    });
+    return nonce;
 }
 
 function snapshotTargetContext(context) {

@@ -17,6 +17,7 @@ import {
     addCombatTicks,
     getPendingOffenseKind,
     performAttack,
+    performSpell,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
 import { performTickAction } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/tick-actions.js";
 import { services } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
@@ -688,6 +689,8 @@ test("single-target attack mechanics use the primary target without losing secon
             rolled = true;
             assert.equal(attackId, attack.id);
             assert.deepEqual([...systemTargets], [tokenObjectB]);
+            assert.deepEqual(getPendingOffenseKind(actor.id).targetTokenUuids, [targetA.uuid, targetB.uuid]);
+            assert.equal(getPendingOffenseKind(actor.id).primaryTargetTokenUuid, targetB.uuid);
             return true;
         },
         setFlag: async () => {},
@@ -718,8 +721,7 @@ test("single-target attack mechanics use the primary target without losing secon
 
     assert.equal(rolled, true);
     assert.deepEqual([...systemTargets], [tokenObjectA, tokenObjectB]);
-    assert.deepEqual(getPendingOffenseKind(actor.id).targetTokenUuids, [targetA.uuid, targetB.uuid]);
-    assert.equal(getPendingOffenseKind(actor.id).primaryTargetTokenUuid, targetB.uuid);
+    assert.equal(getPendingOffenseKind(actor.id), undefined);
 });
 
 test("attack mechanics can execute a scoped attack view without bypassing target handling", async () => {
@@ -767,6 +769,99 @@ test("attack mechanics can execute a scoped attack view without bypassing target
     assert.equal(completed, true);
     assert.equal(scopedRolls, 1);
     assert.equal(directRolls, 0);
+    assert.equal(getPendingOffenseKind(actor.id), undefined);
+});
+
+test("cancelled attack and spell dialogs clear their pending offense contexts", async () => {
+    const target = {
+        uuid: "Scene.scene.Token.cancel-target",
+        name: "Abbruchziel",
+        actor: { uuid: "Actor.cancel-target" },
+    };
+    const attack = { id: "cancelled-attack", name: "Klinge", isRanged: false };
+    const spell = { id: "cancelled-spell", name: "Flammenstrahl", difficulty: "VTD" };
+    const attackActor = {
+        id: "cancelled-attacker",
+        attacks: [attack],
+        getFlag: () => attack.id,
+        rollAttack: async () => false,
+        setFlag: async () => assert.fail("a cancelled attack must not change preparation flags"),
+    };
+    const spellActor = {
+        id: "cancelled-caster",
+        spells: [spell],
+        getFlag: () => spell.id,
+        rollSpell: async () => false,
+    };
+    const user = { id: "user", selection: { target, targets: [target] } };
+    globalThis.game = { user };
+    globalThis.ui = { notifications: { warn: () => assert.fail("both actions have a target") } };
+    services.getRuntimeController = () => user;
+    services.getTargetSelectionForUser = (runtimeController) => runtimeController.selection;
+    services.withTemporarySystemTargets = async (_targets, operation) => operation();
+    services.scheduleRender = () => {};
+
+    assert.equal(await performAttack({ actor: attackActor }, attack.id), false);
+    assert.equal(getPendingOffenseKind(attackActor.id), undefined);
+
+    await performSpell({ actor: spellActor }, spell.id);
+    assert.equal(getPendingOffenseKind(spellActor.id), undefined);
+});
+
+test("an older roll completion cannot clear a newer pending offense context", async () => {
+    const attack = { id: "overlapping-attack", name: "Klinge", isRanged: false };
+    const targetA = {
+        uuid: "Scene.scene.Token.overlap-a",
+        name: "Ziel A",
+        actor: { uuid: "Actor.overlap-a" },
+    };
+    const targetB = {
+        uuid: "Scene.scene.Token.overlap-b",
+        name: "Ziel B",
+        actor: { uuid: "Actor.overlap-b" },
+    };
+    let resolveFirst;
+    let resolveSecond;
+    const firstRoll = new Promise((resolve) => resolveFirst = resolve);
+    const secondRoll = new Promise((resolve) => resolveSecond = resolve);
+    let rollCount = 0;
+    const actor = {
+        id: "overlapping-attacker",
+        attacks: [attack],
+        getFlag: () => attack.id,
+        rollAttack: () => {
+            rollCount += 1;
+            return rollCount === 1 ? firstRoll : secondRoll;
+        },
+        setFlag: async () => assert.fail("cancelled attacks must not change preparation flags"),
+    };
+    const user = { id: "user", selection: { target: targetA, targets: [targetA] } };
+    globalThis.game = { user };
+    globalThis.ui = { notifications: { warn: () => assert.fail("both actions have a target") } };
+    services.getRuntimeController = () => user;
+    services.getTargetSelectionForUser = (runtimeController) => runtimeController.selection;
+    services.withTemporarySystemTargets = async (_targets, operation) => operation();
+    services.scheduleRender = () => {};
+
+    const firstOperation = performAttack({ actor }, attack.id);
+    await Promise.resolve();
+    const firstPending = getPendingOffenseKind(actor.id);
+    assert.equal(firstPending.primaryTargetTokenUuid, targetA.uuid);
+
+    user.selection = { target: targetB, targets: [targetB] };
+    const secondOperation = performAttack({ actor }, attack.id);
+    await Promise.resolve();
+    const secondPending = getPendingOffenseKind(actor.id);
+    assert.equal(secondPending.primaryTargetTokenUuid, targetB.uuid);
+    assert.notEqual(secondPending.nonce, firstPending.nonce);
+
+    resolveFirst(false);
+    assert.equal(await firstOperation, false);
+    assert.equal(getPendingOffenseKind(actor.id), secondPending);
+
+    resolveSecond(false);
+    assert.equal(await secondOperation, false);
+    assert.equal(getPendingOffenseKind(actor.id), undefined);
 });
 
 test("temporary Splittermond system targets are restored when a roll fails", async () => {
