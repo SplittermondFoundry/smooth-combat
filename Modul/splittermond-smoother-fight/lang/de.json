@@ -509,6 +509,7 @@
       "DefenderRule": "{target} darf höchstens 2 m entfernt sein. Die Abwehr nutzt eine Nahkampffertigkeit mit −3; bei mehreren Abwehren zählt die höchste neue VTD.",
       "DefenderRoll": "Aktive Abwehr würfeln",
       "DefenderRollTitle": "Verteidiger: {defender} für {target}",
+      "DefenderModifier": "Verteidiger",
       "DefenderUnavailable": "Kein eigener Kampfteilnehmer mit der Meisterschaft Verteidiger und einer gültigen Nahkampf-Abwehr befindet sich innerhalb von 2 m.",
       "WaitingForDefender": "{defender} verteidigt {target} …",
       "LinkedUserOffline": "Der zugeordnete Spieler ist nicht verbunden. Das letzte bekannte Ziel wird verwendet.",

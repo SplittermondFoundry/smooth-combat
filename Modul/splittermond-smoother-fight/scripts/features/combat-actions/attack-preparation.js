@@ -14,11 +14,13 @@ import {
     t,
 } from "../../shared/values.js";
 
+import {
+    installTemporarySelectableModifier,
+} from "../../shared/temporary-selectable-modifier.js";
+
 const ATTACK_PREPARATION_FLAG = "attackPreparation";
 const ATTACK_PREPARATION_ACTIONS = new Set(["aim", "searchOpening"]);
 const ATTACK_PREPARATION_TICKS = new Set([2, 4, 6]);
-const PREPARATION_MODIFIER_MARKER = "smootherFightAttackPreparationId";
-const temporarySelectableModifierRecords = new WeakMap();
 
 export function getAttackPreparation(actor, combatId = undefined) {
     const raw = actor?.getFlag?.(MODULE_ID, ATTACK_PREPARATION_FLAG)
@@ -129,7 +131,14 @@ export function prepareAttackPreparationRollOptions(
     { includeAttackDefault = false } = {}
 ) {
     const name = t(`SMOOTHER_FIGHT.HUD.TickActions.${preparation.actionId}.Name`);
-    const cleanup = installTemporarySelectableModifier(attack, preparation, name);
+    const cleanup = installTemporarySelectableModifier({
+        skill: attack?.skill,
+        modifierManager: attack?.actor?.modifier,
+        groupId: `skill.${attack?.id ?? ""}`,
+        recordId: `attack-preparation:${preparation.id}`,
+        name,
+        amount: preparation.bonus,
+    });
     if (!cleanup) {
         return {
             cleanup: () => {},
@@ -210,77 +219,6 @@ export async function clearAttackPreparationForCombatant(combatant) {
 function attackPreparationTargetMatches(preparation, target) {
     if (preparation.targetTokenUuid) return preparation.targetTokenUuid === target?.uuid;
     return Boolean(preparation.targetActorUuid && preparation.targetActorUuid === target?.actor?.uuid);
-}
-
-function installTemporarySelectableModifier(attack, preparation, name) {
-    const skill = attack?.skill;
-    const manager = attack?.actor?.modifier ?? skill?.actor?.modifier;
-    const modifierMap = manager?._modifier;
-    if (!skill || typeof manager?.add !== "function" || !(modifierMap instanceof Map)) return null;
-
-    const groupId = `skill.${attack.id}`;
-    const groupKey = groupId.toLowerCase();
-    const recordKey = `${preparation.id}:${groupKey}`;
-    const records = temporarySelectableModifierRecords.get(manager) ?? new Map();
-    const existingRecord = records.get(recordKey);
-    if (existingRecord && modifierMap.get(groupKey)?.includes(existingRecord.modifier)) {
-        existingRecord.references += 1;
-        return temporaryModifierCleanup(manager, records, recordKey, existingRecord);
-    }
-    records.delete(recordKey);
-
-    let templateValue;
-    try {
-        templateValue = Array.from(skill.selectableModifier ?? [])
-            .map((modifier) => modifier?.value)
-            .find((value) => Number.isFinite(Number(value?.amount)));
-    } catch (_error) {
-        return null;
-    }
-    const expressionPrototype = templateValue ? Object.getPrototypeOf(templateValue) : null;
-    if (!expressionPrototype) return null;
-
-    const value = Object.create(expressionPrototype);
-    Object.defineProperty(value, "amount", {
-        configurable: true,
-        enumerable: true,
-        value: preparation.bonus,
-    });
-    const marker = `${preparation.id}:${preparationId()}`;
-    try {
-        manager.add(groupId, {
-            [PREPARATION_MODIFIER_MARKER]: marker,
-            name,
-            type: "innate",
-        }, value, true);
-    } catch (_error) {
-        return null;
-    }
-
-    const added = modifierMap.get(groupKey)?.find((modifier) => (
-        modifier?.attributes?.[PREPARATION_MODIFIER_MARKER] === marker
-    ));
-    if (!added) return null;
-    const record = { groupKey, modifier: added, references: 1 };
-    records.set(recordKey, record);
-    temporarySelectableModifierRecords.set(manager, records);
-    return temporaryModifierCleanup(manager, records, recordKey, record);
-}
-
-function temporaryModifierCleanup(manager, records, recordKey, record) {
-    let released = false;
-    return () => {
-        if (released) return;
-        released = true;
-        record.references -= 1;
-        if (record.references > 0) return;
-        const modifiers = manager._modifier?.get(record.groupKey);
-        const index = modifiers?.indexOf(record.modifier) ?? -1;
-        if (index >= 0) modifiers.splice(index, 1);
-        if (modifiers?.length === 0) manager._modifier.delete(record.groupKey);
-        records.delete(recordKey);
-        if (records.size === 0) temporarySelectableModifierRecords.delete(manager);
-    };
 }
 
 function uniqueModifierNames(names) {

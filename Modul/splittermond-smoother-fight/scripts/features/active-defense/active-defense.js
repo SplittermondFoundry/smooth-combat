@@ -40,6 +40,10 @@ import {
     t,
 } from "../../shared/values.js";
 
+import {
+    installTemporarySelectableModifier,
+} from "../../shared/temporary-selectable-modifier.js";
+
 function primaryTargetTokenUuid(context) {
     return context?.primaryTargetTokenUuid ?? context?.targetTokenUuid ?? null;
 }
@@ -415,27 +419,75 @@ export async function beginDefenderDefense(message) {
     try {
         const baseDefense = await target.actor.derivedValues.defense.value.calculate();
         const difficulty = pending.activeDefenseDifficulty;
-        const defenderModifier = Array.from(current.defense.skill.selectableModifier ?? [])
-            .find((modifier) => isDefenderMasteryName(modifier?.attributes?.name));
-        await runPendingDefenseRoll(pending, () => current.defense.skill.roll({
-            type: "defense",
-            preSelectedModifier: defenderModifier ? [defenderModifier.attributes.name] : [],
-            difficulty,
-            modifier: defenderModifier ? 0 : -3,
-            title: t("SMOOTHER_FIGHT.HUD.DefenderRollTitle", {
-                defender: current.token.name ?? current.actor.name,
-                target: target.name,
-            }),
-            checkMessageData: {
-                defenseType: "defense",
-                baseDefense,
-                itemData: current.defense,
-            },
-        }));
+        const preparedModifier = prepareDefenderRollOptions(current, pending);
+        try {
+            await runPendingDefenseRoll(pending, () => current.defense.skill.roll({
+                type: "defense",
+                ...preparedModifier.rollOptions,
+                difficulty,
+                title: t("SMOOTHER_FIGHT.HUD.DefenderRollTitle", {
+                    defender: current.token.name ?? current.actor.name,
+                    target: target.name,
+                }),
+                checkMessageData: {
+                    defenseType: "defense",
+                    baseDefense,
+                    itemData: current.defense,
+                },
+            }));
+        } finally {
+            preparedModifier.cleanup();
+        }
     } catch (error) {
         clearPendingDefense(pending.pendingDefenseId);
         throw error;
     }
+}
+
+export function prepareDefenderRollOptions(choice, pending) {
+    const skill = choice?.defense?.skill;
+    let defenderModifier = null;
+    try {
+        defenderModifier = Array.from(skill?.selectableModifier ?? [])
+            .find((modifier) => isDefenderMasteryName(modifier?.attributes?.name));
+    } catch (_error) {
+        // Continue with the temporary modifier or the numeric compatibility fallback.
+    }
+    if (defenderModifier) {
+        return {
+            cleanup: () => {},
+            rollOptions: {
+                preSelectedModifier: [defenderModifier.attributes.name],
+                modifier: 0,
+            },
+            usesNamedModifier: true,
+        };
+    }
+
+    const name = t("SMOOTHER_FIGHT.HUD.DefenderModifier");
+    const cleanup = installTemporarySelectableModifier({
+        skill,
+        modifierManager: choice?.actor?.modifier,
+        groupId: `skill.${choice?.defense?.id ?? ""}`,
+        recordId: `defender:${pending?.pendingDefenseId ?? ""}`,
+        name,
+        amount: -3,
+    });
+    return cleanup ? {
+        cleanup,
+        rollOptions: {
+            preSelectedModifier: [name],
+            modifier: 0,
+        },
+        usesNamedModifier: true,
+    } : {
+        cleanup: () => {},
+        rollOptions: {
+            preSelectedModifier: [],
+            modifier: -3,
+        },
+        usesNamedModifier: false,
+    };
 }
 
 export function getEligibleDefenderChoices(message, user) {

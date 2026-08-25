@@ -509,6 +509,7 @@
       "DefenderRule": "{target} must be within 2 m. The defense uses a melee skill at −3; when several characters defend, the highest new Defense counts.",
       "DefenderRoll": "Roll active defense",
       "DefenderRollTitle": "Defender: {defender} for {target}",
+      "DefenderModifier": "Defender",
       "DefenderUnavailable": "No combatant you own has the Defender mastery, a valid melee defense, and a distance of at most 2 m.",
       "WaitingForDefender": "{defender} is defending {target} …",
       "LinkedUserOffline": "The assigned player is offline. The last known target is used.",
