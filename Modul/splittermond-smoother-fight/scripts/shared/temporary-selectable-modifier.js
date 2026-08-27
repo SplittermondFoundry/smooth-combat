@@ -51,19 +51,35 @@ export function installTemporarySelectableModifier({
         value: numericAmount,
     });
     const marker = `${normalizedRecordId}:${temporaryModifierId()}`;
+    const attributes = {
+        [TEMPORARY_MODIFIER_MARKER]: marker,
+        name: normalizedName,
+        type: "innate",
+    };
     try {
-        manager.add(normalizedGroupId, {
-            [TEMPORARY_MODIFIER_MARKER]: marker,
-            name: normalizedName,
-            type: "innate",
-        }, value, true);
+        manager.add(normalizedGroupId, attributes, value, true);
     } catch (_error) {
         return null;
     }
 
-    const added = modifierMap.get(groupKey)?.find((modifier) => (
+    let added = modifierMap.get(groupKey)?.find((modifier) => (
         modifier?.attributes?.[TEMPORARY_MODIFIER_MARKER] === marker
     ));
+    if (added?.selectable === false) {
+        removeModifier(modifierMap, groupKey, added);
+        try {
+            manager.add(normalizedGroupId, attributes, value, null, true);
+        } catch (_error) {
+            return null;
+        }
+        added = modifierMap.get(groupKey)?.find((modifier) => (
+            modifier?.attributes?.[TEMPORARY_MODIFIER_MARKER] === marker
+        ));
+    }
+    if (added?.selectable === false) {
+        removeModifier(modifierMap, groupKey, added);
+        return null;
+    }
     if (!added) return null;
     const record = { groupKey, modifier: added, references: 1 };
     records.set(recordKey, record);
@@ -100,13 +116,17 @@ function temporaryModifierCleanup(manager, records, recordKey, record) {
         released = true;
         record.references -= 1;
         if (record.references > 0) return;
-        const modifiers = manager._modifier?.get(record.groupKey);
-        const index = modifiers?.indexOf(record.modifier) ?? -1;
-        if (index >= 0) modifiers.splice(index, 1);
-        if (modifiers?.length === 0) manager._modifier.delete(record.groupKey);
+        removeModifier(manager._modifier, record.groupKey, record.modifier);
         records.delete(recordKey);
         if (records.size === 0) temporarySelectableModifierRecords.delete(manager);
     };
+}
+
+function removeModifier(modifierMap, groupKey, modifier) {
+    const modifiers = modifierMap?.get(groupKey);
+    const index = modifiers?.indexOf(modifier) ?? -1;
+    if (index >= 0) modifiers.splice(index, 1);
+    if (modifiers?.length === 0) modifierMap.delete(groupKey);
 }
 
 function temporaryModifierId() {

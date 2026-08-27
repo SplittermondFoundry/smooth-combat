@@ -499,6 +499,8 @@
       "SelectTargetFirst": "Select a target first.",
       "AttackRangeWarning": "{action}: The target is probably out of range ({distance}; range {range}). The attack is not blocked.",
       "SpellRangeWarning": "{action}: The range is probably exceeded ({distance}; base range {range}). The spell is not blocked.",
+      "SmallMagicProtectionModifier": "Minor Magic Protection",
+      "SmallMagicProtectionEnhancedModifier": "Minor Magic Protection (Enhanced)",
       "DamageTargetMissing": "The target stored for this attack is no longer available.",
       "ActionFailed": "The action could not be completed. See the console for details.",
       "RequiredFlagFailed": "The critical combat state “{flag}” could not be saved. The action was stopped for safety; do not apply it again.",

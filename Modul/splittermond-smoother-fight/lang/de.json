@@ -499,6 +499,8 @@
       "SelectTargetFirst": "Bitte zuerst ein Ziel auswählen.",
       "AttackRangeWarning": "{action}: Das Ziel liegt vermutlich außer Reichweite ({distance}; Reichweite {range}). Der Angriff wird nicht blockiert.",
       "SpellRangeWarning": "{action}: Die Reichweite ist vermutlich überschritten ({distance}; Grundreichweite {range}). Der Zauber wird nicht blockiert.",
+      "SmallMagicProtectionModifier": "Kleiner Magieschutz",
+      "SmallMagicProtectionEnhancedModifier": "Kleiner Magieschutz (Verstärkt)",
       "DamageTargetMissing": "Das für diesen Angriff gespeicherte Ziel ist nicht mehr verfügbar.",
       "ActionFailed": "Die Aktion konnte nicht ausgeführt werden. Details stehen in der Konsole.",
       "RequiredFlagFailed": "Der kritische Kampfzustand „{flag}“ konnte nicht gespeichert werden. Die Aktion wurde sicherheitshalber gestoppt; bitte nicht erneut anwenden.",

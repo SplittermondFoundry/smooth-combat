@@ -45,6 +45,10 @@ import {
     warnIfSpellOutOfRange,
 } from "./range-warning.js";
 
+import {
+    prepareSmallMagicProtectionRollOptions,
+} from "./spell-target-modifier.js";
+
 export async function performAttack(context, attackId, rollOptions = {}, rollAttack = null) {
     context = liveRuntimeActionContext(context);
     if (!context) return false;
@@ -191,11 +195,16 @@ export async function performSpell(context, spellId) {
     }
     if (prepared && targetDependent) warnIfSpellOutOfRange(context, spell);
     if (prepared) {
+        const preparedRoll = prepareSmallMagicProtectionRollOptions(spell, context.target);
         const pendingNonce = setPendingOffenseKind(context.actor.id, "spell", context);
         try {
-            const success = await services.withTemporarySystemTargets([context.target], () => context.actor.rollSpell(spellId));
+            const success = await services.withTemporarySystemTargets(
+                [context.target],
+                () => context.actor.rollSpell(spellId, preparedRoll.rollOptions)
+            );
             if (success) await clearPreparationApplication(context.actor, "spell");
         } finally {
+            preparedRoll.cleanup();
             clearPendingOffenseKind(context.actor.id, pendingNonce);
         }
     } else {
