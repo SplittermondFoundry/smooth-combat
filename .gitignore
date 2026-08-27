@@ -1,6 +1,8 @@
 node_modules/
 dist/
 *.log
+*.lnk
 .DS_Store
 Thumbs.db
 /Github/
+/Modul/splittermond-smoother-fight.zip
