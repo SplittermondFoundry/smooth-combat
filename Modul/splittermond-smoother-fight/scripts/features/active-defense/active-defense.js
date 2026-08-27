@@ -25,7 +25,6 @@ import {
     isDefenderMasteryName,
     isOffensiveCombatMessage,
     parseActiveDefenseDescription,
-    tokenDocumentCenter,
 } from "../../combat-rules.js";
 
 import {
@@ -43,6 +42,10 @@ import {
 import {
     installTemporarySelectableModifier,
 } from "../../shared/temporary-selectable-modifier.js";
+
+import {
+    measureTokenDistance,
+} from "../../shared/token-distance.js";
 
 function primaryTargetTokenUuid(context) {
     return context?.primaryTargetTokenUuid ?? context?.targetTokenUuid ?? null;
@@ -529,29 +532,6 @@ function getDefenderMasteries(actor) {
     return Array.from(actor?.items ?? []).filter((item) =>
         item.type === "mastery" && isDefenderMasteryName(item.name)
     );
-}
-
-function measureTokenDistance(left, right) {
-    const leftPoint = tokenCenter(left);
-    const rightPoint = tokenCenter(right);
-    if (!leftPoint || !rightPoint) return Number.POSITIVE_INFINITY;
-    try {
-        const measured = canvas?.grid?.measurePath?.([leftPoint, rightPoint]);
-        if (Number.isFinite(Number(measured?.distance))) return Number(measured.distance);
-    } catch (error) {
-        console.debug(`${MODULE_ID} | Could not measure Defender distance through the grid`, error);
-    }
-    const gridSize = Number(canvas?.grid?.size) || 100;
-    const gridDistance = Number(canvas?.scene?.grid?.distance) || 1;
-    return Math.hypot(rightPoint.x - leftPoint.x, rightPoint.y - leftPoint.y) / gridSize * gridDistance;
-}
-
-function tokenCenter(token) {
-    const documentCenter = tokenDocumentCenter(token, canvas?.grid?.size);
-    if (documentCenter) return documentCenter;
-    const object = token?.object ?? canvas?.tokens?.get?.(token?.id);
-    if (object?.center) return { x: object.center.x, y: object.center.y };
-    return null;
 }
 
 export function canUserSubmitDefense(user, pending, message) {

@@ -6,6 +6,10 @@ import {
     MODULE_ID,
 } from "./constants.js";
 
+import {
+    DEFAULT_MELEE_RANGE,
+} from "../domain/combat/range.js";
+
 export function registerSettings() {
     const rerender = () => services.scheduleRender();
     game.settings.register(MODULE_ID, "enabled", {
@@ -43,6 +47,17 @@ export function registerSettings() {
         restricted: true,
         type: Boolean,
         default: true,
+        onChange: rerender,
+    });
+    game.settings.register(MODULE_ID, "meleeRange", {
+        name: "SMOOTHER_FIGHT.Settings.MeleeRangeName",
+        hint: "SMOOTHER_FIGHT.Settings.MeleeRangeHint",
+        scope: "world",
+        config: true,
+        restricted: true,
+        type: Number,
+        range: { min: 0.5, max: 10, step: 0.5 },
+        default: DEFAULT_MELEE_RANGE,
         onChange: rerender,
     });
     game.settings.register(MODULE_ID, "minimized", {

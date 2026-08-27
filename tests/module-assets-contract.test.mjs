@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "d7f785d0d6921c4fb26c4d046fe9b87396ceb54fda1c466b10767eb6cdc3177d",
+        "825b5acb34f55bb5d9300394d82cd5145162dcfac38db47c10e46ba1433bf7f4",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -114,7 +114,7 @@ test("published DOM integration attributes remain available", () => {
     assert.equal((hudView.match(/data-sf-action="toggle-combatant-hidden"/gu) ?? []).length, 1);
     assert.equal((hudView.match(/data-sf-action="toggle-combatant-visibility"/gu) ?? []).length, 1);
     assert.match(combatEventView, /data-subevent-actor-id/u);
-    assert.match(hudView, /buildAttackControlMarkup\(context\.actor, \{ meleeOnly: true \}\)/u);
+    assert.match(hudView, /buildAttackControlMarkup\(context\.actor, \{\s*meleeOnly: true,\s*rangeMeasurement: targetDistance\.measurement,\s*\}\)/u);
     assert.match(hudView, /filter\(\(attack\) => !meleeOnly \|\| !services\.isRangedAttack\(attack\)\)/u);
     assert.match(chatActions, /if \(!mayRollFumble\) removeCombatFumbleRollControls\(element\)/u);
     assert.match(chatActions, /isMessageSpeakerAssignedToCurrentUser\(message\)/u);
@@ -166,7 +166,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "3f677fbe9d4b0b26c1e80dadcbe1b071867eeb3efc196a5c890ea4ecb6e84140",
+        "4eef72df43140823cd6fad4689e0ad710253cd59eb7cd10ddc93d2a39465fb0f",
     );
 });
 

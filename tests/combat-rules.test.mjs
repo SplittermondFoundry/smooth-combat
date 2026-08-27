@@ -63,6 +63,12 @@ import {
     withTemporarySetValues,
 } from "../Modul/splittermond-smoother-fight/scripts/combat-rules.js";
 
+import {
+    assessAttackRange,
+    assessSpellRange,
+    parseExactMeterRange,
+} from "../Modul/splittermond-smoother-fight/scripts/domain/combat/range.js";
+
 function attackReport(overrides = {}) {
     return {
         roll: { total: 26, dice: [{ total: 12 }] },
@@ -336,6 +342,40 @@ test("preparing attacks and spells does not require a target until execution", (
     assert.equal(actionRequiresTarget(false, true), false);
     assert.equal(actionRequiresTarget(true, false), false);
     assert.equal(actionRequiresTarget(true, true), true);
+});
+
+test("attack range uses the Splittermond melee distance and exact listed ranged distances", () => {
+    assert.deepEqual(assessAttackRange(2, 0, false), {
+        status: "within",
+        distance: 2,
+        maximum: 2,
+        source: "melee",
+    });
+    assert.equal(assessAttackRange(2.01, 0, false).status, "outside");
+    assert.equal(assessAttackRange(3, 3, false).maximum, 3);
+    assert.equal(assessAttackRange(7.4, 8, true).status, "within");
+    assert.equal(assessAttackRange(8.1, { value: 8 }, true).status, "outside");
+    assert.equal(assessAttackRange(4, "8", true).status, "unknown");
+    assert.equal(assessAttackRange(4, 8, true, { metric: false }).status, "unknown");
+    assert.equal(assessAttackRange("unbekannt", 8, true).status, "unknown");
+    assert.equal(assessAttackRange(1, 0, true).status, "unknown");
+    assert.equal(assessAttackRange(1, 0, false, { meleeRange: 0 }).status, "unknown");
+});
+
+test("spell range accepts only exact metre values and leaves rule expressions undecided", () => {
+    assert.equal(parseExactMeterRange("7,5 m"), 7.5);
+    assert.equal(parseExactMeterRange("12 Meter"), 12);
+    assert.equal(parseExactMeterRange(4), 4);
+    assert.equal(parseExactMeterRange({ value: 5 }), 5);
+    assert.equal(parseExactMeterRange("8 m + EG"), null);
+    assert.equal(parseExactMeterRange("Berührung"), null);
+    assert.equal(parseExactMeterRange({ value: "5" }), null);
+
+    assert.equal(assessSpellRange(7.5, "7,5 m").status, "within");
+    assert.equal(assessSpellRange(7.6, "7,5 m").status, "outside");
+    assert.equal(assessSpellRange(1, "Berührung").status, "unknown");
+    assert.equal(assessSpellRange(1, "5 m", { metric: false }).status, "unknown");
+    assert.equal(assessSpellRange(-1, "5 m").status, "unknown");
 });
 
 test("token focus uses the center between the tick bar and HUD", () => {

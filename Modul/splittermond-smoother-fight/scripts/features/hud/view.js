@@ -26,6 +26,13 @@ import {
 } from "./movement.js";
 
 import {
+    attackRangePresentation,
+    rangeStatusMarkup,
+    spellRangePresentation,
+    targetDistancePresentation,
+} from "./range.js";
+
+import {
     buildTickActionReference,
 } from "./tick-action-reference.js";
 
@@ -33,6 +40,7 @@ import {
     attackControlSelection,
     attackControlState,
     attackReadiness,
+    isTargetDependentDifficulty,
     isPlayersTurn,
     mayViewTargetDefenses,
     mayViewTargetResources,
@@ -65,8 +73,10 @@ export async function buildHud(context) {
     const userName = runtimeController?.name ?? t("SMOOTHER_FIGHT.HUD.NoRuntimeController");
     const targetName = target?.name ?? target?.actor?.name ?? "–";
     const additionalTargetCount = Math.max(0, targets.length - 1);
+    const targetDistance = targetDistancePresentation(context);
+    const targetDistanceSuffix = targetDistance.text ? ` · ${targetDistance.text}` : "";
     const targetLine = target
-        ? `${t("SMOOTHER_FIGHT.HUD.PlayerPrimaryTargetName", { user: userName, target: targetName })}${additionalTargetCount ? ` (+${additionalTargetCount})` : ""}`
+        ? `${t("SMOOTHER_FIGHT.HUD.PlayerPrimaryTargetName", { user: userName, target: targetName })}${targetDistanceSuffix}${additionalTargetCount ? ` (+${additionalTargetCount})` : ""}`
         : t("SMOOTHER_FIGHT.HUD.NoTargetDetail");
     const minimized = getSetting("minimized", false);
     const hudToggle = buildHudToggle(minimized);
@@ -126,7 +136,7 @@ export async function buildHud(context) {
                 </header>
                 ${canAct ? buildCombatControls(context) : await buildPersonalControls(context)}
                 ${canAct && getSetting("movementTracking", true) ? buildMovementTracker(context) : ""}
-                ${canAct ? await buildActionBar(context) : ""}
+                ${canAct ? await buildActionBar(context, targetDistance.measurement) : ""}
                 ${getSetting("showCards", true) ? services.buildCombatEvents(context) : ""}
             </main>
             <div class="sf-target-column">
@@ -135,7 +145,7 @@ export async function buildHud(context) {
                     side: "target",
                     token: target,
                     actor: target.actor,
-                    eyebrow: t("SMOOTHER_FIGHT.HUD.PrimaryTarget"),
+                    eyebrow: `${t("SMOOTHER_FIGHT.HUD.PrimaryTarget")}${targetDistanceSuffix}`,
                     action: "open-token-sheet",
                     highlighted: services.isCurrentUserTarget(target),
                     primary: true,
@@ -350,7 +360,11 @@ async function buildPersonalControls(activeContext) {
         </div>`;
     }
     const attributes = `data-sf-context-combatant-id="${escapeAttr(context.combatant.id)}" data-sf-context-actor-id="${escapeAttr(context.actor.id)}"`;
-    const meleeAttackControl = await buildAttackControlMarkup(context.actor, { meleeOnly: true });
+    const targetDistance = targetDistancePresentation(context);
+    const meleeAttackControl = await buildAttackControlMarkup(context.actor, {
+        meleeOnly: true,
+        rangeMeasurement: targetDistance.measurement,
+    });
     return `<div class="sf-personal-controls" ${attributes}>
         <section class="sf-combat-controls sf-personal-combat-controls" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CombatControls"))}">
             ${buildAdvanceButtons(context, true)}
@@ -418,7 +432,7 @@ function buildPersonalActionBar(actor, leadingControl = "", meleeAttackControl =
     </nav>`;
 }
 
-async function buildActionBar(context) {
+async function buildActionBar(context, rangeMeasurement = null) {
     const actor = context.actor;
     const defenseAlert = services.hasPendingActiveDefense(context);
     const preparationStatus = services.getPreparationApplicationStatus?.(actor) ?? { state: "idle", record: null };
@@ -430,10 +444,13 @@ async function buildActionBar(context) {
     const preparedSpell = spells.find((spell) => spell.id === preparedSpellId) ?? null;
     const availableSpells = spells.filter((spell) => spell.enoughFocus !== false).length;
     const spellLabel = `${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells})`;
+    const preparedSpellRange = preparedSpell && isTargetDependentDifficulty(preparedSpell.difficulty ?? preparedSpell.system?.difficulty)
+        ? spellRangePresentation(preparedSpell, rangeMeasurement)
+        : null;
     const spellControlMarkup = preparedSpell
-        ? preparedSpellMenu(preparedSpell, availableSpells)
-        : buildSpellMenu(spellLabel, spells, availableSpells);
-    const attackControlMarkup = await buildAttackControlMarkup(actor);
+        ? preparedSpellMenu(preparedSpell, availableSpells, preparedSpellRange)
+        : buildSpellMenu(spellLabel, spells, availableSpells, rangeMeasurement);
+    const attackControlMarkup = await buildAttackControlMarkup(actor, { rangeMeasurement });
     return `<nav class="sf-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
         ${attackPreparationMarkup(actor)}
         ${preparationApplicationMarkup(preparationStatus)}
@@ -467,7 +484,7 @@ function attackPreparationMarkup(actor) {
     </div>`;
 }
 
-function buildSpellMenu(label, spells, availableSpells) {
+function buildSpellMenu(label, spells, availableSpells, rangeMeasurement = null) {
     const filterable = isSpellListFilterable(spells);
     const rows = spells.map((spell) => {
         const preparing = services.isPreparingSpell(spell.id);
@@ -478,12 +495,15 @@ function buildSpellMenu(label, spells, availableSpells) {
         const status = preparing
             ? t("SMOOTHER_FIGHT.HUD.Preparing")
             : displayValue(spell.castDuration, "–");
+        const range = isTargetDependentDifficulty(spell.difficulty ?? spell.system?.difficulty)
+            ? spellRangePresentation(spell, rangeMeasurement)
+            : null;
         const { schoolId, level } = spellFilterDetails(spell);
         const filterAttributes = filterable
             ? ` data-sf-spell-row data-sf-search="${escapeAttr(spellSearchValue(spell))}" data-sf-enough-focus="${spell.enoughFocus !== false}" data-sf-spell-school="${escapeAttr(schoolId)}" data-sf-spell-level="${escapeAttr(level)}"`
             : "";
-        return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="sf-spell-action ${preparing ? "is-preparing" : ""}"${filterAttributes} ${spell.enoughFocus === false || preparing ? 'aria-disabled="true"' : ""}>
-            <img src="${escapeAttr(spell.img)}" alt=""><span>${escapeHtml(spell.name)}<small>${escapeHtml([skill, focus].filter(Boolean).join(" · "))}</small></span>
+        return `<button type="button" data-sf-action="spell" data-spell-id="${escapeAttr(spell.id)}" class="sf-spell-action ${preparing ? "is-preparing" : ""} ${range?.buttonClass ?? ""}"${filterAttributes} ${spell.enoughFocus === false || preparing ? 'aria-disabled="true"' : ""}>
+            <img src="${escapeAttr(spell.img)}" alt=""><span>${escapeHtml(spell.name)}<small>${escapeHtml([skill, focus].filter(Boolean).join(" · "))}</small>${rangeStatusMarkup(range)}</span>
             <b>${escapeHtml(status)}</b>
         </button>`;
     }).join("") || emptyMenuText();
@@ -538,7 +558,7 @@ function preparationApplicationMarkup({ state, record }) {
     </div>`;
 }
 
-async function buildAttackControlMarkup(actor, { meleeOnly = false } = {}) {
+async function buildAttackControlMarkup(actor, { meleeOnly = false, rangeMeasurement = null } = {}) {
     const preparedAttackId = actor.getFlag?.("splittermond", "preparedAttack");
     const storedDefaultAttackId = actor.getFlag?.(MODULE_ID, "defaultAttackId");
     const availableAttacks = [...(actor.attacks ?? [])]
@@ -551,6 +571,10 @@ async function buildAttackControlMarkup(actor, { meleeOnly = false } = {}) {
         attack.id,
         attackReadiness(services.isRangedAttack(attack), attack.id, preparedAttackId),
     ]));
+    const attackRanges = new Map(availableAttacks.map((attack) => [
+        attack.id,
+        attackRangePresentation(attack, services.isRangedAttack(attack), rangeMeasurement),
+    ]));
     const attacks = availableAttacks.sort((a, b) =>
         Number(attackStates.get(b.id)?.prepared) - Number(attackStates.get(a.id)?.prepared) || sortByName(a, b)
     );
@@ -562,6 +586,7 @@ async function buildAttackControlMarkup(actor, { meleeOnly = false } = {}) {
         equipment,
         attackStates,
         attackSpeeds,
+        attackRanges,
         attackControl.defaultAttackId,
         attackControl.automaticDefaultAttackId
     );
@@ -570,7 +595,7 @@ async function buildAttackControlMarkup(actor, { meleeOnly = false } = {}) {
         ? t("SMOOTHER_FIGHT.HUD.TickActions.meleeAttack.Name")
         : t("SMOOTHER_FIGHT.HUD.Attacks");
     return attackSelection.mode === "prepared"
-        ? preparedAttackMenu(preparedAttack)
+        ? preparedAttackMenu(preparedAttack, attackRanges.get(preparedAttack.id))
         : attackSelection.mode === "default"
             ? directAttackControl(directAttack, {
                 menuBody: attackMenuBody,
@@ -578,6 +603,7 @@ async function buildAttackControlMarkup(actor, { meleeOnly = false } = {}) {
                 isDefault: directAttack.id === attackControl.defaultAttackId,
                 readiness: attackStates.get(directAttack.id),
                 speed: attackSpeeds.get(directAttack.id),
+                range: attackRanges.get(directAttack.id),
                 label: meleeOnly ? label : null,
             })
             : actionMenu("fa-solid fa-hand-fist", label, attackMenuBody, "", "attacks");
@@ -620,7 +646,7 @@ function directSkillControl(skill, menuBody) {
     </div>`;
 }
 
-function buildAttackMenuBody(attacks, equipment, attackStates, attackSpeeds, defaultAttackId, automaticDefaultAttackId) {
+function buildAttackMenuBody(attacks, equipment, attackStates, attackSpeeds, attackRanges, defaultAttackId, automaticDefaultAttackId) {
     const attackOptions = attacks.map((attack) => {
         const isDefault = attack.id === defaultAttackId;
         const isAutomatic = attack.id === automaticDefaultAttackId;
@@ -629,9 +655,10 @@ function buildAttackMenuBody(attacks, equipment, attackStates, attackSpeeds, def
             : isDefault
                 ? "SMOOTHER_FIGHT.HUD.ClearDefaultAttack"
                 : "SMOOTHER_FIGHT.HUD.SetDefaultAttack");
+        const range = attackRanges.get(attack.id);
         return `<div class="sf-attack-option ${isDefault ? "is-default" : ""}">
-            <button type="button" class="sf-attack-option-roll ${attackStates.get(attack.id)?.prepared ? "is-prepared" : ""}" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}">
-                <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small></span>
+            <button type="button" class="sf-attack-option-roll ${attackStates.get(attack.id)?.prepared ? "is-prepared" : ""} ${range?.buttonClass ?? ""}" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}">
+                <img src="${escapeAttr(attack.img)}" alt=""><span>${escapeHtml(attack.name)}<small>${escapeHtml([displayLabel(attack.skill?.label), displayValue(attack.skill?.value, "")].filter((value) => value !== "").join(" "))}</small>${rangeStatusMarkup(range)}</span>
                 <b>${escapeHtml(attackStates.get(attack.id)?.prepared ? displayValue(attack.damage, "–") : `${attackSpeeds.get(attack.id) ?? "–"} T`)}</b>
             </button>
             <button type="button" class="sf-default-attack-toggle ${isDefault ? "is-default" : ""} ${isAutomatic ? "is-automatic" : ""}" ${isAutomatic ? "disabled" : 'data-sf-action="toggle-default-attack"'} data-attack-id="${escapeAttr(attack.id)}" title="${escapeAttr(toggleLabel)}" aria-label="${escapeAttr(toggleLabel)}" aria-pressed="${isDefault}"><i class="${isDefault ? "fa-solid" : "fa-regular"} fa-star"></i></button>
@@ -645,14 +672,14 @@ function buildAttackMenuBody(attacks, equipment, attackStates, attackSpeeds, def
     return attackOptions + equipmentOptions;
 }
 
-function directAttackControl(attack, { menuBody, showMenu, isDefault, readiness, speed, label: explicitLabel = null }) {
+function directAttackControl(attack, { menuBody, showMenu, isDefault, readiness, speed, range, label: explicitLabel = null }) {
     const label = explicitLabel ?? t(isDefault ? "SMOOTHER_FIGHT.HUD.DefaultAttack" : "SMOOTHER_FIGHT.HUD.Attacks");
     const status = readiness?.ready ? displayValue(attack.damage, "–") : `${speed ?? "–"} T`;
     const menuLabel = t("SMOOTHER_FIGHT.HUD.OpenAttackMenu");
     return `<div class="sf-action-menu sf-direct-attack-control ${showMenu ? "has-menu" : ""}">
-        <button type="button" class="sf-direct-attack" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" aria-label="${escapeAttr(attack.name)}">
+        <button type="button" class="sf-direct-attack ${range?.buttonClass ?? ""}" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" aria-label="${escapeAttr(attack.name)}">
             <img src="${escapeAttr(attack.img ?? "icons/svg/sword.svg")}" alt="">
-            <span><small>${escapeHtml(label)}</small><strong>${escapeHtml(attack.name)}</strong></span>
+            <span><small>${escapeHtml(label)}</small><strong>${escapeHtml(attack.name)}</strong>${rangeStatusMarkup(range)}</span>
             <b>${escapeHtml(status)}</b>
         </button>
         ${showMenu ? `<details class="sf-direct-attack-picker" data-sf-menu="attacks"><summary title="${escapeAttr(menuLabel)}" aria-label="${escapeAttr(menuLabel)}"><i class="fa-solid fa-chevron-down sf-chevron"></i></summary><div class="sf-action-popover">${menuBody}</div></details>` : ""}
@@ -667,26 +694,26 @@ function actionMenu(icon, label, body, className = "", menuId = "") {
     </details>`;
 }
 
-function preparedSpellMenu(spell, availableSpells) {
+function preparedSpellMenu(spell, availableSpells, range = null) {
     const cast = t("SMOOTHER_FIGHT.HUD.Cast");
     const cancel = t("SMOOTHER_FIGHT.HUD.CancelSpell");
     return `<div class="sf-action-menu sf-prepared-spell-menu">
-        <button type="button" class="sf-prepared-spell-cast sf-spell-action" data-sf-action="cast-prepared-spell" data-spell-id="${escapeAttr(spell.id)}" aria-label="${escapeAttr(`${spell.name}: ${cast}`)}">
+        <button type="button" class="sf-prepared-spell-cast sf-spell-action ${range?.buttonClass ?? ""}" data-sf-action="cast-prepared-spell" data-spell-id="${escapeAttr(spell.id)}" aria-label="${escapeAttr(`${spell.name}: ${cast}`)}">
             <img src="${escapeAttr(spell.img ?? "icons/svg/daze.svg")}" alt="">
-            <span><small>${escapeHtml(`${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells}) · ${t("SMOOTHER_FIGHT.HUD.PreparedSpell")}`)}</small><strong>${escapeHtml(spell.name)}</strong></span>
+            <span><small>${escapeHtml(`${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells}) · ${t("SMOOTHER_FIGHT.HUD.PreparedSpell")}`)}</small><strong>${escapeHtml(spell.name)}</strong>${rangeStatusMarkup(range)}</span>
             <b><i class="fa-solid fa-wand-sparkles"></i><span>${escapeHtml(cast)}</span></b>
         </button>
         <button type="button" class="sf-prepared-spell-cancel" data-sf-action="cancel-prepared-spell" title="${escapeAttr(cancel)}" aria-label="${escapeAttr(cancel)}"><i class="fa-solid fa-xmark"></i></button>
     </div>`;
 }
 
-function preparedAttackMenu(attack) {
+function preparedAttackMenu(attack, range = null) {
     const release = t("SMOOTHER_FIGHT.HUD.ReleaseAttack");
     const cancel = t("SMOOTHER_FIGHT.HUD.CancelAttack");
     return `<div class="sf-action-menu sf-prepared-spell-menu sf-prepared-attack-menu">
-        <button type="button" class="sf-prepared-spell-cast sf-prepared-attack-release" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" aria-label="${escapeAttr(`${attack.name}: ${release}`)}">
+        <button type="button" class="sf-prepared-spell-cast sf-prepared-attack-release ${range?.buttonClass ?? ""}" data-sf-action="attack" data-attack-id="${escapeAttr(attack.id)}" aria-label="${escapeAttr(`${attack.name}: ${release}`)}">
             <img src="${escapeAttr(attack.img ?? "icons/svg/sword.svg")}" alt="">
-            <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.PreparedAttack"))}</small><strong>${escapeHtml(attack.name)}</strong></span>
+            <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.PreparedAttack"))}</small><strong>${escapeHtml(attack.name)}</strong>${rangeStatusMarkup(range)}</span>
             <b><i class="fa-solid fa-crosshairs"></i><span>${escapeHtml(release)}</span></b>
         </button>
         <button type="button" class="sf-prepared-spell-cancel" data-sf-action="cancel-prepared-attack" title="${escapeAttr(cancel)}" aria-label="${escapeAttr(cancel)}"><i class="fa-solid fa-xmark"></i></button>

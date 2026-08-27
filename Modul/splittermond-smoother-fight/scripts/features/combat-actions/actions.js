@@ -40,6 +40,11 @@ import {
     resolveAttackPreparationUse,
 } from "./attack-preparation.js";
 
+import {
+    warnIfAttackOutOfRange,
+    warnIfSpellOutOfRange,
+} from "./range-warning.js";
+
 export async function performAttack(context, attackId, rollOptions = {}, rollAttack = null) {
     context = liveRuntimeActionContext(context);
     if (!context) return false;
@@ -51,6 +56,7 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
         return false;
     }
+    if (readiness.ready) warnIfAttackOutOfRange(context, attack, isRangedAttack(attack));
     const preparation = getAttackPreparation(
         context.actor,
         context.combat?.id ?? globalThis.game?.combat?.id
@@ -183,6 +189,7 @@ export async function performSpell(context, spellId) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
         return;
     }
+    if (prepared && targetDependent) warnIfSpellOutOfRange(context, spell);
     if (prepared) {
         const pendingNonce = setPendingOffenseKind(context.actor.id, "spell", context);
         try {

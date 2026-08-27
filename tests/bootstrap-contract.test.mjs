@@ -43,6 +43,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
         "hideSystemBar",
         "showCards",
         "movementTracking",
+        "meleeRange",
         "minimized",
         "maxCards",
         "defenseRecalculation",
@@ -92,6 +93,11 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
         [settingByKey.movementTracking.scope, settingByKey.movementTracking.config, settingByKey.movementTracking.restricted, settingByKey.movementTracking.type, settingByKey.movementTracking.default],
         ["world", true, true, Boolean, true],
     );
+    assert.deepEqual(
+        [settingByKey.meleeRange.scope, settingByKey.meleeRange.config, settingByKey.meleeRange.restricted, settingByKey.meleeRange.type, settingByKey.meleeRange.default],
+        ["world", true, true, Number, 2],
+    );
+    assert.deepEqual(settingByKey.meleeRange.range, { min: 0.5, max: 10, step: 0.5 });
     assert.deepEqual(settingByKey.maxCards.range, { min: 1, max: 5, step: 1 });
     assert.equal(settingByKey.maxCards.default, 3);
     assert.equal(settingByKey.defenseRecalculation.scope, "world");

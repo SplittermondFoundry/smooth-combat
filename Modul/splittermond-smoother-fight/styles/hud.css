@@ -2091,6 +2091,34 @@
     line-height: 1.2;
 }
 
+#splittermond-smoother-fight-hud .sf-action-range-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    margin-top: 3px;
+    overflow: hidden;
+    font-size: var(--sf-font-meta);
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+#splittermond-smoother-fight-hud .sf-action-range-status.is-within {
+    color: var(--sf-teal);
+}
+
+#splittermond-smoother-fight-hud .sf-action-range-status.is-outside {
+    color: var(--sf-danger);
+}
+
+#splittermond-smoother-fight-hud .sf-action-range-status.is-unknown {
+    color: var(--sf-muted);
+}
+
 #splittermond-smoother-fight-hud .sf-action-popover button b {
     color: var(--sf-gold-bright);
     white-space: nowrap;

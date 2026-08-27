@@ -1165,6 +1165,79 @@ test("cancelled attack and spell dialogs clear their pending offense contexts", 
     assert.equal(getPendingOffenseKind(spellActor.id), undefined);
 });
 
+test("out-of-range warnings remain advisory and do not suppress attack or spell rolls", async () => {
+    const warnings = [];
+    const source = { x: 0, y: 0, width: 1, height: 1, elevation: 0 };
+    const target = {
+        uuid: "Scene.scene.Token.distant-target",
+        name: "Fernes Ziel",
+        x: 400,
+        y: 0,
+        width: 1,
+        height: 1,
+        elevation: 0,
+        actor: { uuid: "Actor.distant-target" },
+    };
+    const user = { id: "user", selection: { target, targets: [target] } };
+    globalThis.game = {
+        user,
+        settings: { get: (_moduleId, key) => key === "meleeRange" ? 6 : undefined },
+        i18n: {
+            lang: "de",
+            localize: translation,
+            format: (key, data) => Object.entries(data).reduce(
+                (text, [name, value]) => text.replaceAll(`{${name}}`, value),
+                translation(key)
+            ),
+        },
+    };
+    globalThis.canvas = {
+        grid: { size: 100, units: "m", measurePath: () => ({ distance: 8 }) },
+    };
+    globalThis.ui = { notifications: { warn: (message) => warnings.push(message) } };
+    services.getRuntimeController = () => user;
+    services.getTargetSelectionForUser = (runtimeController) => runtimeController.selection;
+    services.withTemporarySystemTargets = async (_targets, operation) => operation();
+    services.scheduleRender = () => {};
+
+    const attack = { id: "sword", name: "Schwert", isRanged: false, range: 0 };
+    let attackRolls = 0;
+    const attackActor = {
+        id: "attacker",
+        attacks: [attack],
+        getFlag: () => null,
+    };
+    const attackResult = await performAttack(
+        { actor: attackActor, token: source },
+        attack.id,
+        {},
+        async () => {
+            attackRolls += 1;
+            return false;
+        }
+    );
+
+    const spell = { id: "bolt", name: "Flammenstrahl", difficulty: "VTD", range: "6 m" };
+    let spellRolls = 0;
+    const spellActor = {
+        id: "caster",
+        spells: [spell],
+        getFlag: (namespace, key) => namespace === "splittermond" && key === "preparedSpell" ? spell.id : null,
+        rollSpell: async () => {
+            spellRolls += 1;
+            return false;
+        },
+    };
+    await performSpell({ actor: spellActor, token: source }, spell.id);
+
+    assert.equal(attackResult, false);
+    assert.equal(attackRolls, 1);
+    assert.equal(spellRolls, 1);
+    assert.equal(warnings.length, 2);
+    assert.match(warnings[0], /Schwert.*8 m.*6 m.*nicht blockiert/u);
+    assert.match(warnings[1], /Flammenstrahl.*8 m.*6 m.*nicht blockiert/u);
+});
+
 test("an older roll completion cannot clear a newer pending offense context", async () => {
     const attack = { id: "overlapping-attack", name: "Klinge", isRanged: false };
     const targetA = {

@@ -18,6 +18,7 @@ import { getAttackPreparation } from "../Modul/splittermond-smoother-fight/scrip
 const harness = {
     controlledToken: null,
     controlCalls: [],
+    meleeRange: 2,
     movementTracking: true,
     player: null,
     revealTargetDefenses: false,
@@ -84,6 +85,7 @@ function installFixture() {
     resetPersonalCombatantSelection();
     harness.controlledToken = null;
     harness.controlCalls = [];
+    harness.meleeRange = 2;
     harness.movementTracking = true;
     harness.revealTargetDefenses = false;
     harness.revealTargetResources = false;
@@ -118,6 +120,7 @@ function installFixture() {
         settings: {
             get: (_moduleId, key) => ({
                 minimized: false,
+                meleeRange: harness.meleeRange,
                 movementTracking: harness.movementTracking,
                 revealTargetDefenses: harness.revealTargetDefenses,
                 revealTargetResources: harness.revealTargetResources,
@@ -241,6 +244,63 @@ test("personal HUD controls expose melee attacks but not ranged attacks outside 
     assert.match(html, /data-attack-id="sword"/u);
     assert.doesNotMatch(html, /data-attack-id="bow"/u);
     assert.match(html, /SMOOTHER_FIGHT\.HUD\.TickActions\.meleeAttack\.Name/u);
+});
+
+test("the primary target distance drives advisory attack and spell range states", async () => {
+    const { combat, first } = installFixture();
+    combat.combatant = first;
+    first.token.x = 0;
+    first.token.y = 0;
+    first.token.width = 1;
+    first.token.height = 1;
+    first.actor.attacks = [
+        { id: "sword", name: "Sword", img: "sword.webp", isRanged: false, range: 0, weaponSpeed: 6 },
+        { id: "bow", name: "Bow", img: "bow.webp", isRanged: true, range: 10, weaponSpeed: 8 },
+    ];
+    first.actor.spells = [
+        { id: "bolt", name: "Bolt", img: "bolt.webp", difficulty: "VTD", range: "7 m", castDuration: 5 },
+        { id: "touch", name: "Touch", img: "touch.webp", difficulty: "KW", range: "Berührung", castDuration: 3 },
+    ];
+    const target = {
+        id: "target",
+        uuid: "Scene.scene.Token.target",
+        name: "Target",
+        x: 300,
+        y: 0,
+        width: 1,
+        height: 1,
+        actor: { name: "Target actor", derivedValues: {}, system: {} },
+    };
+    harness.targetSelection = {
+        target,
+        targets: [target],
+        primaryTargetTokenUuid: target.uuid,
+        primaryTargetActorUuid: null,
+    };
+    globalThis.canvas = {
+        grid: {
+            size: 100,
+            units: "m",
+            measurePath: () => ({ distance: 7.4 }),
+        },
+        tokens: { get: () => null },
+    };
+
+    const html = await buildHud(getHudContext());
+
+    assert.match(html, /SMOOTHER_FIGHT\.HUD\.PrimaryTarget · 7,4 m/u);
+    assert.match(html, /class="sf-attack-option-roll [^"]*is-range-outside" data-sf-action="attack" data-attack-id="sword"/u);
+    assert.match(html, /class="sf-attack-option-roll [^"]*is-range-within" data-sf-action="attack" data-attack-id="bow"/u);
+    assert.match(html, /data-spell-id="bolt" class="[^"]*is-range-outside/u);
+    assert.match(html, /data-spell-id="touch" class="[^"]*is-range-unknown/u);
+    assert.match(html, /SMOOTHER_FIGHT\.HUD\.AttackRangeOutside/u);
+    assert.match(html, /SMOOTHER_FIGHT\.HUD\.RangeWithin/u);
+    assert.match(html, /SMOOTHER_FIGHT\.HUD\.SpellRangeOutside/u);
+    assert.match(html, /SMOOTHER_FIGHT\.HUD\.RangeUnknown/u);
+
+    harness.meleeRange = 8;
+    const extendedMeleeRange = await buildHud(getHudContext());
+    assert.match(extendedMeleeRange, /class="sf-attack-option-roll [^"]*is-range-within" data-sf-action="attack" data-attack-id="sword"/u);
 });
 
 test("a pending attack preparation is visible and dismissible in personal HUD controls", async () => {
