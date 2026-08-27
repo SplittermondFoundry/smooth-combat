@@ -124,6 +124,20 @@ const serviceStubs = {
     finishRemoteDamageApplication: (...args) => record("finishRemoteDamageApplication", args),
     recordCompletedDamageApplication: (...args) => record("recordCompletedDamageApplication", args),
     setDamageApplicationState: async (...args) => record("setDamageApplicationState", args),
+    canUserDeclineActiveDefense: (...args) => {
+        record("canUserDeclineActiveDefense", args);
+        return behavior.canUserDeclineActiveDefense(...args);
+    },
+    declineActiveDefenseForUser: async (...args) => record("declineActiveDefenseForUser", args),
+    beginOffenseFollowUp: async (...args) => {
+        record("beginOffenseFollowUp", args);
+        return behavior.beginOffenseFollowUp(...args);
+    },
+    defenseAwaitsResponse: (...args) => {
+        record("defenseAwaitsResponse", args);
+        return behavior.defenseAwaitsResponse(...args);
+    },
+    finishOffenseFollowUpRequest: (...args) => record("finishOffenseFollowUpRequest", args),
     setRequiredFlag: async (...args) => {
         record("setRequiredFlag", args);
         return true;
@@ -162,6 +176,9 @@ function resetHarness(gameStub) {
         waitForChatMessage: () => null,
         normalizePendingDefense: (value) => value?.attackMessageId ? value : null,
         canUserSubmitDefense: () => false,
+        canUserDeclineActiveDefense: () => false,
+        beginOffenseFollowUp: async () => null,
+        defenseAwaitsResponse: () => false,
     });
 
     gameStub.user = { id: "current-user", isGM: false };
@@ -529,6 +546,87 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             state: "completed",
             error: null,
         }]]);
+    });
+
+    await t.test("active-defense decline requests require the target owner's authorization", async () => {
+        resetHarness(gameStub);
+        gameStub.user.isGM = true;
+        const sender = { id: "defender", isGM: false };
+        const offense = { id: "offense-to-decline", type: "attackRollMessage" };
+        gameStub.users.set(sender.id, sender);
+        gameStub.messages.set(offense.id, offense);
+        const payload = {
+            type: "decline-active-defense",
+            senderId: sender.id,
+            recipientId: gameStub.user.id,
+            messageId: offense.id,
+        };
+
+        await socketHandler(payload);
+        assert.deepEqual(callsOf("declineActiveDefenseForUser"), []);
+
+        behavior.canUserDeclineActiveDefense = () => true;
+        await socketHandler(payload);
+        assert.deepEqual(callsOf("declineActiveDefenseForUser"), [[offense, sender]]);
+    });
+
+    await t.test("offense follow-ups are serialized by the recipient GM and return their latest message", async () => {
+        resetHarness(gameStub);
+        const sender = { id: "attacker", isGM: false };
+        const gm = { id: "gm", isGM: true };
+        const offense = { id: "offense-follow-up", type: "attackRollMessage" };
+        const successor = { id: "offense-successor", type: "attackRollMessage" };
+        gameStub.user = gm;
+        gameStub.users.set(sender.id, sender);
+        gameStub.users.set(gm.id, gm);
+        gameStub.messages.set(offense.id, offense);
+        const payload = {
+            type: "begin-offense-follow-up",
+            senderId: sender.id,
+            recipientId: gm.id,
+            requestId: "request-follow-up",
+            messageId: offense.id,
+        };
+
+        behavior.beginOffenseFollowUp = async () => successor;
+        await socketHandler(payload);
+        assert.deepEqual(callsOf("beginOffenseFollowUp"), [[offense, sender, { notify: false }]]);
+        assert.deepEqual(callsOf("socketEmit"), [["module.splittermond-smoother-fight", {
+            type: "begin-offense-follow-up-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: offense.id,
+            allowed: true,
+            latestMessageId: successor.id,
+            reason: null,
+        }]]);
+
+        callLog.length = 0;
+        gameStub.user = sender;
+        await socketHandler({
+            type: "begin-offense-follow-up-result",
+            senderId: "unknown",
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: offense.id,
+            allowed: true,
+            latestMessageId: successor.id,
+        });
+        assert.deepEqual(callsOf("finishOffenseFollowUpRequest"), []);
+
+        const result = {
+            type: "begin-offense-follow-up-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: offense.id,
+            allowed: true,
+            latestMessageId: successor.id,
+            reason: null,
+        };
+        await socketHandler(result);
+        assert.deepEqual(callsOf("finishOffenseFollowUpRequest"), [[result, gm]]);
     });
 
     await t.test("defense recalculation validates receiver, author, offense, and submit permission", async () => {

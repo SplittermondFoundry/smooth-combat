@@ -1,6 +1,9 @@
 import { services } from "../../core/services.js";
 
 import {
+    enforceOffenseDefensePhaseControls,
+    handleRenderedOffenseFollowUp,
+    isOffenseFollowUpControl,
     mayControlSpeakerActor,
     removeOutgoingDamageControls,
 } from "./actions.js";
@@ -139,6 +142,7 @@ async function attachCombatContext(message) {
         outOfTurn: Boolean(activeCombatant && speakerCombatant && activeCombatant.id !== speakerCombatant.id),
         assignedUserId: assignedUser?.id ?? null,
         runtimeControllerId: runtimeController?.id ?? game.user.id,
+        defensePhase: services.initialDefensePhaseForOffense(message),
         createdAt,
     };
     await services.setRequiredFlag(message, "context", context);
@@ -193,6 +197,42 @@ function captureSystemActiveDefense(message, html) {
             });
         }, { capture: true });
     }
+    for (const button of html.querySelectorAll('.sf-chat-decline-defense[data-sf-action="decline-active-defense"]')) {
+        if (button.dataset.smootherFightCaptured) continue;
+        button.dataset.smootherFightCaptured = "true";
+        button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            button.disabled = true;
+            void services.requestActiveDefenseDecline(message).then((requested) => {
+                if (!requested && button.isConnected) button.disabled = false;
+            }).catch((error) => {
+                console.error(`${MODULE_ID} | Declining active defense failed`, error);
+                ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+                if (button.isConnected) button.disabled = false;
+            });
+        }, { capture: true });
+    }
+}
+
+function captureSystemOffenseFollowUps(message, html) {
+    if (!html || !isOffensiveCombatMessage(message)) return;
+    for (const button of html.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks]")) {
+        if (!isOffenseFollowUpControl(button) || button.disabled || button.dataset.smootherFightFollowUpCaptured) continue;
+        button.dataset.smootherFightFollowUpCaptured = "true";
+        button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            const operation = handleRenderedOffenseFollowUp(event, button, message);
+            button.disabled = true;
+            void operation.catch((error) => {
+                console.error(`${MODULE_ID} | Offense follow-up failed`, error);
+                ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+            }).finally(() => {
+                if (button.isConnected) button.disabled = false;
+            });
+        }, { capture: true });
+    }
 }
 
 export function prepareRenderedChatMessage(message, html) {
@@ -202,6 +242,8 @@ export function prepareRenderedChatMessage(message, html) {
         removeOutgoingDamageControls(html);
         html.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
     }
+    enforceOffenseDefensePhaseControls(html, message);
     captureSystemActiveDefense(message, html);
+    captureSystemOffenseFollowUps(message, html);
     services.bindFumbleActions(message, html);
 }

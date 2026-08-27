@@ -56,6 +56,14 @@ function primaryTargetActorUuid(context) {
 export async function handleChatCardAction(event, button) {
     const messageElement = button.closest(".sf-chat-message");
     const message = game.messages.get(messageElement?.dataset.messageId);
+    return handleChatMessageAction(event, button, message);
+}
+
+export async function handleRenderedOffenseFollowUp(event, button, message) {
+    return handleChatMessageAction(event, button, message);
+}
+
+async function handleChatMessageAction(event, button, message) {
     if (!message || button.disabled) return;
     const fumbleRecovery = button.dataset.sfFumbleRecovery;
     if (fumbleRecovery) {
@@ -112,6 +120,10 @@ export async function handleChatCardAction(event, button) {
             ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.NoOwner"));
             return;
         }
+        if (isOffensiveCombatMessage(message)) {
+            message = await beginOffenseFollowUpForControl(message, button);
+            if (!message) return;
+        }
         try {
             await advanceLegacyChatTicks(message, button);
         } catch (error) {
@@ -155,6 +167,11 @@ export async function handleChatCardAction(event, button) {
     if (isOutgoingDamageControl(button) && !mayControlSpeakerActor(message)) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageOwnerOnly"));
         return;
+    }
+
+    if (isOffensiveCombatMessage(message) && isOffenseFollowUpControl(button)) {
+        message = await beginOffenseFollowUpForControl(message, button);
+        if (!message) return;
     }
 
     const startsDamageRoll = isOutgoingDamageControl(button);
@@ -260,12 +277,49 @@ function isLegacyTickAction(control) {
     return Boolean(control?.matches?.(".add-tick[data-ticks]"));
 }
 
+async function beginOffenseFollowUpForControl(message, control) {
+    const latest = await services.requestOffenseFollowUp(message);
+    if (!latest || messageOffersFollowUpControl(latest, control)) return latest;
+    ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.FollowUpNoLongerAvailable"));
+    return null;
+}
+
+function messageOffersFollowUpControl(message, control) {
+    const template = globalThis.document?.createElement?.("template");
+    const requestedKey = chatActionKey(control);
+    const markup = String(message?.content ?? "");
+    if (template) {
+        template.innerHTML = markup;
+        if (isLegacyTickAction(control)) {
+            return Boolean(template.content.querySelector(".add-tick[data-ticks]"));
+        }
+        if (!requestedKey) return false;
+        return Array.from(template.content.querySelectorAll(
+            ".splittermond-chat-action[data-action], .splittermond-chat-action[data-localaction], .splittermond-chat-action[data-local-action]"
+        )).some((candidate) => chatActionKey(candidate) === requestedKey);
+    }
+    if (isLegacyTickAction(control)) {
+        return [...markup.matchAll(/<[^>]+>/gu)].some(([tag]) =>
+            /\bclass\s*=\s*["'][^"']*\badd-tick\b[^"']*["']/iu.test(tag)
+            && /\bdata-ticks\s*=/iu.test(tag)
+        );
+    }
+    if (!requestedKey) return false;
+    return [...markup.matchAll(/\bdata-(localaction|local-action|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/giu)]
+        .some(([, kind, doubleQuoted, singleQuoted, unquoted]) => {
+            const prefix = kind.toLocaleLowerCase() === "action" ? "remote" : "local";
+            const value = doubleQuoted ?? singleQuoted ?? unquoted ?? "";
+            return `${prefix}:${value.toLocaleLowerCase()}` === requestedKey;
+        });
+}
+
 function isLegacySplinterpointAction(control) {
     return Boolean(control?.matches?.(".use-splinterpoint"));
 }
 
 function addEventDefenseActions(element, message) {
     if (!isOffensiveCombatMessage(message)) return;
+    if (!services.defenseAllowsModification(message)) return;
     const context = services.getMessageContext(message);
     if (!message.system?.checkReport?.succeeded && !context?.recalculatedFrom) return;
     if (context?.supersededBy) return;
@@ -373,13 +427,14 @@ export function enforceChatPermissions(root, hudContext) {
 
         const context = services.getMessageContext(message);
         enforceSystemVisibility(element, message, context);
+        enforceOffenseDefensePhaseControls(element, message);
         const defenseTarget = services.resolveToken(primaryTargetTokenUuid(context)) ?? services.getControlledTokenDocument() ?? hudContext.target;
         const mayDefend = game.user.isGM || defenseTarget?.actor?.isOwner;
         const targetAlreadyDefended = Boolean(
             defenseTarget?.actor?.uuid
             && context?.attemptedDefenseActorUuids?.includes?.(defenseTarget.actor.uuid)
         );
-        if (!mayDefend || targetAlreadyDefended || context?.supersededBy || context?.recalculatedFrom) {
+        if (!mayDefend || targetAlreadyDefended || context?.supersededBy || context?.recalculatedFrom || !services.defenseAllowsModification(message)) {
             element.querySelectorAll('[data-localaction="activeDefense" i], [data-local-action="activeDefense" i]').forEach((button) => {
                 button.remove();
             });
@@ -428,18 +483,52 @@ function isFocusCostControl(control) {
     return String(control?.dataset?.action ?? "").toLocaleLowerCase() === "consumecosts";
 }
 
-function isUsableActionControl(control) {
-    return !control?.disabled && control?.getAttribute?.("aria-disabled") !== "true";
+export function isOffenseFollowUpControl(control) {
+    return isOutgoingDamageControl(control) || isFocusCostControl(control) || isTickAdvanceControl(control);
 }
 
-function hasOffenseFollowUpStarted(message) {
-    const system = message?.system;
-    return Boolean(
-        system?.damageHandler?.used
-        || system?.damageHandler?.damageUsed
-        || system?.focusCostHandler?.used
-        || system?.tickCostHandler?.used
-    );
+export function enforceOffenseDefensePhaseControls(element, message) {
+    if (!element || !isOffensiveCombatMessage(message)) return;
+    if (!services.defenseAllowsModification(message)) {
+        element.querySelectorAll(".sf-chat-defense-response").forEach((control) => control.remove());
+        element.querySelectorAll('[data-localaction="activeDefense" i], [data-local-action="activeDefense" i]')
+            .forEach((button) => button.remove());
+    }
+    if (!services.defenseAwaitsResponse(message)) return;
+    decorateActiveDefenseResponseControls(element, message);
+    for (const control of element.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks]")) {
+        if (!isOffenseFollowUpControl(control)) continue;
+        control.disabled = true;
+        control.setAttribute("aria-disabled", "true");
+        control.classList.add("is-awaiting-defense");
+        control.title = t("SMOOTHER_FIGHT.HUD.DefenseFollowUpBlocked");
+    }
+}
+
+function decorateActiveDefenseResponseControls(element, message) {
+    if (!services.canUserDeclineActiveDefense(game.user, message)) return;
+    for (const defenseButton of element.querySelectorAll(
+        '[data-localaction="activeDefense" i], [data-local-action="activeDefense" i]'
+    )) {
+        if (defenseButton.closest(".sf-chat-defense-response")) continue;
+        const wrapper = document.createElement("div");
+        wrapper.className = "sf-chat-defense-response";
+        defenseButton.replaceWith(wrapper);
+        defenseButton.classList.add("sf-chat-defense-button");
+        const declineButton = document.createElement("button");
+        declineButton.type = "button";
+        declineButton.className = "sf-chat-decline-defense";
+        declineButton.dataset.sfAction = "decline-active-defense";
+        declineButton.dataset.messageId = message.id;
+        declineButton.title = t("SMOOTHER_FIGHT.HUD.DeclineActiveDefense");
+        declineButton.setAttribute("aria-label", declineButton.title);
+        declineButton.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+        wrapper.append(defenseButton, declineButton);
+    }
+}
+
+function isUsableActionControl(control) {
+    return !control?.disabled && control?.getAttribute?.("aria-disabled") !== "true";
 }
 
 function decorateEventActionButtons(element, message) {
@@ -454,12 +543,16 @@ function decorateEventActionButtons(element, message) {
         && associatedDamageMessages.some((damageMessage) => !isDamageApplicationCompleted(damageMessage));
     const buttons = Array.from(element.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks], .rollable[data-roll-type]"));
     const degreeOptions = element.querySelector(".sf-promoted-degree-options");
+    const awaitingDefense = services.defenseAwaitsResponse(message);
+    decoratePendingDefenseDegreeOptions(degreeOptions, awaitingDefense);
+    if (awaitingDefense) element.querySelector(".degree-of-success")?.classList.remove("has-next-open-degrees");
     const hasPendingDegreeOptions = Number(message?.system?.openDegreesOfSuccess) > 0
         && Boolean(degreeOptions?.querySelector('input.splittermond-chat-action:not(:checked):not(:disabled)'));
     const actionHighlight = combatActionHighlightState({
         isOffense: isOffensiveCombatMessage(message),
+        awaitingDefense,
         hasPendingDegreeOptions,
-        followUpStarted: hasOffenseFollowUpStarted(message),
+        followUpStarted: services.hasOffenseFollowUpStarted(message),
         isSpell: services.isSpellMessage(message),
         hasPendingFocusCost: buttons.some((button) => isFocusCostControl(button) && isUsableActionControl(button)),
         hasPendingDamage: damageRollPending || (!groupHasDamage && buttons.some((button) =>
@@ -506,6 +599,17 @@ function decorateEventActionButtons(element, message) {
     if (services.isDamageMessage(message) && damageApplicationState === "uncertain") {
         addDamageRecoveryActions(element, "generic");
     }
+}
+
+function decoratePendingDefenseDegreeOptions(degreeOptions, awaitingDefense) {
+    if (!degreeOptions) return;
+    degreeOptions.classList.remove("is-next-degree-options");
+    degreeOptions.querySelector(":scope > .sf-defense-decision-hint")?.remove();
+    if (!awaitingDefense) return;
+    const hint = document.createElement("div");
+    hint.className = "sf-defense-decision-hint";
+    hint.innerHTML = `<i class="fa-solid fa-hourglass-half" aria-hidden="true"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseDecisionPendingHint"))}</span>`;
+    degreeOptions.prepend(hint);
 }
 
 function getAssociatedDamageMessages(element, message) {

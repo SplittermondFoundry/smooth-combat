@@ -1,6 +1,12 @@
 import { activeDefenseState } from "./state.js";
 import { persistMissingDefensiveFeature } from "./system-compatibility.js";
 
+import {
+    DEFENSE_PHASE,
+    defenseAllowsModification,
+    defensePhaseForOffense,
+} from "./phase.js";
+
 import { services } from "../../core/services.js";
 
 import {
@@ -96,9 +102,9 @@ export function queueDefenseForAttack(offenseMessageId, defenseMessage, defenseC
 
 async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, displayedDefenseValue, pending) {
     const original = resolveLatestOffenseMessage(root);
-    if (!original || !isOffensiveCombatMessage(original)) return null;
+    if (!original || !isOffensiveCombatMessage(original) || !defenseAllowsModification(original)) return null;
 
-    const originalContext = services.getMessageContext(original) ?? {};
+    let originalContext = services.getMessageContext(original) ?? {};
     const existingDefenseContext = services.getMessageContext(defenseMessage) ?? pending ?? {};
     const target = services.resolveToken(primaryTargetTokenUuid(originalContext));
     const calculatedBase = await target?.actor?.derivedValues?.[defenseCheck.defenseType]?.value?.calculate?.();
@@ -109,6 +115,8 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
     const candidateDefense = resolvedDefense.defenseValue;
     const featureValue = resolvedDefense.defensiveFeatureValue;
     await persistMissingDefensiveFeature(defenseMessage, featureValue);
+    if (!defenseAllowsModification(original)) return null;
+    originalContext = services.getMessageContext(original) ?? {};
     const previousCandidate = finiteNumber(existingDefenseContext.resultingDefenseValue);
     const alreadyProcessed = originalContext.defenseMessageIds?.includes?.(defenseMessage.id);
     if (alreadyProcessed && (previousCandidate === null || candidateDefense <= previousCandidate)) return original;
@@ -139,6 +147,9 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
 
     const historyContext = {
         ...originalContext,
+        defensePhase: defensePhaseForOffense(original) === DEFENSE_PHASE.UNAVAILABLE
+            ? DEFENSE_PHASE.UNAVAILABLE
+            : DEFENSE_PHASE.RESOLVED,
         rootAttackMessageId: root.id,
         baseDefenseValue: finiteNumber(originalContext.baseDefenseValue)
             ?? finiteNumber(defenseCheck.baseDefense)
@@ -164,7 +175,7 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
 }
 
 export function recreateOffenseAfterSplinterpoint(root, original, { actorUuid, kind }) {
-    if (!root || !original || !isOffensiveCombatMessage(original)) return null;
+    if (!root || !original || !isOffensiveCombatMessage(original) || !defenseAllowsModification(original)) return null;
     const originalContext = services.getMessageContext(original) ?? {};
     const previousBonus = Math.max(0, finiteNumber(originalContext.vtdSplinterpointBonus) ?? 0);
     const bonus = kind === "resonance" ? 2 : 3;

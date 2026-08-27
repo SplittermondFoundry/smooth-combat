@@ -24,6 +24,7 @@ import {
 
 const MODULE_ID = "splittermond-smoother-fight";
 const harness = {
+    requestOffenseFollowUp: async (message) => message,
     completedDamageApplications: new Set(),
     errors: [],
     infos: [],
@@ -42,13 +43,17 @@ function clone(value) {
 class TestMessage {
     constructor(id, {
         actor = null,
+        content = "",
         context = null,
         fumble = null,
         noResultCalls = [],
         rejectCalls = [],
         skipPersistenceCalls = [],
+        type = "base",
     } = {}) {
         this.id = id;
+        this.content = content;
+        this.type = type;
         this.actor = actor;
         this.author = { id: "gm" };
         this.user = "gm";
@@ -129,6 +134,7 @@ class TestActor {
 configureServices({
     addPendingDamageApplication: (application) => harness.pendingDamageApplications.push(application),
     addPendingLegacyTickMessage: (messageId) => harness.legacyLocks.add(messageId),
+    requestOffenseFollowUp: (...args) => harness.requestOffenseFollowUp(...args),
     collectCombatEventGroups: () => [],
     deletePendingLegacyTickMessage: (messageId) => harness.legacyLocks.delete(messageId),
     findPendingDamageApplicationForActor: (actorUuid) => [...harness.pendingDamageApplications]
@@ -161,6 +167,7 @@ configureServices({
 });
 
 function resetHarness() {
+    harness.requestOffenseFollowUp = async (message) => message;
     harness.completedDamageApplications.clear();
     harness.errors.length = 0;
     harness.infos.length = 0;
@@ -191,6 +198,33 @@ function resetHarness() {
     };
     globalThis.foundry = { utils: { randomID: () => "feedback" } };
 }
+
+test("a stale damage control cannot run against a defense successor that no longer offers it", async () => {
+    resetHarness();
+    const actor = new TestActor("stale-damage-attacker");
+    const original = new TestMessage("stale-damage-original", {
+        actor,
+        content: '<button class="splittermond-chat-action" data-action="rollDamage">Damage</button>',
+        type: "attackRollMessage",
+    });
+    const successor = new TestMessage("stale-damage-successor", {
+        actor,
+        content: '<button class="splittermond-chat-action" data-action="advanceToken">Ticks</button>',
+        type: "attackRollMessage",
+    });
+    let genericActions = 0;
+    successor.system.handleGenericAction = async () => {
+        genericActions += 1;
+    };
+    harness.messages.set(original.id, original);
+    harness.messages.set(successor.id, successor);
+    harness.requestOffenseFollowUp = async () => successor;
+
+    await handleChatCardAction(clickEvent(), actionButton(original, { action: "rollDamage" }));
+
+    assert.equal(genericActions, 0);
+    assert.deepEqual(harness.warnings, ["SMOOTHER_FIGHT.HUD.FollowUpNoLongerAvailable"]);
+});
 
 function clickEvent() {
     return {

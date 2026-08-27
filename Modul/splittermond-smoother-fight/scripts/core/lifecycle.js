@@ -198,6 +198,50 @@ export function registerSocket() {
             return;
         }
 
+        if (payload.type === "decline-active-defense" && payload.recipientId === game.user.id && game.user.isGM) {
+            const sender = game.users.get(payload.senderId);
+            const offense = game.messages.get(payload.messageId);
+            if (!sender || !offense || !isOffensiveCombatMessage(offense)) return;
+            if (!services.canUserDeclineActiveDefense(sender, offense)) return;
+            await services.declineActiveDefenseForUser(offense, sender);
+            return;
+        }
+
+        if (payload.type === "begin-offense-follow-up" && payload.recipientId === game.user.id && game.user.isGM) {
+            const sender = game.users.get(payload.senderId);
+            const offense = game.messages.get(payload.messageId);
+            let latest = null;
+            let reason = "not-allowed";
+            if (sender && offense && isOffensiveCombatMessage(offense)) {
+                try {
+                    latest = await services.beginOffenseFollowUp(offense, sender, { notify: false });
+                    if (latest) reason = null;
+                    else if (services.defenseAwaitsResponse(offense)) reason = "awaiting-defense";
+                } catch (error) {
+                    console.error(`${MODULE_ID} | Could not begin remote offense follow-up`, error);
+                    reason = "failed";
+                }
+            }
+            game.socket.emit(SOCKET, {
+                type: "begin-offense-follow-up-result",
+                senderId: game.user.id,
+                recipientId: payload.senderId,
+                requestId: payload.requestId,
+                messageId: payload.messageId,
+                allowed: Boolean(latest),
+                latestMessageId: latest?.id ?? null,
+                reason,
+            });
+            return;
+        }
+
+        if (payload.type === "begin-offense-follow-up-result" && payload.recipientId === game.user.id) {
+            const sender = game.users.get(payload.senderId);
+            if (!sender?.isGM) return;
+            await services.finishOffenseFollowUpRequest(payload, sender);
+            return;
+        }
+
         if (payload.type === "recalculate-defense" && payload.recipientId === game.user.id && game.user.isGM) {
             const sender = game.users.get(payload.senderId);
             const message = await services.waitForChatMessage(payload.defenseMessageId);

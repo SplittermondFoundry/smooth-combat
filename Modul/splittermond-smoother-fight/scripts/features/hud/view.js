@@ -350,6 +350,8 @@ async function buildPersonalControls(activeContext) {
     const candidates = getPersonalHudCandidates(activeContext);
     const context = getPersonalHudContext(activeContext);
     const picker = candidates.length > 1 ? buildPersonalCombatantPicker(candidates, context) : "";
+    const defenseRequest = services.getPendingActiveDefense(activeContext);
+    const defenseControl = defenseRequest ? activeDefenseResponseControl(defenseRequest) : "";
     if (!context) {
         const note = activeContext.runtimeController
             ? t("SMOOTHER_FIGHT.HUD.SelectOwnedToken")
@@ -369,7 +371,7 @@ async function buildPersonalControls(activeContext) {
         <section class="sf-combat-controls sf-personal-combat-controls" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.CombatControls"))}">
             ${buildAdvanceButtons(context, true)}
         </section>
-        ${buildPersonalActionBar(context.actor, picker, meleeAttackControl)}
+        ${buildPersonalActionBar(context.actor, `${defenseControl}${picker}`, meleeAttackControl)}
     </div>`;
 }
 
@@ -434,7 +436,7 @@ function buildPersonalActionBar(actor, leadingControl = "", meleeAttackControl =
 
 async function buildActionBar(context, rangeMeasurement = null) {
     const actor = context.actor;
-    const defenseAlert = services.hasPendingActiveDefense(context);
+    const defenseRequest = services.getPendingActiveDefense(context);
     const preparationStatus = services.getPreparationApplicationStatus?.(actor) ?? { state: "idle", record: null };
     const preparedSpellId = actor.getFlag?.("splittermond", "preparedSpell");
     const { favoriteSkills, skillControlMarkup } = getSkillActionData(actor);
@@ -457,11 +459,11 @@ async function buildActionBar(context, rangeMeasurement = null) {
         ${skillControlMarkup}
         ${attackControlMarkup}
         ${spellControlMarkup}
-        ${actionMenu("fa-solid fa-shield-halved", t("SMOOTHER_FIGHT.HUD.Defense"), [
+        ${defenseRequest ? activeDefenseResponseControl(defenseRequest) : actionMenu("fa-solid fa-shield-halved", t("SMOOTHER_FIGHT.HUD.Defense"), [
             defenseButton(actor, "defense", "VTD"),
             defenseButton(actor, "bodyresist", "KW"),
             defenseButton(actor, "mindresist", "GW"),
-        ].join(""), `sf-defense-menu${defenseAlert ? " is-defense-alert" : ""}`)}
+        ].join(""), "sf-defense-menu")}
         ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
     </nav>`;
 }
@@ -692,6 +694,19 @@ function actionMenu(icon, label, body, className = "", menuId = "") {
         <summary title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="${icon}" aria-hidden="true"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron" aria-hidden="true"></i></summary>
         <div class="sf-action-popover">${body}</div>
     </details>`;
+}
+
+function activeDefenseResponseControl({ message, target }) {
+    const label = t("SMOOTHER_FIGHT.HUD.Defense");
+    const decline = t("SMOOTHER_FIGHT.HUD.DeclineActiveDefense");
+    const targetName = target?.name ?? target?.actor?.name ?? "–";
+    return `<div class="sf-action-menu sf-defense-response-control is-defense-alert">
+        <button type="button" class="sf-defense-response" data-sf-action="respond-active-defense" data-message-id="${escapeAttr(message.id)}" aria-label="${escapeAttr(label)}">
+            <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+            <span><small>${escapeHtml(targetName)}</small><strong>${escapeHtml(label)}</strong></span>
+        </button>
+        <button type="button" class="sf-decline-defense" data-sf-action="decline-active-defense" data-message-id="${escapeAttr(message.id)}" title="${escapeAttr(decline)}" aria-label="${escapeAttr(decline)}"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>`;
 }
 
 function preparedSpellMenu(spell, availableSpells, range = null) {

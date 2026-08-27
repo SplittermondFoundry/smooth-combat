@@ -20,6 +20,7 @@ const harness = {
     controlCalls: [],
     meleeRange: 2,
     movementTracking: true,
+    pendingDefense: null,
     player: null,
     revealTargetDefenses: false,
     revealTargetResources: false,
@@ -41,7 +42,7 @@ configureServices({
     getControlledTokenDocument: () => harness.controlledToken,
     getRuntimeController: (combatant) => combatant.runtimeController ?? null,
     getTargetSelectionForUser: () => harness.targetSelection,
-    hasPendingActiveDefense: () => false,
+    getPendingActiveDefense: () => harness.pendingDefense,
     isPreparingSpell: () => false,
     isRangedAttack: (attack) => Boolean(attack.isRanged),
     isCurrentUserTarget: () => false,
@@ -87,6 +88,7 @@ function installFixture() {
     harness.controlCalls = [];
     harness.meleeRange = 2;
     harness.movementTracking = true;
+    harness.pendingDefense = null;
     harness.revealTargetDefenses = false;
     harness.revealTargetResources = false;
     harness.renderCalls = 0;
@@ -244,6 +246,22 @@ test("personal HUD controls expose melee attacks but not ranged attacks outside 
     assert.match(html, /data-attack-id="sword"/u);
     assert.doesNotMatch(html, /data-attack-id="bow"/u);
     assert.match(html, /SMOOTHER_FIGHT\.HUD\.TickActions\.meleeAttack\.Name/u);
+});
+
+test("a pending active defense uses a wide response button with a dedicated decline action", async () => {
+    const { first } = installFixture();
+    harness.controlledToken = first.token;
+    harness.pendingDefense = {
+        message: { id: "attack-awaiting-defense" },
+        target: first.token,
+    };
+
+    const html = await buildHud(getHudContext());
+
+    assert.match(html, /class="sf-action-menu sf-defense-response-control is-defense-alert"/u);
+    assert.match(html, /class="sf-defense-response" data-sf-action="respond-active-defense" data-message-id="attack-awaiting-defense"/u);
+    assert.match(html, /class="sf-decline-defense" data-sf-action="decline-active-defense" data-message-id="attack-awaiting-defense"/u);
+    assert.match(html, /fa-solid fa-xmark/u);
 });
 
 test("the primary target distance drives advisory attack and spell range states", async () => {

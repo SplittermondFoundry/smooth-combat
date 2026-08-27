@@ -14,6 +14,17 @@ import {
     recoverDefenseSplinterpointApplication,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/splinterpoints.js";
 import { recreateOffenseAfterSplinterpoint } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/recalculation.js";
+import {
+    beginOffenseFollowUp,
+    declineActiveDefenseForUser,
+    finishOffenseFollowUpRequest,
+    requestOffenseFollowUp,
+} from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/phase-actions.js";
+import {
+    defenseAllowsModification,
+    defenseAwaitsResponse,
+    defensePhaseForOffense,
+} from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/phase.js";
 import { activeDefenseState } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/state.js";
 import { setRequiredFlag } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 
@@ -23,8 +34,10 @@ const harness = {
     actors: new Map(),
     messages: new Map(),
     splinterpointCards: [],
+    socketPayloads: [],
     tokens: new Map(),
     nextMessageId: 1,
+    activeGm: null,
     rejectSetFlag: null,
 };
 
@@ -167,6 +180,7 @@ function installGlobals() {
             get contents() { return Array.from(harness.messages.values()); },
         },
         settings: { get: () => true },
+        socket: { emit: (_channel, payload) => harness.socketPayloads.push(payload) },
         i18n: {
             format: (_key, data) => `Neue Abwehr ${data?.defense ?? ""}`,
             localize: (key) => key.includes(".short") ? "VTD" : key,
@@ -185,6 +199,7 @@ configureServices({
     getDefenseSplinterpointActions,
     getAssignedUser: (combatant) => combatant?.assignedUser ?? null,
     getHudContext: () => null,
+    getActivePrimaryGm: () => harness.activeGm,
     getMessageContext: (message) => message?.flags?.[MODULE_ID]?.context ?? null,
     getRuntimeController: (combatant) => combatant.runtimeController ?? null,
     isOwnMessage: (message) => (message.author?.id ?? message.user) === game.user.id,
@@ -197,6 +212,7 @@ configureServices({
     setRequiredFlag,
     scheduleRender: () => {},
     setCombatEventExpansionRequest: () => {},
+    waitForChatMessage: async (messageId) => harness.messages.get(messageId) ?? null,
 });
 
 function resetHarness() {
@@ -211,13 +227,17 @@ function resetHarness() {
     activeDefenseState.claimedDefenses.clear();
     activeDefenseState.processingDefenseMessages.clear();
     activeDefenseState.attackProcessingQueues.clear();
+    for (const request of activeDefenseState.offenseFollowUpRequests.values()) clearTimeout(request.timeoutId);
+    activeDefenseState.offenseFollowUpRequests.clear();
     activeDefenseState.splinterpointActorLocks.clear();
     harness.actors.clear();
     harness.checks.clear();
     harness.messages.clear();
     harness.splinterpointCards.length = 0;
+    harness.socketPayloads.length = 0;
     harness.tokens.clear();
     harness.nextMessageId = 1;
+    harness.activeGm = null;
     harness.rejectSetFlag = null;
     installGlobals();
 }
@@ -242,7 +262,7 @@ function createAttack(id, report = attackReport(), context = {}) {
         _id: id,
         type: "attackRollMessage",
         content: '<article class="splittermond check attack">Ursprungsangriff</article>',
-        flags: { [MODULE_ID]: { context: clone(context) } },
+        flags: { [MODULE_ID]: { context: { defensePhase: "open", ...clone(context) } } },
         system: { checkReport: report, openDegreesOfSuccess: 3, template: "attack-card.hbs" },
     });
     harness.messages.set(id, message);
@@ -313,6 +333,88 @@ function latestOffense(root) {
     }
     return latest;
 }
+
+test("the defense phase blocks follow-ups until defense resolves and closes before processing continues", async () => {
+    resetHarness();
+    const root = createAttack("attack-defense-phase", attackReport(), { defensePhase: "open" });
+    root.content = '<button data-localaction="activeDefense">Abwehr</button>';
+
+    assert.equal(defenseAwaitsResponse(root), true);
+    assert.equal(await beginOffenseFollowUp(root), null);
+    assert.equal(root.flags[MODULE_ID].context.defensePhase, "open");
+
+    await setRequiredFlag(root, "context", {
+        ...root.flags[MODULE_ID].context,
+        defensePhase: "resolved",
+    });
+    assert.equal(await beginOffenseFollowUp(root), root);
+    assert.equal(root.flags[MODULE_ID].context.defensePhase, "closed");
+    assert.equal(defenseAllowsModification(root), false);
+});
+
+test("a player waits for the GM's serialized defense-phase decision before continuing", async () => {
+    resetHarness();
+    const player = { id: "attacker", isGM: false };
+    const gm = { id: "gm", isGM: true };
+    const root = createAttack("attack-remote-follow-up", attackReport(), { defensePhase: "resolved" });
+    root.author = player;
+    root.user = player.id;
+    game.user = player;
+    harness.activeGm = gm;
+
+    const pending = requestOffenseFollowUp(root);
+    assert.equal(harness.socketPayloads.length, 1);
+    const request = harness.socketPayloads[0];
+    assert.equal(request.type, "begin-offense-follow-up");
+    assert.equal(request.recipientId, gm.id);
+
+    game.user = gm;
+    const latest = await beginOffenseFollowUp(root, player, { notify: false });
+    game.user = player;
+    await finishOffenseFollowUpRequest({
+        requestId: request.requestId,
+        messageId: root.id,
+        allowed: true,
+        latestMessageId: latest.id,
+        reason: null,
+    }, gm);
+
+    assert.equal(await pending, root);
+    assert.equal(root.flags[MODULE_ID].context.defensePhase, "closed");
+    assert.equal(activeDefenseState.offenseFollowUpRequests.size, 0);
+});
+
+test("declining active defense is persistent and rejects a delayed defense result", async () => {
+    resetHarness();
+    const target = createSplinterpointActor("declining-target", { owners: ["player"] });
+    const targetTokenUuid = "Token.declining-target";
+    harness.tokens.set(targetTokenUuid, { uuid: targetTokenUuid, name: "Declining target", actor: target });
+    const root = createAttack("attack-declined", attackReport(), {
+        defensePhase: "open",
+        primaryTargetTokenUuid: targetTokenUuid,
+    });
+    root.content = '<button data-localaction="activeDefense">Abwehr</button>';
+    const player = { id: "player", isGM: false };
+
+    assert.equal(await declineActiveDefenseForUser(root, player), root);
+    assert.equal(defensePhaseForOffense(root), "declined");
+
+    const defense = createDefense("late-defense-after-decline", 27, target.id);
+    assert.equal(await processDefenseMessage(defense, pendingFor(root, defense, 1)), undefined);
+    assert.equal(latestOffense(root), root);
+    assert.equal(root.flags[MODULE_ID].context.defensePhase, "declined");
+});
+
+test("started damage closes stale defense phases even without an explicit phase update", async () => {
+    resetHarness();
+    const root = createAttack("attack-damage-started", attackReport(), { defensePhase: "resolved" });
+    root.system.damageHandler = { damageUsed: true };
+    const defense = createDefense("late-defense-after-damage", 27, "defender-late");
+
+    assert.equal(defensePhaseForOffense(root), "closed");
+    assert.equal(await processDefenseMessage(defense, pendingFor(root, defense, 1)), undefined);
+    assert.equal(latestOffense(root), root);
+});
 
 test("parallel defenses against one root attack form one complete canonical successor chain", async () => {
     resetHarness();

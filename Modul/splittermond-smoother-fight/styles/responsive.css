@@ -34,6 +34,7 @@
     }
 
     #splittermond-smoother-fight-hud .sf-action-menu > summary span,
+    #splittermond-smoother-fight-hud .sf-defense-response > span,
     #splittermond-smoother-fight-hud .sf-quick-targets > summary span {
         display: none;
     }

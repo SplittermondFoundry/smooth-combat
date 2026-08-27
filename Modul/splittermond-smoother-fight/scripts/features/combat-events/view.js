@@ -36,6 +36,7 @@ function buildEventGroup(group, isLatest, hudContext) {
     const context = services.getMessageContext(primary);
     const recalculated = context?.recalculatedFrom;
     const superseded = context?.supersededBy;
+    const defensePhase = services.defensePhaseForOffense(primary);
     const defenseAlert = shouldHighlightActiveDefense(group, isLatest, hudContext, context);
     const badge = group.kind === "spell"
         ? `<span class="sf-event-badge is-spell"><i class="fa-solid fa-wand-sparkles"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Spells"))}</span>`
@@ -44,9 +45,14 @@ function buildEventGroup(group, isLatest, hudContext) {
         : superseded
             ? `<span class="sf-event-badge is-muted">${escapeHtml(t("SMOOTHER_FIGHT.HUD.OriginalAttack"))}</span>`
             : "";
+    const defensePending = defensePhase === "open" && !superseded && group.damages.length === 0;
     const defenseBadge = defenseAlert
         ? `<span class="sf-event-badge is-defense-alert"><i class="fa-solid fa-shield-halved"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseAvailable"))}</span>`
-        : "";
+        : defensePending
+            ? `<span class="sf-event-badge is-defense-pending"><i class="fa-solid fa-hourglass-half"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefensePending"))}</span>`
+            : defensePhase === "declined" && !superseded
+                ? `<span class="sf-event-badge is-defense-declined"><i class="fa-solid fa-xmark"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseDeclined"))}</span>`
+                : "";
     const targetBadge = buildEventTargetBadge(context);
     const belongsToActiveCombatant = messageBelongsToCombatant(primary, hudContext.combatant, context);
     const open = isLatest && (belongsToActiveCombatant || context?.outOfTurn) && !combatEventState.cardsCollapsed ? "open" : "";
@@ -119,7 +125,7 @@ function primaryTargetTokenUuid(context) {
 
 function shouldHighlightActiveDefense(group, isLatest, hudContext, messageContext) {
     if (group.damages.length > 0) return false;
-    if (!messageOffersActiveDefense(group.primary) && !messageContext?.recalculatedFrom) return false;
+    if (!services.defenseAwaitsResponse(group.primary)) return false;
     if (messageContext?.supersededBy) return false;
     const storedTarget = services.resolveToken(primaryTargetTokenUuid(messageContext));
     if (storedTarget) {
@@ -130,10 +136,19 @@ function shouldHighlightActiveDefense(group, isLatest, hudContext, messageContex
 }
 
 export function hasPendingActiveDefense(context) {
+    return Boolean(getPendingActiveDefense(context));
+}
+
+export function getPendingActiveDefense(context) {
     const groups = services.collectCombatEventGroups(context);
     const latest = groups.at(-1);
-    if (!latest) return false;
-    return shouldHighlightActiveDefense(latest, true, context, services.getMessageContext(latest.primary));
+    if (!latest) return null;
+    const messageContext = services.getMessageContext(latest.primary);
+    if (!shouldHighlightActiveDefense(latest, true, context, messageContext)) return null;
+    return {
+        message: latest.primary,
+        target: services.resolveToken(primaryTargetTokenUuid(messageContext)) ?? context?.target ?? null,
+    };
 }
 
 export function messageOffersActiveDefense(message) {

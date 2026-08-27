@@ -18,6 +18,10 @@ import {
     resolveProcessedDefenseOffense,
 } from "./recalculation.js";
 
+import {
+    defenseAllowsModification,
+} from "./phase.js";
+
 export { normalizePendingDefense };
 
 import { services } from "../../core/services.js";
@@ -150,6 +154,9 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
         ?? normalizePendingDefense(services.getMessageContext(message))
         ?? normalizePendingDefense(activeDefenseState.claimedDefenses.get(message.id));
     if (!pending?.attackMessageId || pending.expiresAt < Date.now()) return;
+
+    const offense = resolveLatestOffenseMessage(game.messages.get(pending.attackMessageId));
+    if (!defenseAllowsModification(offense)) return;
 
     if (!pendingMatchesDefenseMessage(pending, message)) return;
     if (pending.assisted && !isValidDefenderAttempt(pending, message)) return;
@@ -327,6 +334,10 @@ async function launchActorActiveDefense(actor, type, pending) {
 
 export async function beginActiveDefense(message) {
     message = resolveLatestOffenseMessage(message);
+    if (!message || !defenseAllowsModification(message)) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNoLongerAvailable"));
+        return;
+    }
     const { pending, target } = rememberPendingDefense(message);
     if (!target?.actor || !(game.user.isGM || target.actor.isOwner)) {
         clearPendingDefense(pending.pendingDefenseId);
@@ -341,6 +352,10 @@ export async function beginActiveDefense(message) {
 export async function beginAdditionalTargetDefense(message) {
     if (!message) return;
     message = resolveLatestOffenseMessage(message);
+    if (!defenseAllowsModification(message)) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNoLongerAvailable"));
+        return;
+    }
     const context = services.getMessageContext(message);
     const target = services.resolveToken(primaryTargetTokenUuid(context));
     const attempted = new Set(context?.attemptedDefenseActorUuids ?? []);
@@ -357,6 +372,10 @@ export async function beginAdditionalTargetDefense(message) {
 export async function beginDefenderDefense(message) {
     if (!message) return;
     message = resolveLatestOffenseMessage(message);
+    if (!defenseAllowsModification(message)) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNoLongerAvailable"));
+        return;
+    }
     const choices = getEligibleDefenderChoices(message, game.user);
     if (!choices.length) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenderUnavailable"));
@@ -495,9 +514,10 @@ export function prepareDefenderRollOptions(choice, pending) {
 
 export function getEligibleDefenderChoices(message, user) {
     if (!message || !user || !isOffensiveCombatMessage(message)) return [];
+    if (!defenseAllowsModification(message)) return [];
     const context = services.getMessageContext(message);
     if (context?.supersededBy || (!message.system?.checkReport?.succeeded && !context?.recalculatedFrom)) return [];
-    if (!services.messageOffersActiveDefense(message) && !context?.recalculatedFrom) return [];
+    if (!services.messageOffersActiveDefense(message) && !context?.recalculatedFrom && !context?.defensePhase) return [];
     const defenseType = String(message.system?.checkReport?.defenseType ?? context?.defenseType ?? "defense").toLocaleLowerCase();
     if (defenseType !== "defense" && defenseType !== "vtd") return [];
     const target = services.resolveToken(primaryTargetTokenUuid(context));
@@ -535,6 +555,8 @@ function getDefenderMasteries(actor) {
 }
 
 export function canUserSubmitDefense(user, pending, message) {
+    const offense = resolveLatestOffenseMessage(game.messages.get(pending?.attackMessageId));
+    if (!defenseAllowsModification(offense)) return false;
     const target = services.resolveToken(pending?.targetTokenUuid);
     if (!target?.actor) return false;
     if (!pending.assisted) return Boolean(target.actor.testUserPermission?.(user, "OWNER"));

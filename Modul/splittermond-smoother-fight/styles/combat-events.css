@@ -708,6 +708,49 @@
     line-height: 1.15;
 }
 
+.sf-chat-defense-response {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34px;
+    align-items: stretch;
+    width: 100%;
+    margin-block: 2px;
+}
+
+.sf-chat-defense-response > .sf-chat-defense-button,
+.sf-chat-defense-response > .sf-chat-decline-defense {
+    min-width: 0;
+    min-height: 32px;
+    margin: 0 !important;
+    border-radius: 0;
+}
+
+.sf-chat-defense-response > .sf-chat-defense-button {
+    width: 100%;
+    border-radius: 4px 0 0 4px;
+}
+
+.sf-chat-defense-response > .sf-chat-decline-defense {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    padding: 2px !important;
+    border: 1px solid rgba(255, 184, 176, 0.62) !important;
+    border-left: 0 !important;
+    border-radius: 0 4px 4px 0;
+    color: #fff4f1 !important;
+    background: rgba(190, 47, 47, 0.88) !important;
+    font-size: 16px;
+    box-shadow: inset 0 0 0 1px rgba(255, 163, 153, 0.16);
+}
+
+.sf-chat-defense-response > .sf-chat-decline-defense:hover,
+.sf-chat-defense-response > .sf-chat-decline-defense:focus-visible {
+    color: #fff !important;
+    background: #d83d38 !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 220, 215, 0.42), 0 0 9px rgba(216, 61, 56, 0.42);
+}
+
 #splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls .sf-defender-action {
     border-color: rgba(108, 201, 193, 0.58);
     color: #dffbf7;
@@ -826,11 +869,16 @@
 }
 
 #splittermond-smoother-fight-hud.sf-theme-light .sf-action-menu.is-defense-alert > summary,
+#splittermond-smoother-fight-hud.sf-theme-light .sf-defense-response-control > .sf-defense-response,
 #splittermond-smoother-fight-hud.sf-theme-light .sf-event-group.is-defense-alert > summary {
     color: var(--sf-gold-bright);
 }
 
 #splittermond-smoother-fight-hud.sf-theme-light .sf-action-menu.is-defense-alert > summary > i:first-child {
+    color: var(--sf-gold);
+}
+
+#splittermond-smoother-fight-hud.sf-theme-light .sf-defense-response-control > .sf-defense-response > i {
     color: var(--sf-gold);
 }
 
@@ -852,6 +900,25 @@
     min-width: 0;
     font-size: 11px;
     line-height: 1.15;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-defense-decision-hint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 0 4px;
+    padding: 2px 5px;
+    border: 1px solid rgba(242, 206, 135, 0.28);
+    border-radius: 3px;
+    color: #ffe3a3;
+    background: rgba(157, 104, 30, 0.12);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-defense-decision-hint > i {
+    color: var(--sf-gold-bright);
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-degree-options.is-next-degree-options {
@@ -894,6 +961,7 @@
 @media (prefers-reduced-motion: reduce) {
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-shell.is-current-user-turn .sf-live-dot,
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-action-menu.is-defense-alert > summary,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-defense-response-control > .sf-defense-response,
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-event-group.is-defense-alert .sf-chat-message [data-localaction="activeDefense" i],
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-event-group.is-defense-alert .sf-chat-message [data-local-action="activeDefense" i] {
         animation: none;
@@ -915,6 +983,7 @@
 
 #splittermond-smoother-fight-hud.sf-motion-none .sf-shell.is-current-user-turn .sf-live-dot,
 #splittermond-smoother-fight-hud.sf-motion-none .sf-action-menu.is-defense-alert > summary,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-defense-response-control > .sf-defense-response,
 #splittermond-smoother-fight-hud.sf-motion-none .sf-event-group.is-defense-alert .sf-chat-message [data-localaction="activeDefense" i],
 #splittermond-smoother-fight-hud.sf-motion-none .sf-event-group.is-defense-alert .sf-chat-message [data-local-action="activeDefense" i],
 #splittermond-smoother-fight-hud.sf-motion-none .sf-action-feedback,
@@ -942,6 +1011,7 @@
     }
 
     #splittermond-smoother-fight-hud .sf-action-menu.is-defense-alert > summary,
+    #splittermond-smoother-fight-hud .sf-defense-response-control > .sf-defense-response,
     #splittermond-smoother-fight-hud .sf-event-group.is-defense-alert .sf-chat-message [data-localaction="activeDefense" i],
     #splittermond-smoother-fight-hud .sf-event-group.is-defense-alert .sf-chat-message [data-local-action="activeDefense" i] {
         animation: none;

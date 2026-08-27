@@ -24,7 +24,7 @@ export {
 
 export {
     buildCombatEvents,
-    hasPendingActiveDefense,
+    getPendingActiveDefense,
     messageBelongsToCombatant,
     messageOffersActiveDefense,
 } from "./view.js";

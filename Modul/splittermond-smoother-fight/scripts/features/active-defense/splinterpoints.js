@@ -7,6 +7,10 @@ import {
     resolveRootOffenseMessage,
 } from "./recalculation.js";
 
+import {
+    defenseAllowsModification,
+} from "./phase.js";
+
 import { services } from "../../core/services.js";
 
 import {
@@ -70,9 +74,10 @@ function isVtdAttack(message, context) {
 
 export function getDefenseSplinterpointActions(message, user = game.user) {
     if (!message || !user || !isOffensiveCombatMessage(message)) return [];
+    if (!defenseAllowsModification(message)) return [];
     const context = services.getMessageContext(message) ?? {};
     if (context.supersededBy || !isVtdAttack(message, context)) return [];
-    if (!services.messageOffersActiveDefense(message) && !context.recalculatedFrom) return [];
+    if (!services.messageOffersActiveDefense(message) && !context.recalculatedFrom && !context.defensePhase) return [];
     const target = services.resolveToken(primaryTargetTokenUuid(context));
     const targetActor = target?.actor;
     const targetActorUuid = actorUuid(targetActor);

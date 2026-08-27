@@ -149,6 +149,12 @@ test("audio feedback profiles preserve valid personal and custom world settings"
 test("combat action highlighting advances from open degrees through focus costs to ticks", () => {
     assert.deepEqual(combatActionHighlightState({
         isOffense: true,
+        awaitingDefense: true,
+        hasPendingDegreeOptions: true,
+        hasPendingDamage: true,
+    }), { degrees: false, focus: false, damage: false, ticks: false });
+    assert.deepEqual(combatActionHighlightState({
+        isOffense: true,
         hasPendingDegreeOptions: true,
         isSpell: true,
         hasPendingFocusCost: true,

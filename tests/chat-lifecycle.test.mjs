@@ -62,6 +62,7 @@ configureServices({
         return harness.fumble;
     },
     isOwnMessage: (message) => message.author?.id === game.user.id,
+    initialDefensePhaseForOffense: () => "unavailable",
     processDefenseMessage: async (message) => record("processDefenseMessage", message),
     setRequiredFlag: async (message, key, value) => {
         record("setRequiredFlag", message, key, value);
@@ -212,6 +213,7 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
             outOfTurn: false,
             assignedUserId: fixture.assignedUser.id,
             runtimeControllerId: fixture.runtimeController.id,
+            defensePhase: "unavailable",
             createdAt: context.createdAt,
         });
         assert.equal(callsOf("getTargetSelectionForUser").length, 1);

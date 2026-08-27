@@ -278,6 +278,17 @@ class SmootherFightHud {
             await services.handleChatCardAction(event, target);
             return;
         }
+        if (action === "respond-active-defense") {
+            await services.beginActiveDefense(game.messages.get(target.dataset.messageId));
+            return;
+        }
+        if (action === "decline-active-defense") {
+            target.disabled = true;
+            if (!await services.requestActiveDefenseDecline(
+                game.messages.get(target.dataset.messageId)
+            ) && target.isConnected) target.disabled = false;
+            return;
+        }
 
         const hudContext = getHudContext();
         const context = resolveHudActionContext(hudContext, target);

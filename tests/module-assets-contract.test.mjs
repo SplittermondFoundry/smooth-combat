@@ -33,7 +33,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "825b5acb34f55bb5d9300394d82cd5145162dcfac38db47c10e46ba1433bf7f4",
+        "cf5ca8e2f6fba0d9c34c6730dbf72d8786b7ab964ee290f01cf0b14b602790e7",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -90,11 +90,15 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /data-sf-spell-level/u);
     assert.match(hudView, /data-sf-action="toggle-favorite-tick-action"/u);
     assert.match(hudView, /data-sf-action="clear-attack-preparation"/u);
+    assert.match(hudView, /data-sf-action="respond-active-defense"/u);
+    assert.match(hudView, /data-sf-action="decline-active-defense"/u);
     assert.match(hudView, /data-sf-tick-action-category="\$\{escapeAttr\(action\.displayCategory\)\}"/u);
     assert.match(hudController, /bindTickActionReferenceFilters/u);
     assert.match(hudController, /bindSpellListFilters/u);
     assert.match(hudController, /case "toggle-favorite-tick-action"/u);
     assert.match(hudController, /case "clear-attack-preparation"/u);
+    assert.match(hudController, /action === "respond-active-defense"/u);
+    assert.match(hudController, /action === "decline-active-defense"/u);
     assert.doesNotMatch(hudView, /sf-tick-action-tooltip/u);
     assert.doesNotMatch(hudView, /role="tooltip"[^`]*data-sf-action="share-tick-action"/u);
     assert.match(hudView, /data-sf-action="share-tick-action"/u);
@@ -120,6 +124,9 @@ test("published DOM integration attributes remain available", () => {
     assert.match(chatActions, /isMessageSpeakerAssignedToCurrentUser\(message\)/u);
     assert.match(chatActions, /dataset\.sfAction = "use-defense-splinterpoint"/u);
     assert.match(chatActions, /sf-splinterpoint-resonance-action/u);
+    assert.match(chatActions, /className = "sf-chat-defense-response"/u);
+    assert.match(chatActions, /className = "sf-chat-decline-defense"/u);
+    assert.match(chatActions, /SMOOTHER_FIGHT\.HUD\.DefenseDecisionPendingHint/u);
 });
 
 test("the local HUD demo loads the manifest stylesheet entry", () => {
@@ -166,7 +173,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "4eef72df43140823cd6fad4689e0ad710253cd59eb7cd10ddc93d2a39465fb0f",
+        "5504a3b56239229d3696adc88e91231d9c6f31cc9d7dda2e92433d256e3e3649",
     );
 });
 
