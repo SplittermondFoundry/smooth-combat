@@ -196,11 +196,13 @@ test("split styles flatten in the verified cascade order", () => {
         /\.sf-movement-sections\s*\{[^}]*grid-template-columns:\s*max-content minmax\(max-content, 1fr\) minmax\(max-content, 3fr\)/su,
     );
     assert.match(flattenedCss, /\.sf-movement-section::before\s*\{[^}]*width:\s*var\(--sf-movement-fill, 0%\)/su);
+    assert.match(flattenedCss, /\.sf-prepared-spell-menu\s*\{[^}]*container-name:\s*sf-prepared-action/su);
+    assert.match(flattenedCss, /@container sf-prepared-action \(max-width:\s*260px\)[^{]*\{[^}]*\.sf-prepared-spell-cast b span[^}]*display:\s*none/su);
     assert.doesNotMatch(flattenedCss, /font-size:\s*[78]px/u);
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "5504a3b56239229d3696adc88e91231d9c6f31cc9d7dda2e92433d256e3e3649",
+        "d7a0f79f9d1c778e3558a505da45f59462d9bf9d166e0ee6b30ef608568462f3",
     );
 });
 

@@ -1719,6 +1719,8 @@
 #splittermond-smoother-fight-hud .sf-prepared-spell-menu {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 34px;
+    container-type: inline-size;
+    container-name: sf-prepared-action;
     background: linear-gradient(120deg, rgba(216, 168, 93, 0.19), rgba(108, 201, 193, 0.08));
     box-shadow: inset 0 3px 0 rgba(242, 206, 135, 0.72);
 }
@@ -1762,6 +1764,7 @@
 }
 
 #splittermond-smoother-fight-hud .sf-prepared-spell-cast small {
+    overflow: hidden;
     color: var(--sf-gold-bright);
     font-size: var(--sf-font-meta);
     font-weight: 800;
@@ -1795,6 +1798,12 @@
 
 #splittermond-smoother-fight-hud .sf-prepared-spell-cancel:hover {
     background: rgba(198, 93, 85, 0.18) !important;
+}
+
+@container sf-prepared-action (max-width: 260px) {
+    #splittermond-smoother-fight-hud .sf-prepared-spell-cast b span {
+        display: none;
+    }
 }
 
 #splittermond-smoother-fight-hud .sf-action-menu > summary {

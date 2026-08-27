@@ -15,6 +15,7 @@ Dieses Update macht mehrstufige Kampfvorgänge ausfallsicherer. Begonnene und er
 ## Verbesserungen und Fehlerbehebungen
 
 - Optimierung des Release-Prozesses.
+- Vorbereitete Fernkampfangriffe und Zauber passen ihre Aktionsbeschriftung jetzt an die tatsächlich verfügbare Breite an. Dadurch überlagern lange Bezeichnungen wie **Vorbereiteter Fernkampfangriff** nicht mehr die Schaltfläche zum Auslösen.
 - Schadensanwendungen verwenden ein eindeutiges Zustandsmodell: **bereit → wird angewendet → abgeschlossen**. Ein begonnener Versuch gilt nicht länger automatisch als erfolgreich.
 - Kann sicher festgestellt werden, dass kein Schaden angewendet wurde – etwa weil das Ziel fehlt, nicht berechtigt ist oder Kosten nicht verbraucht werden konnten –, wird die Aktion für einen erneuten Versuch freigegeben.
 - Ist nach einem Fehler unklar, ob eine Änderung bereits wirksam wurde, bleibt der Vorgang vorsorglich gesperrt. Die Spielleitung kann ihn nach Prüfung erneut freigeben oder als abgeschlossen markieren.
