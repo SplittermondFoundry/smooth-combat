@@ -95,6 +95,7 @@ class TestActor {
         this.name = id;
         this.isOwner = true;
         this.items = new Map();
+        this.createdItems = [];
         this.tickApplications = 0;
         this.damageApplications = 0;
         this.splinterpointApplications = [];
@@ -124,6 +125,23 @@ class TestActor {
         this.damageApplications += 1;
         this.system.health.consumed.value += 1;
         if (this.damageErrorAfterMutation) throw this.damageErrorAfterMutation;
+    }
+
+    async createEmbeddedDocuments(documentName, sources) {
+        assert.equal(documentName, "Item");
+        const created = sources.map((source, index) => {
+            const item = clone(source);
+            item.id = `${this.id}-item-${this.createdItems.length + index}`;
+            item.update = async function update(change) {
+                if ("system.level" in change) this.system.level = change["system.level"];
+            };
+            return item;
+        });
+        for (const item of created) {
+            this.items.set(item.id, item);
+            this.createdItems.push(item);
+        }
+        return created;
     }
 
     async useSplinterpointBonus(message) {
@@ -445,6 +463,74 @@ test("the in-memory fumble lock closes the parallel-click gap before the persist
     assert.equal(message.flags[MODULE_ID].fumble.ticksApplicationStarted, true);
     assert.equal(message.flags[MODULE_ID].fumble.ticksApplied, true);
     assert.equal(message.setFlagCalls, 2);
+});
+
+test("fumble conditions are embedded only in the actor identified by the token actor UUID", async (t) => {
+    resetHarness();
+    const speakerActor = new TestActor("speaker-actor");
+    const tokenActor = new TestActor("synthetic-token-actor");
+    tokenActor.uuid = "Scene.scene.Token.token.Actor.synthetic-token-actor";
+    const fumble = {
+        ...fumbleData(),
+        actorUuid: tokenActor.uuid,
+        ticks: 0,
+        conditions: [
+            { name: "Erschöpft", level: 2, uuid: null, durationTicks: null },
+            { name: "Benommen", level: 1, uuid: null, durationTicks: 30 },
+        ],
+    };
+    const message = new TestMessage("token-fumble", { actor: speakerActor, fumble });
+    const previousFromUuidSync = globalThis.fromUuidSync;
+    globalThis.fromUuidSync = (uuid) => uuid === tokenActor.uuid ? tokenActor : null;
+    t.after(() => {
+        if (previousFromUuidSync === undefined) delete globalThis.fromUuidSync;
+        else globalThis.fromUuidSync = previousFromUuidSync;
+    });
+
+    await handleFumbleAction(message, "conditions");
+
+    assert.equal(speakerActor.createdItems.length, 0);
+    assert.deepEqual(tokenActor.createdItems.map((item) => [
+        item.name,
+        item.system.level,
+        item.system.combatEvent.interval,
+    ]), [
+        ["Erschöpft", 2, null],
+        ["Benommen", 1, 30],
+    ]);
+    assert.equal(getFumbleActionApplicationState(message, "conditions"), "completed");
+});
+
+test("a weapon fumble advances the source weapon through Splittermond's persistent damage fields", async () => {
+    resetHarness();
+    const actor = new TestActor("weapon-actor");
+    const weapon = {
+        id: "weapon-id",
+        name: "Langschwert",
+        type: "weapon",
+        system: { durability: 5, sufferedDamage: 6, damageLevel: 1 },
+        async update(change) {
+            assert.deepEqual(change, { "system.sufferedDamage": 11 });
+            this.system.sufferedDamage = change["system.sufferedDamage"];
+            this.system.damageLevel = 2;
+        },
+    };
+    actor.items.set(weapon.id, weapon);
+    const message = new TestMessage("weapon-fumble", {
+        actor,
+        fumble: {
+            ...fumbleData(),
+            ticks: 0,
+            damagesWeapon: true,
+            sourceItemId: weapon.id,
+        },
+    });
+
+    await handleFumbleAction(message, "weapon");
+
+    assert.equal(weapon.system.sufferedDamage, 11);
+    assert.equal(weapon.system.damageLevel, 2);
+    assert.equal(getFumbleActionApplicationState(message, "weapon"), "completed");
 });
 
 test("rejected legacy-tick completion becomes uncertain and cannot advance the actor twice", async (t) => {

@@ -19,13 +19,20 @@ import {
 } from "../../shared/application-state.js";
 
 import {
-    cloneData,
     escapeAttr,
     escapeHtml,
     localizeSystem,
     numericValue,
     t,
 } from "../../shared/values.js";
+
+import {
+    applyFumbleConditions,
+} from "./status-effects.js";
+import {
+    getWeaponDamageSnapshot,
+    increaseFumbleWeaponDamage,
+} from "./weapon-damage.js";
 
 const fumbleActionLocks = new Set();
 const staleFumbleActionTimers = new Map();
@@ -114,7 +121,7 @@ function findFumbleSourceMessage(message, kind) {
     }) ?? null;
 }
 
-function extractFumbleEffects(contentOrRoot) {
+export function extractFumbleEffects(contentOrRoot) {
     let root = contentOrRoot;
     if (typeof contentOrRoot === "string") {
         const template = document.createElement("template");
@@ -137,9 +144,17 @@ function extractFumbleEffects(contentOrRoot) {
         if (!uuid.includes("splittermond.statuseffects") && !pack.includes("splittermond.statuseffects")) continue;
         const parsed = parseStatusEffectLabel(link.textContent);
         if (!parsed.name) continue;
-        conditions.push({ uuid: uuid || null, name: parsed.name, level: parsed.level });
+        const condition = {
+            uuid: uuid || null,
+            name: parsed.name,
+            level: parsed.level,
+            durationTicks: statusEffectDurationTicks(link),
+        };
+        if (!conditions.some((existing) => sameExtractedCondition(existing, condition))) conditions.push(condition);
     }
-    const activeText = String(active.textContent ?? "");
+    const activeText = Array.from(active.childNodes ?? [])
+        .map((node) => String(node.textContent ?? ""))
+        .join(" ");
     const damagesWeapon = /\b(?:beschädigte\s+Waffe|damaged\s+weapon)\b/iu.test(activeText);
     if (/\b(?:liegend|prone)\b/iu.test(activeText)
         && !conditions.some((condition) => /^(?:liegend|prone)$/iu.test(condition.name))) {
@@ -149,8 +164,24 @@ function extractFumbleEffects(contentOrRoot) {
             level: 1,
         });
     }
-    const conditionMode = /\b(?:oder|or)\b/iu.test(active.textContent ?? "") ? "choose" : "all";
+    const conditionMode = conditions.length > 1 && /\b(?:oder|or)\b/iu.test(activeText) ? "choose" : "all";
     return { damage, ticks, tickMessage, damagesWeapon, conditions, conditionMode };
+}
+
+function sameExtractedCondition(left, right) {
+    return left.name.localeCompare(right.name, game.i18n.lang, { sensitivity: "base" }) === 0
+        && left.level === right.level
+        && left.durationTicks === right.durationTicks;
+}
+
+function statusEffectDurationTicks(link) {
+    let trailingText = "";
+    for (let sibling = link.nextSibling; sibling; sibling = sibling.nextSibling) {
+        if (sibling.matches?.("a[data-uuid], a[data-pack], a.content-link")) break;
+        trailingText += sibling.textContent ?? "";
+    }
+    const match = trailingText.match(/\b(?:für|for)\s+(?:weitere\s+|another\s+)?(\d+)\s+(?:weitere\s+)?ticks?\b/iu);
+    return match ? Math.max(1, Number.parseInt(match[1], 10)) : null;
 }
 
 export function decorateFumbleCard(content, fumble) {
@@ -159,23 +190,41 @@ export function decorateFumbleCard(content, fumble) {
     template.innerHTML = content ?? "";
     const table = template.content.querySelector(".fumble-table-result");
     if (!table) return content;
-    const conditionNames = fumble.conditions.map((condition) => `${condition.name} ${condition.level}`).join(", ");
-    const conditionActions = fumble.conditionMode === "choose"
-        ? fumble.conditions.map((condition, index) => `<button type="button" data-sf-fumble-action="condition:${index}"><i class="fa-solid fa-person-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleCondition", { condition: `${condition.name} ${condition.level}` }))}</button>`).join("")
-        : fumble.conditions.length
-            ? `<button type="button" data-sf-fumble-action="conditions" title="${escapeAttr(conditionNames)}"><i class="fa-solid fa-person-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleConditions", { count: fumble.conditions.length }))}</button>`
-            : "";
     const actions = `<div class="sf-fumble-actions">
         <strong><i class="fa-solid fa-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumble"))}</strong>
-        ${fumble.ticks ? `<button type="button" data-sf-fumble-action="ticks"><i class="fa-solid fa-stopwatch"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleTicks", { ticks: fumble.ticks }))}</button>` : ""}
-        ${fumble.damagesWeapon && fumble.sourceItemId ? `<button type="button" data-sf-fumble-action="weapon"><i class="fa-solid fa-hammer"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleWeaponDamage"))}</button>` : ""}
-        ${fumble.damage ? `<button type="button" data-sf-fumble-action="damage"><i class="fa-solid fa-heart-crack"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleDamage", { damage: fumble.damage }))}</button>` : ""}
-        ${conditionActions}
+        ${getFumbleActionKeys(fumble).map((action) => fumbleActionButtonMarkup(fumble, action)).join("")}
     </div>`;
     table.insertAdjacentHTML("afterend", actions);
     const wrapper = document.createElement("div");
     wrapper.append(template.content.cloneNode(true));
     return wrapper.innerHTML;
+}
+
+export function getFumbleActionKeys(fumble) {
+    const actions = [];
+    if (fumble.ticks > 0) actions.push("ticks");
+    if (fumble.damagesWeapon && fumble.sourceItemId) actions.push("weapon");
+    if (fumble.damage > 0) actions.push("damage");
+    if (fumble.conditionMode === "choose") {
+        fumble.conditions.forEach((_condition, index) => actions.push(`condition:${index}`));
+    } else if (fumble.conditions.length > 0) {
+        actions.push("conditions");
+    }
+    return actions;
+}
+
+function fumbleActionButtonMarkup(fumble, action) {
+    if (action === "ticks") return `<button type="button" data-sf-fumble-action="ticks"><i class="fa-solid fa-stopwatch"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleTicks", { ticks: fumble.ticks }))}</button>`;
+    if (action === "weapon") return `<button type="button" data-sf-fumble-action="weapon"><i class="fa-solid fa-hammer"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleWeaponDamage"))}</button>`;
+    if (action === "damage") return `<button type="button" data-sf-fumble-action="damage"><i class="fa-solid fa-heart-crack"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleDamage", { damage: fumble.damage }))}</button>`;
+    if (action === "conditions") {
+        const names = fumble.conditions.map((condition) => `${condition.name} ${condition.level}`).join(", ");
+        return `<button type="button" data-sf-fumble-action="conditions" title="${escapeAttr(names)}"><i class="fa-solid fa-person-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleConditions", { count: fumble.conditions.length }))}</button>`;
+    }
+    const index = Number.parseInt(action.split(":")[1], 10);
+    const condition = fumble.conditions[index];
+    if (!condition) return "";
+    return `<button type="button" data-sf-fumble-action="${escapeAttr(action)}"><i class="fa-solid fa-person-burst"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleCondition", { condition: `${condition.name} ${condition.level}` }))}</button>`;
 }
 
 export function bindFumbleActions(message, html) {
@@ -288,9 +337,7 @@ async function applyFumbleAction(message, actor, fumble, action, definition) {
             notification = t("SMOOTHER_FIGHT.HUD.FumbleTicksApplied", { ticks: updated.ticks, name: actor.name });
         }
         if (action === "weapon") {
-            const currentDamageLevel = Math.max(0, numericValue(item.system?.damageLevel));
-            const nextDamageLevel = Math.min(2, currentDamageLevel + 1);
-            await item.update({ "system.damageLevel": nextDamageLevel });
+            await increaseFumbleWeaponDamage(item);
             notification = t("SMOOTHER_FIGHT.HUD.FumbleWeaponDamageApplied", { item: item.name });
         }
         if (action === "damage") {
@@ -376,7 +423,7 @@ async function persistFumbleFailureState(message, fumble, definition, state) {
 
 function fumbleEffectSnapshot(actor, action, item) {
     if (action === "damage") return healthCostTotal(actor.system?.health);
-    if (action === "weapon") return numericValue(item?.system?.damageLevel);
+    if (action === "weapon") return getWeaponDamageSnapshot(item);
     if (action === "conditions" || action.startsWith("condition:")) {
         return Array.from(actor.items ?? [])
             .filter((candidate) => candidate.type === "statuseffect")
@@ -430,44 +477,6 @@ function clearStaleFumbleRender(key) {
     const timer = staleFumbleActionTimers.get(key);
     if (timer) clearTimeout(timer);
     staleFumbleActionTimers.delete(key);
-}
-
-async function applyFumbleConditions(actor, conditions) {
-    for (const condition of conditions) {
-        const existing = Array.from(actor.items ?? []).find((item) =>
-            item.type === "statuseffect" && item.name.localeCompare(condition.name, game.i18n.lang, { sensitivity: "base" }) === 0
-        );
-        if (existing) {
-            const current = Math.max(0, numericValue(existing.system?.level));
-            await existing.update({ "system.level": current + condition.level });
-            continue;
-        }
-        const sourceItem = await resolveStatusEffectSource(condition);
-        if (!sourceItem) throw new Error(`Status effect not found: ${condition.name}`);
-        const source = cloneData(sourceItem.toObject());
-        delete source._id;
-        source.system ??= {};
-        source.system.level = condition.level;
-        await actor.createEmbeddedDocuments("Item", [source]);
-    }
-}
-
-async function resolveStatusEffectSource(condition) {
-    if (condition.uuid) {
-        let item = null;
-        try {
-            item = globalThis.fromUuidSync?.(condition.uuid) ?? await globalThis.fromUuid?.(condition.uuid);
-        } catch (error) {
-            console.debug(`${MODULE_ID} | Could not resolve ${condition.uuid} synchronously`, error);
-            item = await globalThis.fromUuid?.(condition.uuid);
-        }
-        if (item) return item;
-    }
-    const pack = game.packs.get("splittermond.statuseffects");
-    if (!pack) return null;
-    const index = await pack.getIndex({ fields: ["name"] });
-    const entry = index.find((candidate) => candidate.name.localeCompare(condition.name, game.i18n.lang, { sensitivity: "base" }) === 0);
-    return entry ? pack.getDocument(entry._id) : null;
 }
 
 function resolveFumbleActor(message, fumble) {
