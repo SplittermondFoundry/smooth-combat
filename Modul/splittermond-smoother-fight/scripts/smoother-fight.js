@@ -1,4 +1,4 @@
-import { configureServices } from "./core/services.js";
+import { configureServices, services } from "./core/services.js";
 import { registerHooks, registerSocket } from "./core/lifecycle.js";
 import { registerSettings } from "./core/settings.js";
 import * as activeDefenseApi from "./features/active-defense/api.js";
@@ -17,6 +17,7 @@ import {
 } from "./features/feedback/feedback.js";
 import { registerAudioSettingsMenu } from "./features/feedback/settings-app.js";
 import * as fumblesApi from "./features/fumbles/api.js";
+import * as gmCheatApi from "./features/gm-cheat/api.js";
 import * as hudApi from "./features/hud/api.js";
 import { registerAppearanceSettingsMenu } from "./features/hud/appearance.js";
 import { mountHud, renderHud } from "./features/hud/controller.js";
@@ -32,6 +33,7 @@ configureServices(
     combatEventsApi,
     feedbackApi,
     fumblesApi,
+    gmCheatApi,
     hudApi,
     targetingApi,
 );
@@ -46,6 +48,7 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", async () => {
     await migrateAudioFeedbackSettings();
+    services.installGmCheatRollInterceptor();
     installHealthCostFeedbackInterceptor();
     mountHud();
     seedHealthFeedbackState();

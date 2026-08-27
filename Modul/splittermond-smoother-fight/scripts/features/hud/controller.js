@@ -455,6 +455,9 @@ class SmootherFightHud {
                 case "toggle-theme":
                     await game.settings.set(MODULE_ID, "theme", getSetting("theme", "dark") === "light" ? "dark" : "light");
                     break;
+                case "toggle-cheat-roll":
+                    await services.toggleGmCheatRoll();
+                    break;
             }
         } catch (error) {
             console.error(`${MODULE_ID} | HUD action failed`, error);

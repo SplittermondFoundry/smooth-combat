@@ -3,23 +3,35 @@ import assert from "node:assert/strict";
 
 test("bootstrap preserves settings, menus, and keybinding contracts", async () => {
     const onceCallbacks = new Map();
+    const hookCallbacks = [];
     const settings = [];
     const menus = [];
     const keybindings = [];
+    const appendedElements = [];
 
     globalThis.Hooks = {
         once: (name, callback) => onceCallbacks.set(name, callback),
+        on: (name, callback) => hookCallbacks.push({ name, callback }),
     };
     globalThis.game = {
         settings: {
             get: () => ({}),
+            set: async () => true,
             register: (moduleId, key, options) => settings.push({ moduleId, key, options }),
             registerMenu: (moduleId, key, options) => menus.push({ moduleId, key, options }),
         },
         keybindings: {
             register: (moduleId, key, options) => keybindings.push({ moduleId, key, options }),
         },
+        socket: {
+            on: () => {},
+        },
     };
+    class TestDie {
+        randomFace() {
+            return 1;
+        }
+    }
     class ApplicationV2 {}
     globalThis.foundry = {
         applications: {
@@ -28,6 +40,32 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
                 HandlebarsApplicationMixin: (Base) => class extends Base {},
             },
         },
+    };
+    globalThis.CONFIG = {
+        Actor: { documentClass: class {} },
+        Dice: { terms: { d: TestDie } },
+    };
+    globalThis.canvas = { scene: null };
+    globalThis.window = { addEventListener: () => {} };
+    globalThis.document = {
+        body: { append: (element) => appendedElements.push(element) },
+        createElement: () => ({
+            addEventListener: () => {},
+            classList: {
+                add: () => {},
+                remove: () => {},
+                toggle: () => {},
+            },
+            dataset: {},
+            remove: () => {},
+            replaceChildren: () => {},
+            setAttribute: () => {},
+            style: {
+                removeProperty: () => {},
+                setProperty: () => {},
+            },
+        }),
+        querySelector: () => null,
     };
 
     await import("../Modul/splittermond-smoother-fight/scripts/smoother-fight.js?bootstrap-contract");
@@ -164,4 +202,9 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
         ["collapseCombatActions", [{ key: "KeyX" }]],
         ["openLatestCombatAction", [{ key: "KeyY" }, { key: "KeyZ" }]],
     ]);
+
+    await assert.doesNotReject(() => onceCallbacks.get("ready")());
+    assert.equal(appendedElements.length, 1, "the ready hook must mount the HUD without a runtime error");
+    assert.equal(appendedElements[0].id, "splittermond-smoother-fight-hud");
+    assert.ok(hookCallbacks.length > 0, "the ready hook must register runtime hooks");
 });

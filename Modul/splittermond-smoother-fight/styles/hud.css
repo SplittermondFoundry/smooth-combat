@@ -203,6 +203,27 @@
     background: rgba(216, 168, 93, 0.14);
 }
 
+#splittermond-smoother-fight-hud .sf-hud-toggle.sf-cheat-roll-toggle {
+    flex-basis: 24px;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    font-size: 10px;
+    opacity: 0.72;
+}
+
+#splittermond-smoother-fight-hud .sf-hud-toggle.sf-cheat-roll-toggle:hover,
+#splittermond-smoother-fight-hud .sf-hud-toggle.sf-cheat-roll-toggle.is-active {
+    opacity: 1;
+}
+
+#splittermond-smoother-fight-hud .sf-hud-toggle.sf-cheat-roll-toggle.is-active {
+    border-color: var(--sf-gold-bright);
+    color: var(--sf-gold-bright);
+    background: rgba(216, 168, 93, 0.2);
+    box-shadow: 0 0 8px rgba(242, 206, 135, 0.28);
+}
+
 #splittermond-smoother-fight-hud .sf-live-dot {
     width: 7px;
     height: 7px;

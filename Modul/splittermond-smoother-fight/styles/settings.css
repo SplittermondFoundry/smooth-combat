@@ -2208,6 +2208,60 @@
     width: 100%;
 }
 
+.sf-cheat-roll-dialog > p {
+    margin-top: 0;
+    color: var(--color-text-secondary, #777);
+    line-height: 1.4;
+}
+
+.sf-cheat-roll-formula {
+    margin: 8px 0 0;
+    text-align: center;
+}
+
+.sf-cheat-roll-formula code {
+    display: inline-block;
+    max-width: 100%;
+    padding: 4px 7px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sf-cheat-roll-dialog fieldset {
+    margin: 14px 0 0;
+    padding: 10px;
+    border: 1px solid var(--color-border-light-primary, #999);
+    border-radius: 5px;
+}
+
+.sf-cheat-roll-dialog legend {
+    padding: 0 5px;
+    font-weight: 700;
+}
+
+.sf-cheat-dice-inputs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
+    gap: 8px;
+}
+
+.sf-cheat-dice-inputs label {
+    display: grid;
+    gap: 4px;
+    text-align: center;
+}
+
+.sf-cheat-dice-inputs label[hidden] {
+    display: none;
+}
+
+.sf-cheat-dice-inputs input {
+    width: 100%;
+    min-width: 0;
+    text-align: center;
+}
+
 .sf-user-dot {
     width: 8px;
     height: 8px;

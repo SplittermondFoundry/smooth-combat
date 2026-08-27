@@ -109,6 +109,7 @@ export async function buildHud(context) {
                         ${turnNotice}
                         ${controllerNotice}
                         <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
+                        ${buildGmCheatToggle()}
                         ${buildThemeToggle()}
                         ${hudToggle}
                     </header>
@@ -131,6 +132,7 @@ export async function buildHud(context) {
                     ${turnNotice}
                     ${controllerNotice}
                     <span class="sf-turn-target ${personalTarget ? "is-user-target" : ""}"><i class="fa-solid fa-crosshairs"></i> ${escapeHtml(targetLine)}</span>
+                    ${buildGmCheatToggle()}
                     ${buildThemeToggle()}
                     ${hudToggle}
                 </header>
@@ -164,6 +166,7 @@ async function buildConcealedHud(context) {
         <header class="sf-turnline">
             <span class="sf-live-dot"></span>
             <strong class="sf-concealed-name" title="${escapeAttr(label)}"><i class="fa-solid fa-circle-question"></i><span aria-hidden="true">?</span></strong>
+            ${buildGmCheatToggle()}
             ${buildThemeToggle()}
             ${hudToggle}
         </header>`;
@@ -203,6 +206,16 @@ function buildThemeToggle() {
     const light = getSetting("theme", "dark") === "light";
     const label = t(light ? "SMOOTHER_FIGHT.HUD.UseDarkMode" : "SMOOTHER_FIGHT.HUD.UseLightMode");
     return `<button type="button" class="sf-hud-toggle sf-theme-toggle" data-sf-action="toggle-theme" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid ${light ? "fa-moon" : "fa-sun"}"></i></button>`;
+}
+
+function buildGmCheatToggle() {
+    if (!game.user?.isGM) return "";
+    const preset = services.getGmCheatRollPreset();
+    const active = Boolean(preset);
+    const label = active
+        ? t("SMOOTHER_FIGHT.HUD.CheatRollCancel")
+        : t("SMOOTHER_FIGHT.HUD.CheatRoll");
+    return `<button type="button" class="sf-hud-toggle sf-cheat-roll-toggle ${active ? "is-active" : ""}" data-sf-action="toggle-cheat-roll" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" aria-pressed="${active}"><i class="fa-solid fa-dice"></i></button>`;
 }
 
 function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false, primary = false, showDefenses = true }) {
