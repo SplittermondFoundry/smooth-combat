@@ -36,7 +36,8 @@ export async function onCreateChatMessage(message) {
 }
 
 export async function onUpdateChatMessage(message, changes) {
-    if ((!hasSplittermondCheckUpdate(changes) && !hasDefenseContextUpdate(changes)) || !services.isDefenseMessage(message)) return;
+    const checkUpdated = hasSplittermondCheckUpdate(changes);
+    if ((!checkUpdated && !hasDefenseContextUpdate(changes)) || !services.isDefenseMessage(message)) return;
     try {
         const author = message.author ?? game.users.get(message.user?.id ?? message.user);
         const pending = services.normalizePendingDefense(services.getMessageContext(message));
@@ -50,7 +51,10 @@ export async function onUpdateChatMessage(message, changes) {
         await services.processDefenseMessage(
             message,
             processForAuthor ? pending : null,
-            { allowForeign: processForAuthor }
+            {
+                allowForeign: processForAuthor,
+                queueIfBusy: checkUpdated,
+            }
         );
         services.announceMessageFeedback(message);
     } catch (error) {

@@ -134,14 +134,24 @@ export async function claimPendingDefenseForMessage(message) {
     return pending;
 }
 
-export async function processDefenseMessage(message, pendingOverride = null, { allowForeign = false } = {}) {
-    if (activeDefenseState.processingDefenseMessages.has(message.id)) return null;
-    activeDefenseState.processingDefenseMessages.add(message.id);
+export async function processDefenseMessage(
+    message,
+    pendingOverride = null,
+    { allowForeign = false, queueIfBusy = true } = {}
+) {
+    const previous = activeDefenseState.processingDefenseMessages.get(message.id);
+    if (previous && !queueIfBusy) return null;
+    const operation = (previous ?? Promise.resolve())
+        .catch(() => undefined)
+        .then(() => processDefenseMessageOnce(message, pendingOverride, { allowForeign }));
+    activeDefenseState.processingDefenseMessages.set(message.id, operation);
     try {
-        return await processDefenseMessageOnce(message, pendingOverride, { allowForeign });
+        return await operation;
     } finally {
-        activeDefenseState.claimedDefenses.delete(message.id);
-        activeDefenseState.processingDefenseMessages.delete(message.id);
+        if (activeDefenseState.processingDefenseMessages.get(message.id) === operation) {
+            activeDefenseState.claimedDefenses.delete(message.id);
+            activeDefenseState.processingDefenseMessages.delete(message.id);
+        }
     }
 }
 

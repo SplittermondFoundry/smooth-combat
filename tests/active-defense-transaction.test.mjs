@@ -594,6 +594,50 @@ test("a broken splinterpoint rerender retains Defensiv and recalculates the atta
     assert.equal(defense.flags[MODULE_ID].context.defensiveFeatureValue, 2);
 });
 
+test("a concurrent splinterpoint update queues behind the initial active defense", async () => {
+    resetHarness();
+    const root = createAttack("attack-concurrent-defense-splinterpoint", attackReport({
+        difficulty: 29,
+        roll: { total: 38 },
+        isCrit: true,
+        degreeOfSuccess: { fromRoll: 6, modification: 0 },
+    }));
+    const defense = createDefense("defense-concurrent-splinterpoint", 35, "defender-concurrent");
+    const initialCheck = harness.checks.get(defense.id);
+    initialCheck.baseDefense = 25;
+    initialCheck.degreeOfSuccess.fromRoll = 6;
+    initialCheck.itemData.itemFeatures = {
+        internalFeatureList: [{ name: "Defensiv", value: 3 }],
+    };
+    defense.flags.splittermond.check = clone(initialCheck);
+    const pending = pendingFor(root, defense, 1);
+
+    const initialProcessing = processDefenseMessage(defense, pending);
+    const ignoredContextProcessing = processDefenseMessage(defense, pending, { queueIfBusy: false });
+
+    const improvedCheck = clone(initialCheck);
+    improvedCheck.degreeOfSuccess.fromRoll = 7;
+    harness.checks.set(defense.id, improvedCheck);
+    defense.flags.splittermond.check = clone(improvedCheck);
+    defense.content = '<div class="degree-of-success-description"><strong>VTD: 36</strong></div>';
+    const updateProcessing = processDefenseMessage(defense, pending);
+
+    const [, ignoredContextResult] = await Promise.all([
+        initialProcessing,
+        ignoredContextProcessing,
+        updateProcessing,
+    ]);
+
+    const latest = latestOffense(root);
+    assert.equal(ignoredContextResult, null);
+    assert.equal(defense.flags[MODULE_ID].context.resultingDefenseValue, 36);
+    assert.equal(defense.flags[MODULE_ID].context.defensiveFeatureValue, 3);
+    assert.equal(latest.flags[MODULE_ID].context.defenseValue, 36);
+    assert.equal(latest.system.checkReport.difficulty, 36);
+    assert.equal(latest.system.checkReport.degreeOfSuccess.fromRoll, 3);
+    assert.equal(activeDefenseState.processingDefenseMessages.size, 0);
+});
+
 test("an improved defense remains visible when the attack outcome does not change", async () => {
     resetHarness();
     const root = createAttack("attack-stable", attackReport({

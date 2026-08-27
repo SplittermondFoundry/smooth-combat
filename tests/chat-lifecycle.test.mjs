@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { configureServices } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
-import { onCreateChatMessage } from "../Modul/splittermond-smoother-fight/scripts/features/chat/lifecycle.js";
+import {
+    onCreateChatMessage,
+    onUpdateChatMessage,
+} from "../Modul/splittermond-smoother-fight/scripts/features/chat/lifecycle.js";
 
 const harness = {
     calls: [],
     contexts: new WeakMap(),
+    defense: false,
     fumble: false,
     assignedUser: null,
     runtimeController: null,
@@ -55,7 +59,7 @@ configureServices({
     },
     isDefenseMessage: (message) => {
         record("isDefenseMessage", message);
-        return false;
+        return harness.defense;
     },
     isFumbleTableMessage: (message) => {
         record("isFumbleTableMessage", message);
@@ -63,7 +67,8 @@ configureServices({
     },
     isOwnMessage: (message) => message.author?.id === game.user.id,
     initialDefensePhaseForOffense: () => "unavailable",
-    processDefenseMessage: async (message) => record("processDefenseMessage", message),
+    normalizePendingDefense: (value) => value,
+    processDefenseMessage: async (...args) => record("processDefenseMessage", ...args),
     setRequiredFlag: async (message, key, value) => {
         record("setRequiredFlag", message, key, value);
         if (key === "context") harness.contexts.set(message, value);
@@ -96,6 +101,7 @@ function createHooksHarness() {
 function createFixture({ diceActive = true, fumble = false, pendingKind = null } = {}) {
     harness.calls.length = 0;
     harness.contexts = new WeakMap();
+    harness.defense = false;
     harness.fumble = fumble;
     harness.primaryTargetUuid = null;
     harness.pendingKinds = new Map();
@@ -155,6 +161,39 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
 
     return { actor, attackerToken, assignedUser, combatant, currentUser, hooks, message, runtimeController, targetA, targetB };
 }
+
+test("updated defense checks queue behind processing while internal context updates do not", async (t) => {
+    const gameDescriptor = Object.getOwnPropertyDescriptor(globalThis, "game");
+    const hooksDescriptor = Object.getOwnPropertyDescriptor(globalThis, "Hooks");
+    t.after(() => {
+        if (gameDescriptor) Object.defineProperty(globalThis, "game", gameDescriptor);
+        else delete globalThis.game;
+        if (hooksDescriptor) Object.defineProperty(globalThis, "Hooks", hooksDescriptor);
+        else delete globalThis.Hooks;
+    });
+    const fixture = createFixture({ diceActive: false });
+    fixture.currentUser.isGM = true;
+    harness.defense = true;
+
+    await onUpdateChatMessage(fixture.message, {
+        "flags.splittermond.check.degreeOfSuccess.fromRoll": 7,
+    });
+    assert.deepEqual(callsOf("processDefenseMessage").map(({ args }) => args), [[
+        fixture.message,
+        null,
+        { allowForeign: false, queueIfBusy: true },
+    ]]);
+
+    harness.calls.length = 0;
+    await onUpdateChatMessage(fixture.message, {
+        "flags.splittermond-smoother-fight.context.resultingDefenseValue": 36,
+    });
+    assert.deepEqual(callsOf("processDefenseMessage").map(({ args }) => args), [[
+        fixture.message,
+        null,
+        { allowForeign: false, queueIfBusy: false },
+    ]]);
+});
 
 async function waitForDiceHook(hooks) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
