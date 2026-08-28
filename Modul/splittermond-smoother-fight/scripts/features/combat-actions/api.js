@@ -39,6 +39,24 @@ export {
 } from "./tick-actions.js";
 
 export {
+    abortMovementPlan,
+    advancePendingMovements,
+    cancelMovementPlanAfterManualMove,
+    clearMovementPlanForCombatant,
+    clearMovementPlansForCombat,
+    clearMovementRoutePreview,
+    clearTemporaryMovementRoutePreview,
+    getAbortableControlledTokenMovement,
+    isMovementRoutePreviewPersistent,
+    isMovementRoutePreviewVisible,
+    refreshMovementRoutePreviewScale,
+    renderTokenMovementControl,
+    syncDefaultMovementRoutePreviews,
+    togglePersistentMovementRoutePreview,
+    toggleMovementRoutePreview,
+} from "./movement.js";
+
+export {
     clearAttackPreparationForCombatant,
     clearAttackPreparationsForCombat,
     dismissAttackPreparation,

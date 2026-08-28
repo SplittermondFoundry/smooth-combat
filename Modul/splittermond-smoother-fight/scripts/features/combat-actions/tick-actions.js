@@ -22,6 +22,10 @@ import {
     setAttackPreparation,
 } from "./attack-preparation.js";
 
+import {
+    performTrackedMovementAction,
+} from "./movement.js";
+
 const SELECTABLE_DURATION_ACTIONS = new Set(["aim", "searchOpening"]);
 const SHIELD_BASH_MANEUVERS = Object.freeze([]);
 const WRONG_HAND_TICK_PENALTY = 2;
@@ -36,6 +40,11 @@ export async function performTickAction(context, actionId, requestedTicks = "cus
 
     if (SELECTABLE_DURATION_ACTIONS.has(action.id)) return performTimedPreparation(context, action);
     switch (action.id) {
+        case "walk":
+        case "sprint": {
+            const tracked = await performTrackedMovementAction(context, action);
+            return tracked === null ? performReferenceAction(context, action, requestedTicks) : tracked;
+        }
         case "disengage":
             return performDisengage(context, action);
         case "shieldBash":

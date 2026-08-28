@@ -77,6 +77,36 @@ export function buildMovementTracker(context) {
     </section>`;
 }
 
+export function buildSelectedMovementControl(combat) {
+    const token = services.getAbortableControlledTokenMovement(combat);
+    const tokenReference = token?.uuid ?? token?.id;
+    if (!token || !tokenReference) return "";
+    const tokenName = token.name ?? token.actor?.name ?? "–";
+    const description = t("SMOOTHER_FIGHT.HUD.SelectedMovementPlan", { token: tokenName });
+    const abortLabel = t("SMOOTHER_FIGHT.HUD.AbortMovement");
+    const routeVisible = services.isMovementRoutePreviewVisible(token);
+    const routePersistent = services.isMovementRoutePreviewPersistent(token);
+    const routeLabel = t(routeVisible
+        ? "SMOOTHER_FIGHT.HUD.HideMovementRoute"
+        : "SMOOTHER_FIGHT.HUD.ShowMovementRoute");
+    const persistentLabel = t(routePersistent
+        ? "SMOOTHER_FIGHT.HUD.HidePersistentMovementRoute"
+        : "SMOOTHER_FIGHT.HUD.ShowPersistentMovementRoute");
+    return `
+        <section class="sf-combat-controls sf-selected-movement-control" aria-label="${escapeAttr(description)}">
+            <span><i class="fa-solid fa-route" aria-hidden="true"></i> ${escapeHtml(description)}</span>
+            <button type="button" class="sf-icon-button ${routeVisible ? "is-active" : ""}" data-sf-action="toggle-movement-route" data-token-uuid="${escapeAttr(tokenReference)}" title="${escapeAttr(routeLabel)}" aria-pressed="${routeVisible}">
+                <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i><span>${escapeHtml(routeLabel)}</span>
+            </button>
+            <button type="button" class="sf-icon-button ${routePersistent ? "is-active" : ""}" data-sf-action="toggle-persistent-movement-route" data-token-uuid="${escapeAttr(tokenReference)}" title="${escapeAttr(persistentLabel)}" aria-pressed="${routePersistent}">
+                <i class="fa-solid fa-thumbtack" aria-hidden="true"></i><span>${escapeHtml(persistentLabel)}</span>
+            </button>
+            <button type="button" class="sf-icon-button is-danger" data-sf-action="abort-selected-movement" data-token-uuid="${escapeAttr(tokenReference)}" title="${escapeAttr(abortLabel)}">
+                <i class="fa-solid fa-person-circle-xmark" aria-hidden="true"></i><span>${escapeHtml(abortLabel)}</span>
+            </button>
+        </section>`;
+}
+
 function movementSection(id, name, distance, progress, state) {
     const className = `sf-movement-section sf-movement-section-${id}`;
     const style = `--sf-movement-fill:${progress.toFixed(3)}%`;

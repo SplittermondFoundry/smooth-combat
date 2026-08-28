@@ -12,11 +12,18 @@ import {
 } from "../Modul/splittermond-smoother-fight/scripts/features/hud/context.js";
 import { buildTickActionReference } from "../Modul/splittermond-smoother-fight/scripts/features/hud/tick-action-reference.js";
 import { buildHud } from "../Modul/splittermond-smoother-fight/scripts/features/hud/view.js";
-import { markZeroHealthTargetDefeated } from "../Modul/splittermond-smoother-fight/scripts/features/hud/controller.js";
+import {
+    abortSelectedTokenMovement,
+    markZeroHealthTargetDefeated,
+    toggleSelectedTokenPersistentMovementRoute,
+    toggleSelectedTokenMovementRoute,
+} from "../Modul/splittermond-smoother-fight/scripts/features/hud/controller.js";
 import { toggleFavoriteTickAction } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
 import { getAttackPreparation } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/attack-preparation.js";
 
 const harness = {
+    abortCalls: [],
+    abortableMovement: null,
     controlledToken: null,
     controlCalls: [],
     meleeRange: 2,
@@ -26,6 +33,9 @@ const harness = {
     revealTargetDefenses: false,
     revealTargetResources: false,
     renderCalls: 0,
+    routePreviewVisible: false,
+    routePreviewPersistent: false,
+    routeToggleCalls: [],
     targetSelection: {
         target: null,
         targets: [],
@@ -35,21 +45,48 @@ const harness = {
 };
 
 configureServices({
+    abortMovementPlan: async (...args) => {
+        harness.abortCalls.push(args);
+        return true;
+    },
     canChooseTarget: () => false,
     feedbackMarkup: () => "",
     getAttackSpeed: async (attack) => attack.weaponSpeed ?? 0,
     getAssignedUser: (combatant) => combatant.assignedUser ?? null,
     getAttackPreparation,
     getControlledTokenDocument: () => harness.controlledToken,
+    getAbortableControlledTokenMovement: () => harness.abortableMovement,
     getGmCheatRollPreset: () => null,
     getRuntimeController: (combatant) => combatant.runtimeController ?? null,
     getTargetSelectionForUser: () => harness.targetSelection,
     getPendingActiveDefense: () => harness.pendingDefense,
+    isMovementRoutePreviewVisible: () => harness.routePreviewVisible,
+    isMovementRoutePreviewPersistent: () => harness.routePreviewPersistent,
     isPreparingSpell: () => false,
     isRangedAttack: (attack) => Boolean(attack.isRanged),
     isCurrentUserTarget: () => false,
+    resolveToken: (reference) => Array.from(globalThis.game?.combat?.combatants ?? [])
+        .map((candidate) => candidate.token?.document ?? candidate.token)
+        .find((token) => token?.uuid === reference || token?.id === reference) ?? null,
     resolveCombatantToken: (combatant) => combatant.token ?? null,
     scheduleRender: () => harness.renderCalls += 1,
+    toggleMovementRoutePreview: (...args) => {
+        harness.routeToggleCalls.push(args);
+        harness.routePreviewVisible = !harness.routePreviewVisible;
+        if (!harness.routePreviewVisible) harness.routePreviewPersistent = false;
+        return harness.routePreviewVisible;
+    },
+    togglePersistentMovementRoutePreview: (...args) => {
+        harness.routeToggleCalls.push(args);
+        if (harness.routePreviewPersistent) {
+            harness.routePreviewPersistent = false;
+            harness.routePreviewVisible = false;
+        } else {
+            harness.routePreviewPersistent = true;
+            harness.routePreviewVisible = true;
+        }
+        return harness.routePreviewVisible;
+    },
     tokenUuid: (token) => token?.uuid ?? null,
 });
 
@@ -86,6 +123,8 @@ function combatant(id, controller, { owner = false } = {}) {
 
 function installFixture() {
     resetPersonalCombatantSelection();
+    harness.abortCalls = [];
+    harness.abortableMovement = null;
     harness.controlledToken = null;
     harness.controlCalls = [];
     harness.meleeRange = 2;
@@ -94,6 +133,9 @@ function installFixture() {
     harness.revealTargetDefenses = false;
     harness.revealTargetResources = false;
     harness.renderCalls = 0;
+    harness.routePreviewVisible = false;
+    harness.routePreviewPersistent = false;
+    harness.routeToggleCalls = [];
     harness.targetSelection = {
         target: null,
         targets: [],
@@ -372,6 +414,41 @@ test("movement tracking setting shows and hides the tracker for the active comba
     harness.movementTracking = false;
     const disabled = await buildHud(getHudContext());
     assert.doesNotMatch(disabled, /sf-movement-tracker/u);
+});
+
+test("the combat HUD aborts the selected non-active token's movement", async () => {
+    const { active, combat, second } = installFixture();
+    globalThis.game.user = { id: "gm", isGM: true, name: "GM" };
+    harness.controlledToken = second.token;
+    harness.abortableMovement = second.token;
+
+    const html = await buildHud(getHudContext());
+
+    assert.match(html, new RegExp(active.actor.name, "u"), "the regular HUD remains on the active combatant");
+    assert.match(html, /class="sf-combat-controls sf-selected-movement-control"/u);
+    assert.match(html, /data-sf-action="abort-selected-movement"/u);
+    assert.match(html, /data-sf-action="toggle-movement-route"/u);
+    assert.match(html, /data-sf-action="toggle-persistent-movement-route"/u);
+    assert.match(html, /aria-pressed="false"/u);
+    assert.match(html, /data-token-uuid="Scene\.scene\.Token\.token-second"/u);
+    assert.match(html, /Token second/u);
+
+    assert.equal(await abortSelectedTokenMovement(combat, second.token.uuid), true);
+    assert.deepEqual(harness.abortCalls, [[second.token, combat]]);
+
+    assert.equal(toggleSelectedTokenMovementRoute(combat, second.token.uuid), true);
+    assert.deepEqual(harness.routeToggleCalls, [[second.token, combat]]);
+    const visibleRouteHtml = await buildHud(getHudContext());
+    assert.match(visibleRouteHtml, /aria-pressed="true"/u);
+    assert.match(visibleRouteHtml, /SMOOTHER_FIGHT\.HUD\.HideMovementRoute/u);
+    assert.equal(toggleSelectedTokenMovementRoute(combat, second.token.uuid), false);
+    assert.equal(harness.routePreviewVisible, false);
+
+    assert.equal(toggleSelectedTokenPersistentMovementRoute(combat, second.token.uuid), true);
+    assert.equal(harness.routePreviewPersistent, true);
+    const persistentRouteHtml = await buildHud(getHudContext());
+    assert.match(persistentRouteHtml, /SMOOTHER_FIGHT\.HUD\.HidePersistentMovementRoute/u);
+    assert.equal(toggleSelectedTokenPersistentMovementRoute(combat, second.token.uuid), false);
 });
 
 test("the world option reveals a foreign target's health and focus", async () => {

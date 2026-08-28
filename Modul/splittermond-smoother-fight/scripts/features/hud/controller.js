@@ -153,6 +153,31 @@ export async function markZeroHealthTargetDefeated(context, tokenReference) {
     return true;
 }
 
+export async function abortSelectedTokenMovement(combat, tokenReference) {
+    if (!combat || !tokenReference) return false;
+    const token = services.resolveToken(tokenReference);
+    if (!token) return false;
+    return services.abortMovementPlan(token, combat);
+}
+
+export function toggleSelectedTokenMovementRoute(combat, tokenReference) {
+    if (!combat || !tokenReference) return null;
+    const token = services.resolveToken(tokenReference);
+    if (!token) return null;
+    const visible = services.toggleMovementRoutePreview(token, combat);
+    if (visible !== null) services.scheduleRender(0);
+    return visible;
+}
+
+export function toggleSelectedTokenPersistentMovementRoute(combat, tokenReference) {
+    if (!combat || !tokenReference) return null;
+    const token = services.resolveToken(tokenReference);
+    if (!token) return null;
+    const visible = services.togglePersistentMovementRoutePreview(token, combat);
+    if (visible !== null) services.scheduleRender(0);
+    return visible;
+}
+
 export async function renderHud() {
     await hudState.hud.render();
 }
@@ -371,6 +396,17 @@ class SmootherFightHud {
                         target.dataset.tickActionId,
                         target.dataset.tickActionAdvance
                     ));
+                    break;
+                case "abort-selected-movement":
+                    target.disabled = true;
+                    if (!await abortSelectedTokenMovement(context.combat, target.dataset.tokenUuid)
+                        && target.isConnected) target.disabled = false;
+                    break;
+                case "toggle-movement-route":
+                    toggleSelectedTokenMovementRoute(context.combat, target.dataset.tokenUuid);
+                    break;
+                case "toggle-persistent-movement-route":
+                    toggleSelectedTokenPersistentMovementRoute(context.combat, target.dataset.tokenUuid);
                     break;
                 case "revert-movement":
                     await services.requireOwner(context, () => services.revertTokenMovement(context));

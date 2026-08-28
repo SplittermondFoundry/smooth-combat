@@ -49,6 +49,18 @@ export function registerSettings() {
         default: true,
         onChange: rerender,
     });
+    game.settings.register(MODULE_ID, "showMovementRoutesByDefault", {
+        name: "SMOOTHER_FIGHT.Settings.ShowMovementRoutesByDefaultName",
+        hint: "SMOOTHER_FIGHT.Settings.ShowMovementRoutesByDefaultHint",
+        scope: "client",
+        config: true,
+        type: Boolean,
+        default: true,
+        onChange: (enabled) => {
+            if (enabled) services.syncDefaultMovementRoutePreviews(game.combat, { reconsider: true });
+            rerender();
+        },
+    });
     game.settings.register(MODULE_ID, "meleeRange", {
         name: "SMOOTHER_FIGHT.Settings.MeleeRangeName",
         hint: "SMOOTHER_FIGHT.Settings.MeleeRangeHint",

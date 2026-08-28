@@ -84,7 +84,7 @@ export async function createTickActionChatCard(context, actionId, selectedTicks 
         : t("SMOOTHER_FIGHT.HUD.TickActionDash"));
     const special = MOVEMENT_ACTIONS.has(action.id)
         ? `${baseSpecial} (${t("SMOOTHER_FIGHT.HUD.MovementDistance", {
-            distance: formatMovementDistance(readTokenMovementDistance(token)),
+            distance: formatMovementDistance(options.movementDistance ?? readTokenMovementDistance(token)),
         })})`
         : baseSpecial;
     const source = action.source

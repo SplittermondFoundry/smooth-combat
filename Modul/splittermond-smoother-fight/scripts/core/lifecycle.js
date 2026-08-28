@@ -17,6 +17,7 @@ import {
 } from "../shared/values.js";
 
 export function registerHooks() {
+    const movementProgressHooks = new Set(["combatStart", "combatRound", "combatTurn", "updateCombat"]);
     const rerenderHooks = [
         "combatStart",
         "combatRound",
@@ -34,22 +35,38 @@ export function registerHooks() {
         "deleteItem",
         "updateUser",
     ];
-    rerenderHooks.forEach((hook) => Hooks.on(hook, () => services.scheduleRender()));
-    Hooks.on("controlToken", () => services.scheduleRender(0));
-    Hooks.on("userConnected", () => services.scheduleRender(0));
+    rerenderHooks.forEach((hook) => Hooks.on(hook, (document) => {
+        services.scheduleRender();
+        if (movementProgressHooks.has(hook)) void services.advancePendingMovements(document);
+    }));
+    Hooks.on("controlToken", (token, controlled) => {
+        if (!controlled) services.clearTemporaryMovementRoutePreview(token);
+        services.scheduleRender(0);
+    });
+    Hooks.on("canvasTearDown", () => services.clearMovementRoutePreview());
+    Hooks.on("canvasPan", () => services.refreshMovementRoutePreviewScale());
+    Hooks.on("userConnected", () => {
+        services.scheduleRender(0);
+        void services.advancePendingMovements(game.combat);
+    });
     Hooks.on("sightRefresh", () => services.scheduleRender(0));
-    Hooks.on("updateToken", (token, changes) => {
+    Hooks.on("updateToken", (token, changes, options, userId) => {
         if (Object.hasOwn(changes ?? {}, "hidden")) services.scheduleRender(0);
         if (hasTokenPositionUpdate(changes)) {
             void services.resetCompletedMovementReversalApplication(token);
+            void services.cancelMovementPlanAfterManualMove(token, options, userId);
             services.scheduleRenderAfterTokenMovement(token);
         }
+        services.syncDefaultMovementRoutePreviews(game.combat);
     });
     Hooks.on("recordToken", () => {
         if (getSetting("movementTracking", true)) services.scheduleRender(0);
     });
 
-    Hooks.on("canvasReady", services.seedHealthFeedbackState);
+    Hooks.on("canvasReady", (...args) => {
+        services.seedHealthFeedbackState(...args);
+        services.syncDefaultMovementRoutePreviews(game.combat);
+    });
     Hooks.on("preUpdateActor", services.rememberActorHealthCost);
     Hooks.on("updateActor", services.announceAppliedDamageFeedback);
     Hooks.on("createActor", services.rememberActorHealthCost);
@@ -73,6 +90,7 @@ export function registerHooks() {
         setTimeout(() => {
             services.syncActiveCombatantTokenSelection(combat);
             services.announceTurnFeedback(combat);
+            void services.advancePendingMovements(combat);
         }, 0);
     });
 
@@ -88,10 +106,16 @@ export function registerHooks() {
         services.announceTurnFeedback(combat);
     });
     Hooks.on("deleteCombat", (combat) => {
-        runAuthoritativeAttackPreparationCleanup(() => services.clearAttackPreparationsForCombat(combat));
+        runAuthoritativeCleanup(() => Promise.all([
+            services.clearAttackPreparationsForCombat(combat),
+            services.clearMovementPlansForCombat(combat),
+        ]));
     });
     Hooks.on("deleteCombatant", (combatant) => {
-        runAuthoritativeAttackPreparationCleanup(() => services.clearAttackPreparationForCombatant(combatant));
+        runAuthoritativeCleanup(() => Promise.all([
+            services.clearAttackPreparationForCombatant(combatant),
+            services.clearMovementPlanForCombatant(combatant),
+        ]));
     });
 
     Hooks.on("createChatMessage", (message) => {
@@ -115,7 +139,10 @@ export function registerHooks() {
 
     Hooks.on("renderChatMessageHTML", (message, html) => services.prepareRenderedChatMessage(message, html));
     Hooks.on("renderChatMessage", (message, html) => services.prepareRenderedChatMessage(message, asElement(html)));
-    Hooks.on("renderTokenHUD", (app, html) => services.renderTokenOwnerControl(app, html));
+    Hooks.on("renderTokenHUD", (app, html) => {
+        services.renderTokenOwnerControl(app, html);
+        services.renderTokenMovementControl(app, html);
+    });
     services.prepareExistingRenderedChatMessages();
 }
 
@@ -133,7 +160,7 @@ function suppressRecalculatedOffenseDiceLegacy(messageId, interception) {
     suppressRecalculatedOffenseDice(messageId, interception);
 }
 
-function runAuthoritativeAttackPreparationCleanup(operation) {
+function runAuthoritativeCleanup(operation) {
     if (services.getActivePrimaryGm?.()?.id !== globalThis.game?.user?.id) return;
     void operation().catch(() => false);
 }

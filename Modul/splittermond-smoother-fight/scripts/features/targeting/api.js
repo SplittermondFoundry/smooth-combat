@@ -2,6 +2,7 @@ export {
     bindQuickTargetHover,
     canChooseTarget,
     clearHoveredToken,
+    highlightToken,
     getAllSceneTokens,
     getSceneTokens,
     getTargetSceneTokens,

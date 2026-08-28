@@ -21,6 +21,8 @@ const EXPECTED_HOOKS = [
     "deleteItem",
     "updateUser",
     "controlToken",
+    "canvasTearDown",
+    "canvasPan",
     "userConnected",
     "sightRefresh",
     "updateToken",
@@ -60,6 +62,12 @@ function callsOf(name) {
 
 const serviceStubs = {
     scheduleRender: (...args) => record("scheduleRender", args),
+    advancePendingMovements: (...args) => record("advancePendingMovements", args),
+    cancelMovementPlanAfterManualMove: (...args) => record("cancelMovementPlanAfterManualMove", args),
+    clearMovementRoutePreview: (...args) => record("clearMovementRoutePreview", args),
+    clearTemporaryMovementRoutePreview: (...args) => record("clearTemporaryMovementRoutePreview", args),
+    refreshMovementRoutePreviewScale: (...args) => record("refreshMovementRoutePreviewScale", args),
+    syncDefaultMovementRoutePreviews: (...args) => record("syncDefaultMovementRoutePreviews", args),
     scheduleRenderAfterTokenMovement: (...args) => record("scheduleRenderAfterTokenMovement", args),
     resetCompletedMovementReversalApplication: (...args) => record("resetCompletedMovementReversalApplication", args),
     seedHealthFeedbackState: (...args) => record("seedHealthFeedbackState", args),
@@ -85,6 +93,8 @@ const serviceStubs = {
     },
     clearAttackPreparationsForCombat: async (...args) => record("clearAttackPreparationsForCombat", args),
     clearAttackPreparationForCombatant: async (...args) => record("clearAttackPreparationForCombatant", args),
+    clearMovementPlansForCombat: async (...args) => record("clearMovementPlansForCombat", args),
+    clearMovementPlanForCombatant: async (...args) => record("clearMovementPlanForCombatant", args),
     onCreateChatMessage: (...args) => {
         record("onCreateChatMessage", args);
         return behavior.onCreateChatMessage(...args);
@@ -103,6 +113,7 @@ const serviceStubs = {
     prepareRenderedChatMessage: (...args) => record("prepareRenderedChatMessage", args),
     prepareExistingRenderedChatMessages: (...args) => record("prepareExistingRenderedChatMessages", args),
     renderTokenOwnerControl: (...args) => record("renderTokenOwnerControl", args),
+    renderTokenMovementControl: (...args) => record("renderTokenMovementControl", args),
     resolveToken: (...args) => {
         record("resolveToken", args);
         return behavior.resolveToken(...args);
@@ -241,23 +252,43 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
 
     await t.test("hook callbacks retain their routing and state transitions", async () => {
         resetHarness(gameStub);
-        handlersFor(hookRegistrations, "combatRound")[0]({ id: "combat" });
+        const progressedCombat = { id: "combat" };
+        handlersFor(hookRegistrations, "combatRound")[0](progressedCombat);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
+        assert.deepEqual(callsOf("advancePendingMovements"), [[progressedCombat]]);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "userConnected")[0]({ id: "player" }, true);
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
+        assert.deepEqual(callsOf("advancePendingMovements"), [[gameStub.combat]]);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "sightRefresh")[0]({});
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
 
         callLog.length = 0;
+        const releasedToken = { id: "released-token" };
+        handlersFor(hookRegistrations, "controlToken")[0](releasedToken, false);
+        assert.deepEqual(callsOf("clearTemporaryMovementRoutePreview"), [[releasedToken]]);
+        assert.deepEqual(callsOf("scheduleRender"), [[0]]);
+
+        callLog.length = 0;
+        handlersFor(hookRegistrations, "canvasTearDown")[0]();
+        assert.deepEqual(callsOf("clearMovementRoutePreview"), [[]]);
+
+        callLog.length = 0;
+        handlersFor(hookRegistrations, "canvasPan")[0]();
+        assert.deepEqual(callsOf("refreshMovementRoutePreviewScale"), [[]]);
+
+        callLog.length = 0;
         const movedToken = { id: "token" };
-        handlersFor(hookRegistrations, "updateToken")[0](movedToken, { hidden: false, x: 120 });
+        const movementOptions = { animate: true };
+        handlersFor(hookRegistrations, "updateToken")[0](movedToken, { hidden: false, x: 120 }, movementOptions, "player");
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
         assert.deepEqual(callsOf("scheduleRenderAfterTokenMovement"), [[movedToken]]);
         assert.deepEqual(callsOf("resetCompletedMovementReversalApplication"), [[movedToken]]);
+        assert.deepEqual(callsOf("cancelMovementPlanAfterManualMove"), [[movedToken, movementOptions, "player"]]);
+        assert.deepEqual(callsOf("syncDefaultMovementRoutePreviews"), [[gameStub.combat]]);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "recordToken")[0](movedToken);
@@ -296,6 +327,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         await new Promise((resolve) => setTimeout(resolve, 0));
         assert.deepEqual(callsOf("syncActiveCombatantTokenSelection"), [[tickCombat]]);
         assert.deepEqual(callsOf("announceTurnFeedback"), [[tickCombat]]);
+        assert.deepEqual(callsOf("advancePendingMovements"), [[tickCombat]]);
         assert.deepEqual(selectedCombatantIds, [nextCombatant.id]);
 
         callLog.length = 0;
@@ -307,6 +339,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         assert.deepEqual(callsOf("syncActiveCombatantTokenSelection"), [[combat]]);
         assert.deepEqual(callsOf("announceTurnFeedback"), [[combat]]);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
+        assert.deepEqual(callsOf("advancePendingMovements"), [[combat]]);
 
         callLog.length = 0;
         const primaryGm = { id: "primary-gm", isGM: true, active: true };
@@ -315,12 +348,14 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         const endedCombat = { id: "ended-combat" };
         for (const callback of handlersFor(hookRegistrations, "deleteCombat")) callback(endedCombat);
         assert.deepEqual(callsOf("clearAttackPreparationsForCombat"), [[endedCombat]]);
+        assert.deepEqual(callsOf("clearMovementPlansForCombat"), [[endedCombat]]);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
 
         callLog.length = 0;
         const removedCombatant = { id: "removed-combatant", parent: endedCombat };
         for (const callback of handlersFor(hookRegistrations, "deleteCombatant")) callback(removedCombatant);
         assert.deepEqual(callsOf("clearAttackPreparationForCombatant"), [[removedCombatant]]);
+        assert.deepEqual(callsOf("clearMovementPlanForCombatant"), [[removedCombatant]]);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
 
         callLog.length = 0;
@@ -375,6 +410,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             [createdMessage, htmlElement],
         ]);
         assert.deepEqual(callsOf("renderTokenOwnerControl"), [[{ id: "hud" }, htmlElement]]);
+        assert.deepEqual(callsOf("renderTokenMovementControl"), [[{ id: "hud" }, htmlElement]]);
     });
 
     await t.test("target updates reject foreign players and accept self or GM updates", async () => {

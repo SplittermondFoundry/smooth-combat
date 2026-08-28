@@ -42,7 +42,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "54674ce7de499d5d7755960cb4c0a5d14bec4729a2b7cff0566fdf98130714ed",
+        "ae23aced7a809dafce9e22f70f91bd2e8ce4e836896fa39462189ade8e8167cf",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");

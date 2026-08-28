@@ -25,6 +25,7 @@ import {
 
 import {
     buildMovementTracker,
+    buildSelectedMovementControl,
 } from "./movement.js";
 
 import {
@@ -99,6 +100,7 @@ export async function buildHud(context) {
         }))}</span>`
         : "";
     const shellClass = currentPlayersTurn ? "sf-shell is-current-user-turn" : "sf-shell";
+    const selectedMovementControl = buildSelectedMovementControl(combat);
 
     if (minimized) {
         return `
@@ -139,6 +141,7 @@ export async function buildHud(context) {
                     ${hudToggle}
                 </header>
                 ${canAct ? buildCombatControls(context) : await buildPersonalControls(context)}
+                ${selectedMovementControl}
                 ${canAct && getSetting("movementTracking", true) ? buildMovementTracker(context) : ""}
                 ${canAct ? await buildActionBar(context, targetDistance.measurement) : ""}
                 ${getSetting("showCards", true) ? services.buildCombatEvents(context) : ""}
@@ -179,11 +182,12 @@ async function buildConcealedHud(context) {
     }
 
     const personalControls = await buildPersonalControls(context);
+    const selectedMovementControl = buildSelectedMovementControl(context.combat);
     const events = getSetting("showCards", true) ? services.buildCombatEvents(context) : "";
     return `
         <div class="sf-shell is-concealed-turn">
             ${concealedActorPanel(label)}
-            <main class="sf-center">${header}${personalControls}${events}</main>
+            <main class="sf-center">${header}${personalControls}${selectedMovementControl}${events}</main>
             <div class="sf-target-column sf-concealed-target-column" aria-hidden="true"></div>
         </div>`;
 }

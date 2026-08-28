@@ -54,6 +54,8 @@ Hooks.once("ready", async () => {
     seedHealthFeedbackState();
     registerHooks();
     registerSocket();
+    void combatActionsApi.advancePendingMovements(game.combat);
+    combatActionsApi.syncDefaultMovementRoutePreviews(game.combat);
     publishOwnTarget();
     hudApi.syncActiveCombatantTokenSelection(game.combat);
     setLastTurnCombatantId(game.combat?.combatant?.id ?? null);

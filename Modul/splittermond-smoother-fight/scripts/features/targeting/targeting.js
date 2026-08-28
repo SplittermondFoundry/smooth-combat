@@ -273,7 +273,7 @@ export function bindQuickTargetHover(root) {
     }
 }
 
-function highlightToken(uuid) {
+export function highlightToken(uuid) {
     const tokenDocument = resolveToken(uuid);
     const tokenObject = tokenDocument?.object ?? canvas?.tokens?.get(tokenDocument?.id);
     if (!tokenObject || targetingState.hoveredToken?.object === tokenObject) return;
