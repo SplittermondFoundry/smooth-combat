@@ -19,6 +19,7 @@ Dieses Update macht mehrstufige Kampfvorgänge ausfallsicherer. Begonnene und er
 
 ## Verbesserungen und Fehlerbehebungen
 
+- Nach einer Aktiven Abwehr wird nun ausschließlich deren noch offene Tickzahlung als nächster sinnvoller Schritt hervorgehoben. Die Erfolgsgradoptionen des zugehörigen Angriffs folgen erst, sobald die 3 Ticks ausgegeben wurden.
 - Ein tatsächlich ausgeführter Angriff bricht nun eine noch vorbereitete Zauberhandlung ab. Das Systemkennzeichen und der Status **Magie fokussieren** werden dabei gemeinsam entfernt; ein abgebrochener Angriffsdialog lässt die Zaubervorbereitung bestehen.
 - Optimierung des Release-Prozesses.
 - Neu berechnete Angriffskarten nach einer **Aktiven Abwehr** behalten den ursprünglichen Würfelwurf, lösen diesen in **Dice So Nice** aber nicht länger ein zweites Mal als 3D-Animation aus und erscheinen erst nach dem vollständigen Abschluss des Abwehrwurfs.

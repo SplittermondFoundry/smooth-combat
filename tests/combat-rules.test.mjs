@@ -155,6 +155,12 @@ test("combat action highlighting advances from open degrees through focus costs 
     }), { degrees: false, focus: false, damage: false, ticks: false });
     assert.deepEqual(combatActionHighlightState({
         isOffense: true,
+        hasPendingDefenseTicks: true,
+        hasPendingDegreeOptions: true,
+        hasPendingDamage: true,
+    }), { degrees: false, focus: false, damage: false, ticks: false });
+    assert.deepEqual(combatActionHighlightState({
+        isOffense: true,
         hasPendingDegreeOptions: true,
         isSpell: true,
         hasPendingFocusCost: true,

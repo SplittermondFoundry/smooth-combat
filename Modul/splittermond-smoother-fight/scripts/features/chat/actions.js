@@ -572,6 +572,7 @@ function decorateEventActionButtons(element, message) {
     const actionHighlight = combatActionHighlightState({
         isOffense: isOffensiveCombatMessage(message),
         awaitingDefense,
+        hasPendingDefenseTicks: isOffensiveCombatMessage(message) && hasUsableAssociatedDefenseTickAction(element),
         hasPendingDegreeOptions,
         followUpStarted: services.hasOffenseFollowUpStarted(message),
         isSpell: services.isSpellMessage(message),
@@ -620,6 +621,15 @@ function decorateEventActionButtons(element, message) {
     if (services.isDamageMessage(message) && damageApplicationState === "uncertain") {
         addDamageRecoveryActions(element, "generic");
     }
+}
+
+export function hasUsableAssociatedDefenseTickAction(element) {
+    const group = element?.closest?.(".sf-event-group");
+    if (!group) return false;
+    return Array.from(group.querySelectorAll(".sf-associated-card.is-defense .sf-chat-message"))
+        .some((defenseElement) => Array.from(defenseElement.querySelectorAll(
+            ".splittermond-chat-action, .add-tick[data-ticks], .rollable[data-roll-type]"
+        )).some((control) => isTickAdvanceControl(control) && isUsableActionControl(control)));
 }
 
 function decoratePendingDefenseDegreeOptions(degreeOptions, awaitingDefense) {

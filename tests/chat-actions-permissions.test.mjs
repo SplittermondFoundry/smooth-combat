@@ -4,6 +4,7 @@ import test from "node:test";
 import { configureServices } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
 import {
     enforceOffenseDefensePhaseControls,
+    hasUsableAssociatedDefenseTickAction,
     isMessageSpeakerAssignedToCurrentUser,
 } from "../Modul/splittermond-smoother-fight/scripts/features/chat/actions.js";
 
@@ -176,4 +177,31 @@ test("message action highlighting follows an active runtime substitute", () => {
     });
 
     assert.equal(isMessageSpeakerAssignedToCurrentUser(message), true);
+});
+
+test("a usable tick action on an associated active defense takes priority", () => {
+    const usableTickAction = {
+        dataset: { action: "advanceToken" },
+        disabled: false,
+        getAttribute: () => null,
+    };
+    const appliedTickAction = {
+        dataset: { action: "advanceToken" },
+        disabled: true,
+        getAttribute: () => "true",
+    };
+    const defenseElement = {
+        querySelectorAll: () => [usableTickAction, appliedTickAction],
+    };
+    const group = {
+        querySelectorAll: () => [defenseElement],
+    };
+    const offenseElement = {
+        closest: (selector) => selector === ".sf-event-group" ? group : null,
+    };
+
+    assert.equal(hasUsableAssociatedDefenseTickAction(offenseElement), true);
+    usableTickAction.disabled = true;
+    usableTickAction.getAttribute = () => "true";
+    assert.equal(hasUsableAssociatedDefenseTickAction(offenseElement), false);
 });

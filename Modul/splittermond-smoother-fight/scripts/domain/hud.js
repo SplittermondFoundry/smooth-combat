@@ -103,6 +103,7 @@ export function resolveCombatEventOpenIds(previousEventIds, previousOpenEventIds
 export function combatActionHighlightState({
     isOffense = false,
     awaitingDefense = false,
+    hasPendingDefenseTicks = false,
     hasPendingDegreeOptions = false,
     followUpStarted = false,
     isSpell = false,
@@ -110,7 +111,9 @@ export function combatActionHighlightState({
     hasPendingDamage = false,
     hasPendingDamageApplication = false,
 } = {}) {
-    if (awaitingDefense) return { degrees: false, focus: false, damage: false, ticks: false };
+    if (awaitingDefense || hasPendingDefenseTicks) {
+        return { degrees: false, focus: false, damage: false, ticks: false };
+    }
     const degrees = Boolean(isOffense && hasPendingDegreeOptions && !followUpStarted);
     const focus = Boolean(!degrees && isSpell && hasPendingFocusCost);
     const damage = Boolean(!degrees && !focus && isOffense && hasPendingDamage);
