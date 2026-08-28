@@ -23,7 +23,7 @@ import {
     readTokenMovementDistance,
 } from "../../shared/movement.js";
 
-const MOVEMENT_ACTIONS = new Set(["walk", "sprint"]);
+const MOVEMENT_ACTIONS = new Set(["crawl", "walk", "sprint"]);
 
 export function createDefenseSplinterpointChatCard({
     actor,

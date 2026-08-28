@@ -17,7 +17,7 @@ import {
 } from "../shared/values.js";
 
 export function registerHooks() {
-    const movementProgressHooks = new Set(["combatStart", "combatRound", "combatTurn", "updateCombat"]);
+    const combatProgressHooks = new Set(["combatStart", "combatRound", "combatTurn", "updateCombat"]);
     const rerenderHooks = [
         "combatStart",
         "combatRound",
@@ -37,7 +37,10 @@ export function registerHooks() {
     ];
     rerenderHooks.forEach((hook) => Hooks.on(hook, (document) => {
         services.scheduleRender();
-        if (movementProgressHooks.has(hook)) void services.advancePendingMovements(document);
+        if (combatProgressHooks.has(hook)) {
+            void services.advanceContinuousActions(document);
+            void services.advancePendingMovements(document);
+        }
     }));
     Hooks.on("controlToken", (token, controlled) => {
         if (!controlled) services.clearTemporaryMovementRoutePreview(token);
@@ -47,6 +50,7 @@ export function registerHooks() {
     Hooks.on("canvasPan", () => services.refreshMovementRoutePreviewScale());
     Hooks.on("userConnected", () => {
         services.scheduleRender(0);
+        void services.advanceContinuousActions(game.combat);
         void services.advancePendingMovements(game.combat);
     });
     Hooks.on("sightRefresh", () => services.scheduleRender(0));
@@ -90,6 +94,7 @@ export function registerHooks() {
         setTimeout(() => {
             services.syncActiveCombatantTokenSelection(combat);
             services.announceTurnFeedback(combat);
+            void services.advanceContinuousActions(combat);
             void services.advancePendingMovements(combat);
         }, 0);
     });
@@ -108,12 +113,14 @@ export function registerHooks() {
     Hooks.on("deleteCombat", (combat) => {
         runAuthoritativeCleanup(() => Promise.all([
             services.clearAttackPreparationsForCombat(combat),
+            services.clearContinuousActionsForCombat(combat),
             services.clearMovementPlansForCombat(combat),
         ]));
     });
     Hooks.on("deleteCombatant", (combatant) => {
         runAuthoritativeCleanup(() => Promise.all([
             services.clearAttackPreparationForCombatant(combatant),
+            services.clearContinuousActionForCombatant(combatant),
             services.clearMovementPlanForCombatant(combatant),
         ]));
     });

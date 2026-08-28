@@ -42,7 +42,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "ae23aced7a809dafce9e22f70f91bd2e8ce4e836896fa39462189ade8e8167cf",
+        "4b103cd6ce1fc73a7fc8f31a2e4feec09e9e4b517177a1fff78725331f357e25",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -214,7 +214,7 @@ test("customizable media assets remain recognizable files", () => {
     const expectedAssets = {
         backgrounds: ["hud-dark.jpg", "hud-light.jpg"],
         audio: ["arcane.wav", "blocked.wav", "impact.wav", "shield.wav", "shot.wav", "turn.wav"],
-        icons: ["active-defense.svg", "damage-blocked.svg", "damage.svg", "ranged.svg", "spell.svg", "turn.svg"],
+        icons: ["active-defense.svg", "continuous-action.svg", "damage-blocked.svg", "damage.svg", "ranged.svg", "spell.svg", "turn.svg"],
     };
     for (const [directory, names] of Object.entries(expectedAssets)) {
         assert.deepEqual(fs.readdirSync(path.join(moduleRoot, "assets", directory)).filter((name) => name !== "README.md").sort(), names);

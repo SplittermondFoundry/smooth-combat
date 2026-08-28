@@ -1,6 +1,9 @@
 export const FREE_MOVEMENT_DISTANCE = 2;
 
 const MOVEMENT_MILESTONES = Object.freeze({
+    crawl: Object.freeze([
+        Object.freeze({ tickOffset: 5, fraction: 1 }),
+    ]),
     walk: Object.freeze([
         Object.freeze({ tickOffset: 3, fraction: 0.5 }),
         Object.freeze({ tickOffset: 5, fraction: 1 }),

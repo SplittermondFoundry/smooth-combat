@@ -62,6 +62,7 @@ function callsOf(name) {
 
 const serviceStubs = {
     scheduleRender: (...args) => record("scheduleRender", args),
+    advanceContinuousActions: (...args) => record("advanceContinuousActions", args),
     advancePendingMovements: (...args) => record("advancePendingMovements", args),
     cancelMovementPlanAfterManualMove: (...args) => record("cancelMovementPlanAfterManualMove", args),
     clearMovementRoutePreview: (...args) => record("clearMovementRoutePreview", args),
@@ -93,6 +94,8 @@ const serviceStubs = {
     },
     clearAttackPreparationsForCombat: async (...args) => record("clearAttackPreparationsForCombat", args),
     clearAttackPreparationForCombatant: async (...args) => record("clearAttackPreparationForCombatant", args),
+    clearContinuousActionsForCombat: async (...args) => record("clearContinuousActionsForCombat", args),
+    clearContinuousActionForCombatant: async (...args) => record("clearContinuousActionForCombatant", args),
     clearMovementPlansForCombat: async (...args) => record("clearMovementPlansForCombat", args),
     clearMovementPlanForCombatant: async (...args) => record("clearMovementPlanForCombatant", args),
     onCreateChatMessage: (...args) => {
@@ -255,11 +258,13 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         const progressedCombat = { id: "combat" };
         handlersFor(hookRegistrations, "combatRound")[0](progressedCombat);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
+        assert.deepEqual(callsOf("advanceContinuousActions"), [[progressedCombat]]);
         assert.deepEqual(callsOf("advancePendingMovements"), [[progressedCombat]]);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "userConnected")[0]({ id: "player" }, true);
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
+        assert.deepEqual(callsOf("advanceContinuousActions"), [[gameStub.combat]]);
         assert.deepEqual(callsOf("advancePendingMovements"), [[gameStub.combat]]);
 
         callLog.length = 0;
@@ -327,6 +332,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         await new Promise((resolve) => setTimeout(resolve, 0));
         assert.deepEqual(callsOf("syncActiveCombatantTokenSelection"), [[tickCombat]]);
         assert.deepEqual(callsOf("announceTurnFeedback"), [[tickCombat]]);
+        assert.deepEqual(callsOf("advanceContinuousActions"), [[tickCombat]]);
         assert.deepEqual(callsOf("advancePendingMovements"), [[tickCombat]]);
         assert.deepEqual(selectedCombatantIds, [nextCombatant.id]);
 
@@ -339,6 +345,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         assert.deepEqual(callsOf("syncActiveCombatantTokenSelection"), [[combat]]);
         assert.deepEqual(callsOf("announceTurnFeedback"), [[combat]]);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
+        assert.deepEqual(callsOf("advanceContinuousActions"), [[combat]]);
         assert.deepEqual(callsOf("advancePendingMovements"), [[combat]]);
 
         callLog.length = 0;
@@ -348,6 +355,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         const endedCombat = { id: "ended-combat" };
         for (const callback of handlersFor(hookRegistrations, "deleteCombat")) callback(endedCombat);
         assert.deepEqual(callsOf("clearAttackPreparationsForCombat"), [[endedCombat]]);
+        assert.deepEqual(callsOf("clearContinuousActionsForCombat"), [[endedCombat]]);
         assert.deepEqual(callsOf("clearMovementPlansForCombat"), [[endedCombat]]);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
 
@@ -355,6 +363,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         const removedCombatant = { id: "removed-combatant", parent: endedCombat };
         for (const callback of handlersFor(hookRegistrations, "deleteCombatant")) callback(removedCombatant);
         assert.deepEqual(callsOf("clearAttackPreparationForCombatant"), [[removedCombatant]]);
+        assert.deepEqual(callsOf("clearContinuousActionForCombatant"), [[removedCombatant]]);
         assert.deepEqual(callsOf("clearMovementPlanForCombatant"), [[removedCombatant]]);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
 

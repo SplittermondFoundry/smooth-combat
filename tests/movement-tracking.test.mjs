@@ -77,6 +77,9 @@ test("movement thresholds offer the matching Splittermond action", () => {
 });
 
 test("movement milestones and route slices follow the GRW timing and measured path", () => {
+    assert.deepEqual(movementActionMilestones("crawl", 11), [
+        { fraction: 1, tick: 16, tickOffset: 5 },
+    ]);
     assert.deepEqual(movementActionMilestones("walk", 11), [
         { fraction: 0.5, tick: 14, tickOffset: 3 },
         { fraction: 1, tick: 16, tickOffset: 5 },
@@ -246,6 +249,7 @@ test("walking stores the selected route, returns to the start, and advances at t
     assert.equal(await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 }), true);
     assert.equal(fixture.token.x, 0);
     assert.equal(fixture.combatant.initiative, 6);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction").completionTrigger, "movement");
     assert.deepEqual(fixture.plan().milestones.map(({ tick, fraction }) => ({ tick, fraction })), [
         { tick: 4, fraction: 0.5 },
         { tick: 6, fraction: 1 },
@@ -256,12 +260,35 @@ test("walking stores the selected route, returns to the start, and advances at t
     assert.equal(await advancePendingMovements(fixture.combat), true);
     assert.equal(fixture.token.x, 50);
     assert.equal(fixture.plan().completedFraction, 0.5);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction").actionId, "walk");
 
     fixture.combat.currentTick = 6;
     assert.equal(await advancePendingMovements(fixture.combat), true);
     assert.equal(fixture.token.x, 100);
     assert.equal(fixture.plan(), null);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
     assert.deepEqual(fixture.moveCalls.map((call) => call.waypoints.at(-1).x), [50, 100]);
+});
+
+test("crawling remains continuous until its route target at tick 5", async () => {
+    const fixture = scheduledMovementFixture("crawl");
+
+    assert.equal(await performTrackedMovementAction(fixture.context, { id: "crawl", ticks: 5 }), true);
+    assert.deepEqual(fixture.plan().milestones, [
+        { fraction: 1, tick: 6, tickOffset: 5 },
+    ]);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction").completionTrigger, "movement");
+
+    fixture.combat.currentTick = 5;
+    assert.equal(await advancePendingMovements(fixture.combat), false);
+    assert.equal(fixture.token.x, 0);
+    assert.notEqual(fixture.plan(), null);
+
+    fixture.combat.currentTick = 6;
+    assert.equal(await advancePendingMovements(fixture.combat), true);
+    assert.equal(fixture.token.x, 100);
+    assert.equal(fixture.plan(), null);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
 });
 
 test("a sprint tick jump visibly traverses every crossed quarter milestone", async () => {

@@ -16,6 +16,12 @@ import {
 } from "../../shared/document-flags.js";
 
 import {
+    beginContinuousAction,
+    completeContinuousAction,
+    CONTINUOUS_MOVEMENT_ACTION_IDS,
+} from "./continuous-action.js";
+
+import {
     readTokenMovementDistance,
 } from "../../shared/movement.js";
 
@@ -76,15 +82,27 @@ export async function performTrackedMovementAction(context, action) {
             throw error;
         }
 
+        try {
+            await beginContinuousAction(context, {
+                actionId: action.id,
+                completionTrigger: "movement",
+                startTick: plan.startTick,
+                endTick: plan.milestones.at(-1)?.tick,
+            });
+        } catch (error) {
+            await rollbackMovementPlan(token, route, plan, context.combat);
+            throw error;
+        }
+
         let actualTicks;
         try {
             actualTicks = await services.addCombatTicks(context, action.ticks);
         } catch (error) {
-            await rollbackMovementPlan(token, route);
+            await rollbackMovementPlan(token, route, plan, context.combat);
             throw error;
         }
         if (actualTicks === null) {
-            await rollbackMovementPlan(token, route);
+            await rollbackMovementPlan(token, route, plan, context.combat);
             return false;
         }
 
@@ -144,6 +162,7 @@ export async function abortMovementPlan(tokenLike, combat = globalThis.game?.com
     }
 
     await clearMovementPlan(token);
+    await completeTrackedMovement(token, plan, combat);
     if (reachedMilestone) ui.notifications.info(t("SMOOTHER_FIGHT.HUD.MovementPlanAborted"));
     else ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.MovementPlanStopped"));
     services.scheduleRender(0);
@@ -280,8 +299,17 @@ export async function cancelMovementPlanAfterManualMove(tokenLike, options = {},
     if (!token || options?.[SCHEDULED_MOVEMENT_OPTION]) return false;
     if (movementLocks.has(token.uuid ?? token.id)) return false;
     if (userId && userId !== globalThis.game?.user?.id) return false;
-    if (!readMovementPlan(token)) return false;
+    const plan = readMovementPlan(token);
+    if (!plan) {
+        const completed = await completeContinuousAction({ token, combat: globalThis.game?.combat }, {
+            actionIds: CONTINUOUS_MOVEMENT_ACTION_IDS,
+            trigger: "movement",
+        });
+        if (completed) services.scheduleRender(0);
+        return completed;
+    }
     await clearMovementPlan(token);
+    await completeTrackedMovement(token, plan);
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.MovementPlanCancelled"));
     services.scheduleRender(0);
     return true;
@@ -392,7 +420,7 @@ async function drainTokenMovementAdvances(token, combat, lockKey) {
             if (!plan || plan.combatId !== combat?.id) break;
             const due = movementDueMilestones(plan, combatTick(combat));
             if (!due.length) continue;
-            changed = await advanceTokenMovementPlan(token, plan, due) || changed;
+            changed = await advanceTokenMovementPlan(token, plan, due, combat) || changed;
         }
         return changed;
     } finally {
@@ -401,7 +429,7 @@ async function drainTokenMovementAdvances(token, combat, lockKey) {
     }
 }
 
-async function advanceTokenMovementPlan(token, plan, due) {
+async function advanceTokenMovementPlan(token, plan, due, combat) {
     const fractions = due.map((milestone) => milestone.fraction);
     const waypoints = movementPathThroughFractions(
         plan.route,
@@ -411,25 +439,37 @@ async function advanceTokenMovementPlan(token, plan, due) {
     );
     if (!waypoints.length) {
         await clearMovementPlan(token);
+        await completeTrackedMovement(token, plan, combat);
         return false;
     }
     const completed = await moveTokenAlongRoute(token, waypoints);
     await token.clearMovementHistory?.();
     if (!completed) {
         await clearMovementPlan(token);
+        await completeTrackedMovement(token, plan, combat);
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.MovementPlanStopped"));
         return false;
     }
 
     const completedFraction = fractions.at(-1);
-    if (completedFraction >= 1) await clearMovementPlan(token);
-    else await writeMovementPlan(token, { ...plan, completedFraction });
+    if (completedFraction >= 1) {
+        await clearMovementPlan(token);
+        await completeTrackedMovement(token, plan, combat);
+    } else await writeMovementPlan(token, { ...plan, completedFraction });
     return true;
 }
 
-async function rollbackMovementPlan(token, route) {
+async function rollbackMovementPlan(token, route, plan, combat) {
     await clearMovementPlan(token).catch(() => false);
+    await completeTrackedMovement(token, plan, combat).catch(() => false);
     await restoreSelectedRoute(token, route).catch(() => false);
+}
+
+function completeTrackedMovement(token, plan, combat = globalThis.game?.combat) {
+    return completeContinuousAction({ token, combat }, {
+        actionIds: [plan?.actionId],
+        trigger: "movement",
+    });
 }
 
 async function restoreSelectedRoute(token, route) {

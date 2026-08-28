@@ -6,6 +6,7 @@ import * as assignmentsApi from "./features/assignments/api.js";
 import { registerSettingsMenu } from "./features/assignments/settings-app.js";
 import * as chatApi from "./features/chat/api.js";
 import * as combatActionsApi from "./features/combat-actions/api.js";
+import { registerContinuousActionStatusEffect } from "./features/combat-actions/continuous-action.js";
 import * as combatEventsApi from "./features/combat-events/api.js";
 import * as feedbackApi from "./features/feedback/api.js";
 import {
@@ -39,6 +40,7 @@ configureServices(
 );
 
 Hooks.once("init", () => {
+    registerContinuousActionStatusEffect();
     registerSettings();
     registerSettingsMenu();
     registerAudioSettingsMenu();
@@ -54,6 +56,7 @@ Hooks.once("ready", async () => {
     seedHealthFeedbackState();
     registerHooks();
     registerSocket();
+    void combatActionsApi.advanceContinuousActions(game.combat);
     void combatActionsApi.advancePendingMovements(game.combat);
     combatActionsApi.syncDefaultMovementRoutePreviews(game.combat);
     publishOwnTarget();

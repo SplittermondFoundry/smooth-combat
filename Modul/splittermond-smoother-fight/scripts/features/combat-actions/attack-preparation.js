@@ -18,6 +18,10 @@ import {
     installTemporarySelectableModifier,
 } from "../../shared/temporary-selectable-modifier.js";
 
+import {
+    completeContinuousAction,
+} from "./continuous-action.js";
+
 const ATTACK_PREPARATION_FLAG = "attackPreparation";
 const ATTACK_PREPARATION_ACTIONS = new Set(["aim", "searchOpening"]);
 const ATTACK_PREPARATION_TICKS = new Set([2, 4, 6]);
@@ -171,8 +175,12 @@ export async function clearAimPreparation(actor) {
 }
 
 export async function dismissAttackPreparation(context) {
+    const preparation = getAttackPreparation(context?.actor);
     const cleared = await clearAttackPreparation(context?.actor);
     if (!cleared) return false;
+    await completeContinuousAction(context, {
+        actionIds: preparation ? [preparation.actionId] : [],
+    }).catch(() => false);
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.AttackPreparationCleared"));
     return true;
 }

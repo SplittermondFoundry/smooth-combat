@@ -23,8 +23,17 @@ import {
 } from "./attack-preparation.js";
 
 import {
+    beginContinuousAction,
+    completeContinuousAction,
+} from "./continuous-action.js";
+
+import {
     performTrackedMovementAction,
 } from "./movement.js";
+
+import {
+    readTokenMovementDistance,
+} from "../../shared/movement.js";
 
 const SELECTABLE_DURATION_ACTIONS = new Set(["aim", "searchOpening"]);
 const SHIELD_BASH_MANEUVERS = Object.freeze([]);
@@ -38,26 +47,63 @@ export async function performTickAction(context, actionId, requestedTicks = "cus
     context = liveTickActionContext(context);
     if (!context) return false;
 
-    if (SELECTABLE_DURATION_ACTIONS.has(action.id)) return performTimedPreparation(context, action);
-    switch (action.id) {
-        case "walk":
-        case "sprint": {
-            const tracked = await performTrackedMovementAction(context, action);
-            return tracked === null ? performReferenceAction(context, action, requestedTicks) : tracked;
+    const startTick = liveCombatantInitiative(context);
+    let completed;
+    let continuousActionManaged = false;
+    let movementTargetAlreadyReached = false;
+
+    if (SELECTABLE_DURATION_ACTIONS.has(action.id)) {
+        completed = await performTimedPreparation(context, action);
+    } else {
+        switch (action.id) {
+            case "crawl":
+            case "walk":
+            case "sprint": {
+                const tracked = await performTrackedMovementAction(context, action);
+                continuousActionManaged = tracked !== null;
+                completed = tracked === null
+                    ? await performReferenceAction(context, action, requestedTicks)
+                    : tracked;
+                movementTargetAlreadyReached = tracked === null
+                    && completed
+                    && readTokenMovementDistance(context.token) > 0;
+                break;
+            }
+            case "disengage":
+                completed = await performDisengage(context, action);
+                break;
+            case "shieldBash":
+                completed = await performShieldBash(context, action);
+                break;
+            case "evasiveLeap":
+                completed = await performEvasiveLeap(context, action);
+                break;
+            case "escapeGrapple":
+                completed = await performEscapeGrapple(context, action);
+                break;
+            case "coordinate":
+                completed = await performCoordinate(context, action);
+                break;
+            default:
+                completed = await performReferenceAction(context, action, requestedTicks);
+                break;
         }
-        case "disengage":
-            return performDisengage(context, action);
-        case "shieldBash":
-            return performShieldBash(context, action);
-        case "evasiveLeap":
-            return performEvasiveLeap(context, action);
-        case "escapeGrapple":
-            return performEscapeGrapple(context, action);
-        case "coordinate":
-            return performCoordinate(context, action);
-        default:
-            return performReferenceAction(context, action, requestedTicks);
     }
+
+    if (completed && action.kind === "continuous" && !continuousActionManaged) {
+        const continuousAction = await beginContinuousAction(context, {
+            actionId: action.id,
+            startTick,
+            endTick: liveCombatantInitiative(context),
+        });
+        if (continuousAction && movementTargetAlreadyReached) {
+            await completeContinuousAction(context, {
+                actionIds: [action.id],
+                trigger: "movement",
+            });
+        }
+    }
+    return completed;
 }
 
 function liveTickActionContext(context) {
@@ -372,6 +418,11 @@ function actionName(action) {
 
 function targetName(context) {
     return context.target?.name ?? context.target?.actor?.name ?? "–";
+}
+
+function liveCombatantInitiative(context) {
+    const combatant = context?.combat?.combatants?.get?.(context?.combatant?.id) ?? context?.combatant;
+    return Number(combatant?.initiative);
 }
 
 function actorSkill(actor, skillId) {

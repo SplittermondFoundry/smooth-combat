@@ -1,6 +1,12 @@
 {
   "SMOOTHER_FIGHT": {
     "Title": "Smoother Fight",
+    "StatusEffects": {
+      "ContinuousAction": {
+        "Name": "Continuous action",
+        "Description": "The character is performing a continuous action. It ends when the character actually becomes active on its completion tick, when movement reaches its destination, or, for preparatory actions, with the associated attack or spell."
+      }
+    },
     "Keybindings": {
       "ToggleHudName": "Collapse or expand the combat HUD",
       "ToggleHudHint": "Switches between the full and compact Smoother Fight HUD while combat is running.",

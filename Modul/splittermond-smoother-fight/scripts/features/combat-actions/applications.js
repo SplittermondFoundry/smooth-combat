@@ -20,6 +20,10 @@ import {
     t,
 } from "../../shared/values.js";
 
+import {
+    beginContinuousAction,
+} from "./continuous-action.js";
+
 const preparationLocks = new Set();
 const movementReversalLocks = new Set();
 const staleApplicationTimers = new Map();
@@ -81,6 +85,11 @@ export async function prepareCombatAction(context, { kind, itemId, ticks, label 
             await persistPreparationFailureState(actor, "uncertain", applying);
             throw error;
         }
+        await beginContinuousAction(context, {
+            actionId: kind === "attack" ? "readyRangedAttack" : "focusMagic",
+            startTick: previousInitiative,
+            endTick: combatantInitiative(context.combatant),
+        });
         services.scheduleRender(0);
         return true;
     } finally {

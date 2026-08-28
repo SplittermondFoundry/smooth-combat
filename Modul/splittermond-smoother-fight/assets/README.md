@@ -20,6 +20,12 @@ Eigene Hintergrunddateien werden unter **Moduleinstellungen → Darstellung und 
 
 Für ein vollständiges eigenes Icon-Set werden diese sechs Dateien mit unveränderten Namen in einen Ordner im Foundry-Datenverzeichnis kopiert. Anschließend wird dieser Ordner unter **Darstellung und Medien** ausgewählt. Die SVGs werden als Masken eingefärbt; einfarbige, deckende Formen funktionieren deshalb am besten.
 
+## Statusmarker
+
+- `icons/continuous-action.svg`: automatisch zugewiesener Foundry-Status für eine laufende kontinuierliche Handlung
+
+Dieser Marker gehört zur Regellogik des Moduls und ist nicht Teil des austauschbaren HUD-Icon-Sets.
+
 ## Audiosignale
 
 - `audio/shield.wav`: Schutzakkord

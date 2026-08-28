@@ -46,6 +46,10 @@ import {
 } from "./range-warning.js";
 
 import {
+    completeContinuousAction,
+} from "./continuous-action.js";
+
+import {
     prepareSmallMagicProtectionRollOptions,
 } from "./spell-target-modifier.js";
 
@@ -98,6 +102,7 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
                     ? rollAttack(attack, preparedRoll.rollOptions)
                     : context.actor.rollAttack(attackId, preparedRoll.rollOptions)
             );
+            if (success) await completeContinuousAction(context, { trigger: "attack" }).catch(() => false);
             if (success && readiness.prepared) await clearPreparationApplication(context.actor, "attack");
             else if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
             if (success && preparationUse.consumeOnSuccess) {
@@ -124,6 +129,9 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
 export async function cancelPreparedAttack(context) {
     await clearPreparationApplication(context.actor, "attack");
     await clearAimPreparation(context.actor).catch(() => false);
+    await completeContinuousAction(context, {
+        actionIds: ["aim", "readyRangedAttack"],
+    }).catch(() => false);
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.AttackCancelled"));
     services.scheduleRender(0);
 }
@@ -202,7 +210,10 @@ export async function performSpell(context, spellId) {
                 [context.target],
                 () => context.actor.rollSpell(spellId, preparedRoll.rollOptions)
             );
-            if (success) await clearPreparationApplication(context.actor, "spell");
+            if (success) {
+                await completeContinuousAction(context, { trigger: "spell" }).catch(() => false);
+                await clearPreparationApplication(context.actor, "spell");
+            }
         } finally {
             preparedRoll.cleanup();
             clearPendingOffenseKind(context.actor.id, pendingNonce);
@@ -229,6 +240,7 @@ export async function performSpell(context, spellId) {
 
 export async function cancelPreparedSpell(context) {
     await clearPreparationApplication(context.actor, "spell");
+    await completeContinuousAction(context, { actionIds: ["focusMagic"] }).catch(() => false);
     combatActionState.preparingSpellId = null;
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.SpellCancelled"));
     services.scheduleRender(0);

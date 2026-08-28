@@ -1,6 +1,12 @@
 {
   "SMOOTHER_FIGHT": {
     "Title": "Smoother Fight",
+    "StatusEffects": {
+      "ContinuousAction": {
+        "Name": "Kontinuierliche Handlung",
+        "Description": "Der Charakter führt eine kontinuierliche Handlung aus. Sie endet, sobald er am Abschluss-Tick tatsächlich an der Reihe ist, wenn eine Bewegung ihr Ziel erreicht oder bei vorbereitenden Handlungen mit dem zugehörigen Angriff beziehungsweise Zauber."
+      }
+    },
     "Keybindings": {
       "ToggleHudName": "Kampf-HUD ein- oder ausklappen",
       "ToggleHudHint": "Wechselt während eines laufenden Kampfes zwischen dem vollständigen und dem kompakten Smoother-Fight-HUD.",

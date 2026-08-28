@@ -22,7 +22,7 @@ function installGlobals(combatant = null) {
     const combatants = combatant ? [combatant] : [];
     combatants.get = (id) => combatants.find((candidate) => candidate.id === id);
     globalThis.game = {
-        combat: { combatants },
+        combat: { id: "combat", currentTick: combatant?.initiative ?? 0, combatants },
         i18n: {
             format: (key) => key,
             localize: (key) => key,
@@ -115,8 +115,11 @@ test("a preparation failure without consumed ticks returns to idle and remains r
     const combatant = { id: "combatant", initiative: 10 };
     installGlobals(combatant);
     const actor = new TestActor(combatant);
+    const token = new TestToken();
+    token.actor = actor;
+    combatant.token = token;
     actor.tickError = new Error("ticks rejected");
-    const context = { actor, combatant };
+    const context = { actor, combatant, token };
 
     await assert.rejects(prepareCombatAction(context, {
         kind: "attack",
@@ -137,6 +140,10 @@ test("a preparation failure without consumed ticks returns to idle and remains r
     assert.equal(combatant.initiative, 15);
     assert.equal(actor.getFlag("splittermond", "preparedAttack"), "bow");
     assert.equal(getPreparationApplicationStatus(actor).state, "completed");
+    const continuousAction = token.getFlag(MODULE_ID, "continuousAction");
+    assert.equal(continuousAction.actionId, "readyRangedAttack");
+    assert.equal(continuousAction.startTick, 10);
+    assert.equal(continuousAction.endTick, 15);
 });
 
 test("consumed preparation ticks with a rejected prepared flag become uncertain until GM recovery", async () => {
@@ -167,6 +174,27 @@ test("consumed preparation ticks with a rejected prepared flag become uncertain 
     assert.equal(await recoverPreparationApplication(actor, "complete"), true);
     assert.equal(actor.getFlag("splittermond", "preparedSpell"), "fireball");
     assert.equal(getPreparationApplicationStatus(actor).state, "completed");
+});
+
+test("successful spell preparation enters the focus-magic continuous action", async () => {
+    const combatant = { id: "combatant", initiative: 20 };
+    installGlobals(combatant);
+    const actor = new TestActor(combatant);
+    const token = new TestToken();
+    token.actor = actor;
+    combatant.token = token;
+
+    assert.equal(await prepareCombatAction({ actor, combatant, token }, {
+        kind: "spell",
+        itemId: "fireball",
+        ticks: 8,
+        label: "Fireball",
+    }), true);
+
+    const continuousAction = token.getFlag(MODULE_ID, "continuousAction");
+    assert.equal(continuousAction.actionId, "focusMagic");
+    assert.equal(continuousAction.startTick, 20);
+    assert.equal(continuousAction.endTick, 28);
 });
 
 test("a rejected preparation write prevents tick consumption", async (t) => {

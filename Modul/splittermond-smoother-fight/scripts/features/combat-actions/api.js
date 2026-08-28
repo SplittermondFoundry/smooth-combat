@@ -39,6 +39,12 @@ export {
 } from "./tick-actions.js";
 
 export {
+    advanceContinuousActions,
+    clearContinuousActionForCombatant,
+    clearContinuousActionsForCombat,
+} from "./continuous-action.js";
+
+export {
     abortMovementPlan,
     advancePendingMovements,
     cancelMovementPlanAfterManualMove,
