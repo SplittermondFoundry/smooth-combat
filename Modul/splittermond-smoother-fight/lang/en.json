@@ -4,7 +4,13 @@
     "StatusEffects": {
       "ContinuousAction": {
         "Name": "Continuous action",
+        "AssignedName": "Continuous action ({action})",
         "Description": "The character is performing a continuous action. It ends when the character actually becomes active on its completion tick, when movement reaches its destination, or, for preparatory actions, with the associated attack or spell."
+      },
+      "MovementAction": {
+        "Name": "In motion",
+        "AssignedName": "In motion ({action})",
+        "Description": "The character is currently performing a movement action. The status ends when the destination is reached or the movement is cancelled."
       }
     },
     "Keybindings": {

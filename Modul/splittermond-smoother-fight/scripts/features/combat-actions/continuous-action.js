@@ -17,11 +17,13 @@ import {
 
 export const CONTINUOUS_ACTION_FLAG = "continuousAction";
 export const CONTINUOUS_ACTION_STATUS_ID = `${MODULE_ID}.continuous-action`;
+export const MOVEMENT_ACTION_STATUS_ID = `${MODULE_ID}.movement-action`;
 export const CONTINUOUS_MOVEMENT_ACTION_IDS = Object.freeze(["crawl", "walk", "sprint"]);
 
 const CONTINUOUS_ACTION_VERSION = 2;
 const LEGACY_CONTINUOUS_ACTION_VERSION = 1;
 const CONTINUOUS_ACTION_ICON = `${ASSET_ROOT}/icons/continuous-action.svg`;
+const MOVEMENT_ACTION_ICON = `${ASSET_ROOT}/icons/movement-action.svg`;
 const ATTACK_COMPLETION_ACTIONS = new Set(["aim", "readyRangedAttack", "searchOpening"]);
 const MOVEMENT_COMPLETION_ACTIONS = new Set(CONTINUOUS_MOVEMENT_ACTION_IDS);
 const SPELL_COMPLETION_ACTIONS = new Set(["focusMagic"]);
@@ -31,15 +33,14 @@ const continuousActionLocks = new Set();
 export function registerContinuousActionStatusEffect() {
     const statusEffects = globalThis.CONFIG?.statusEffects;
     if (!statusEffects) return false;
-    statusEffects[CONTINUOUS_ACTION_STATUS_ID] = {
-        id: CONTINUOUS_ACTION_STATUS_ID,
-        name: "SMOOTHER_FIGHT.StatusEffects.ContinuousAction.Name",
-        description: "SMOOTHER_FIGHT.StatusEffects.ContinuousAction.Description",
-        img: CONTINUOUS_ACTION_ICON,
-        changes: [],
-        hud: false,
-        showIcon: globalThis.CONST?.ACTIVE_EFFECT_SHOW_ICON?.ALWAYS ?? 2,
-    };
+    for (const definition of [continuousActionStatusDefinition(), movementActionStatusDefinition()]) {
+        statusEffects[definition.id] = {
+            ...definition,
+            changes: [],
+            hud: false,
+            showIcon: globalThis.CONST?.ACTIVE_EFFECT_SHOW_ICON?.ALWAYS ?? 2,
+        };
+    }
     return true;
 }
 
@@ -141,7 +142,7 @@ export async function beginContinuousAction(context, {
             return;
         }
         await setRequiredDocumentFlag(token, CONTINUOUS_ACTION_FLAG, record);
-        await ensureContinuousActionEffect(actor, record).catch((error) => {
+        await ensureContinuousActionEffects(actor, record).catch((error) => {
             console.error(`${MODULE_ID} | Could not display the continuous-action status effect`, error);
         });
     });
@@ -242,34 +243,64 @@ async function syncContinuousAction(token, combatant, combat) {
                 updatedAt: Date.now(),
             };
             await setRequiredDocumentFlag(token, CONTINUOUS_ACTION_FLAG, extended);
-            await ensureContinuousActionEffect(token.actor, extended);
+            await ensureContinuousActionEffects(token.actor, extended);
             return true;
         }
 
-        return ensureContinuousActionEffect(token.actor, action);
+        return ensureContinuousActionEffects(token.actor, action);
     });
 }
 
-async function ensureContinuousActionEffect(actor, action) {
+async function ensureContinuousActionEffects(actor, action) {
     if (!actor) return false;
-    const effect = findContinuousActionEffect(actor, action);
-    const data = continuousActionEffectData(action);
-    if (effect) {
-        if (effectMatchesAction(effect, action)) return false;
-        await effect.update?.({
-            name: data.name,
-            description: data.description,
-            img: data.img,
-            disabled: false,
-            showIcon: data.showIcon,
-            statuses: data.statuses,
-            [`flags.${MODULE_ID}.${CONTINUOUS_ACTION_FLAG}`]: action,
-        });
-        return true;
+    const retainedEffects = new Set();
+    let changed = false;
+
+    for (const status of statusDefinitionsForAction(action)) {
+        const effect = collectionValues(actor.effects).find((candidate) => (
+            !retainedEffects.has(candidate)
+            && effectBelongsToAction(candidate, action)
+            && effectHasStatus(candidate, status.id)
+        ));
+        const data = continuousActionEffectData(action, status);
+        if (effect) {
+            retainedEffects.add(effect);
+            if (effectMatchesAction(effect, action, status, data)) continue;
+            await effect.update?.({
+                name: data.name,
+                description: data.description,
+                img: data.img,
+                disabled: false,
+                showIcon: data.showIcon,
+                statuses: data.statuses,
+                [`flags.${MODULE_ID}.${CONTINUOUS_ACTION_FLAG}`]: action,
+            });
+            changed = true;
+            continue;
+        }
+
+        if (typeof actor.createEmbeddedDocuments !== "function") continue;
+        const created = await actor.createEmbeddedDocuments("ActiveEffect", [data]);
+        const createdEffect = collectionValues(created).find((candidate) => (
+            effectBelongsToAction(candidate, action) && effectHasStatus(candidate, status.id)
+        )) ?? collectionValues(actor.effects).find((candidate) => (
+            !retainedEffects.has(candidate)
+            && effectBelongsToAction(candidate, action)
+            && effectHasStatus(candidate, status.id)
+        ));
+        if (createdEffect) retainedEffects.add(createdEffect);
+        changed = true;
     }
-    if (typeof actor.createEmbeddedDocuments !== "function") return false;
-    await actor.createEmbeddedDocuments("ActiveEffect", [data]);
-    return true;
+
+    const staleIds = collectionValues(actor.effects)
+        .filter((effect) => effectBelongsToAction(effect, action) && !retainedEffects.has(effect))
+        .map((effect) => effect.id ?? effect._id)
+        .filter(Boolean);
+    if (staleIds.length && typeof actor.deleteEmbeddedDocuments === "function") {
+        await actor.deleteEmbeddedDocuments("ActiveEffect", staleIds);
+        changed = true;
+    }
+    return changed;
 }
 
 async function removeContinuousActionEffects(actor, action) {
@@ -283,15 +314,15 @@ async function removeContinuousActionEffects(actor, action) {
     return true;
 }
 
-function continuousActionEffectData(action) {
+function continuousActionEffectData(action, status) {
     return {
-        name: t("SMOOTHER_FIGHT.StatusEffects.ContinuousAction.Name"),
-        description: t("SMOOTHER_FIGHT.StatusEffects.ContinuousAction.Description"),
-        img: CONTINUOUS_ACTION_ICON,
+        name: continuousActionEffectName(action, status),
+        description: t(status.description),
+        img: status.img,
         changes: [],
         disabled: false,
         showIcon: globalThis.CONST?.ACTIVE_EFFECT_SHOW_ICON?.ALWAYS ?? 2,
-        statuses: [CONTINUOUS_ACTION_STATUS_ID],
+        statuses: [status.id],
         flags: {
             [MODULE_ID]: {
                 [CONTINUOUS_ACTION_FLAG]: action,
@@ -300,12 +331,8 @@ function continuousActionEffectData(action) {
     };
 }
 
-function findContinuousActionEffect(actor, action) {
-    return collectionValues(actor?.effects).find((effect) => effectBelongsToAction(effect, action)) ?? null;
-}
-
 function effectBelongsToAction(effect, action) {
-    if (!effectHasContinuousActionStatus(effect)) return false;
+    if (!effectHasManagedActionStatus(effect)) return false;
     const stored = effectContinuousAction(effect);
     if (!stored) return true;
     return (!action?.combatId || stored.combatId === action.combatId)
@@ -313,11 +340,20 @@ function effectBelongsToAction(effect, action) {
         && (!action?.tokenUuid || stored.tokenUuid === action.tokenUuid);
 }
 
-function effectHasContinuousActionStatus(effect) {
-    const statuses = effect?.statuses ?? effect?._source?.statuses ?? [];
+function effectHasManagedActionStatus(effect) {
+    return effectHasStatus(effect, CONTINUOUS_ACTION_STATUS_ID)
+        || effectHasStatus(effect, MOVEMENT_ACTION_STATUS_ID);
+}
+
+function effectHasStatus(effect, statusId) {
+    const statuses = effectStatuses(effect);
     return typeof statuses.has === "function"
-        ? statuses.has(CONTINUOUS_ACTION_STATUS_ID)
-        : Array.from(statuses).includes(CONTINUOUS_ACTION_STATUS_ID);
+        ? statuses.has(statusId)
+        : Array.from(statuses).includes(statusId);
+}
+
+function effectStatuses(effect) {
+    return effect?.statuses ?? effect?._source?.statuses ?? [];
 }
 
 function effectContinuousAction(effect) {
@@ -327,13 +363,50 @@ function effectContinuousAction(effect) {
     );
 }
 
-function effectMatchesAction(effect, action) {
+function effectMatchesAction(effect, action, status, data) {
     const stored = effectContinuousAction(effect);
     return Boolean(stored
         && stored.id === action.id
         && stored.endTick === action.endTick
+        && effectHasStatus(effect, status.id)
+        && Array.from(effectStatuses(effect)).length === 1
+        && effect.name === data.name
         && effect.disabled !== true
         && Number(effect.showIcon ?? effect._source?.showIcon) === (globalThis.CONST?.ACTIVE_EFFECT_SHOW_ICON?.ALWAYS ?? 2));
+}
+
+function continuousActionEffectName(action, status) {
+    const actionName = t(`SMOOTHER_FIGHT.HUD.TickActions.${action.actionId}.Name`);
+    const assignedName = status.id === MOVEMENT_ACTION_STATUS_ID
+        ? "SMOOTHER_FIGHT.StatusEffects.MovementAction.AssignedName"
+        : "SMOOTHER_FIGHT.StatusEffects.ContinuousAction.AssignedName";
+    return t(assignedName, { action: actionName });
+}
+
+function statusDefinitionsForAction(action) {
+    const statuses = [continuousActionStatusDefinition()];
+    if (continuousActionCompletionTrigger(action) === "movement") {
+        statuses.push(movementActionStatusDefinition());
+    }
+    return statuses;
+}
+
+function continuousActionStatusDefinition() {
+    return {
+        id: CONTINUOUS_ACTION_STATUS_ID,
+        name: "SMOOTHER_FIGHT.StatusEffects.ContinuousAction.Name",
+        description: "SMOOTHER_FIGHT.StatusEffects.ContinuousAction.Description",
+        img: CONTINUOUS_ACTION_ICON,
+    };
+}
+
+function movementActionStatusDefinition() {
+    return {
+        id: MOVEMENT_ACTION_STATUS_ID,
+        name: "SMOOTHER_FIGHT.StatusEffects.MovementAction.Name",
+        description: "SMOOTHER_FIGHT.StatusEffects.MovementAction.Description",
+        img: MOVEMENT_ACTION_ICON,
+    };
 }
 
 function readContinuousAction(token) {

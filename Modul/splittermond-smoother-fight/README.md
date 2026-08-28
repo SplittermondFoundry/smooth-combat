@@ -27,7 +27,7 @@ Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github
 
 - kompaktes Kampf-HUD mit aktivem Combatant, ausgewählten Zielen, VTD/KW/GW sowie Lebens- und Fokusleiste
 - persönliche Zuganzeige, Zielwarnungen und ein- oder ausblendbare Standard-Aktionsleiste
-- Foundry-basierte Bewegungsverfolgung mit freier Bewegung, Kriechen, Laufen, Sprinten, Überziehungswarnung, regelgerechter Bewegung entlang der gewählten Route bei Tick 5, 3/5 beziehungsweise 3/5/7/10 sowie parallel und standardmäßig dauerhaft eingeblendeten, tokenfarbigen Routen mit ganzzahligen Meilensteinen, Hover-Hervorhebung und Abbruch am nächstgelegenen Segment direkt im Kampf-HUD; die automatische Daueranzeige lässt sich pro Client abschalten
+- Foundry-basierte Bewegungsverfolgung mit freier Bewegung, Kriechen, Laufen, Sprinten, Überziehungswarnung, eigenem Token-Status **In Bewegung**, regelgerechter Bewegung entlang der gewählten Route bei Tick 5, 3/5 beziehungsweise 3/5/7/10 sowie parallel und standardmäßig dauerhaft eingeblendeten, tokenfarbigen Routen mit ganzzahligen Meilensteinen, Hover-Hervorhebung und Abbruch am nächstgelegenen Segment direkt im Kampf-HUD; die automatische Daueranzeige lässt sich pro Client abschalten
 - Fertigkeiten, Favoriten, Zauber, Angriffe, Ausrüstung und Aktive Abwehr direkt im HUD
 - Splitterpunkte für +3 VTD und Splitterpunkt-Resonanz für weitere +2 VTD direkt an der Angriffskarte
 - korrekte Vorbereitung und Auslösung von Fernkampfangriffen und Zaubern

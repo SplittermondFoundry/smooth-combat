@@ -9,6 +9,7 @@ import {
     CONTINUOUS_ACTION_STATUS_ID,
     getContinuousAction,
     isTokenInContinuousAction,
+    MOVEMENT_ACTION_STATUS_ID,
     normalizeContinuousAction,
     registerContinuousActionStatusEffect,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/continuous-action.js";
@@ -44,6 +45,7 @@ test("continuous-action records are strict token- and combat-bound tags", () => 
 test("starting a continuous action writes the token tag and assigns a visible Foundry status", async () => {
     const fixture = continuousActionFixture();
     installGlobals(fixture.user);
+    installGermanActionTranslations();
     const created = [];
     fixture.actor.createEmbeddedDocuments = async (type, data) => {
         created.push({ type, data: structuredClone(data) });
@@ -65,8 +67,97 @@ test("starting a continuous action writes the token tag and assigns a visible Fo
     assert.equal(created[0].type, "ActiveEffect");
     assert.deepEqual(created[0].data[0].statuses, [CONTINUOUS_ACTION_STATUS_ID]);
     assert.equal(created[0].data[0].showIcon, 2);
+    assert.equal(created[0].data[0].name, "Kontinuierliche Handlung (Aufstehen (liegend))");
     assert.equal(created[0].data[0].flags[MODULE_ID][CONTINUOUS_ACTION_FLAG].id, record.id);
     assert.match(created[0].data[0].img, /continuous-action\.svg$/u);
+});
+
+test("movement actions receive both continuous and movement assigned statuses", async () => {
+    for (const [actionId, actionName, endTick] of [
+        ["crawl", "Kriechen", 15],
+        ["walk", "Laufen", 15],
+        ["sprint", "Sprinten", 20],
+    ]) {
+        const fixture = continuousActionFixture();
+        installGlobals(fixture.user);
+        installGermanActionTranslations();
+        services.scheduleRender = () => {};
+
+        const record = await beginContinuousAction(fixture, {
+            actionId,
+            completionTrigger: "movement",
+            startTick: 10,
+            endTick,
+        });
+
+        assert.equal(record.actionId, actionId);
+        assert.equal(fixture.actor.effects.length, 2);
+        const continuousEffect = fixture.actor.effects.find((effect) => effect.statuses.has(CONTINUOUS_ACTION_STATUS_ID));
+        const movementEffect = fixture.actor.effects.find((effect) => effect.statuses.has(MOVEMENT_ACTION_STATUS_ID));
+        assert.ok(continuousEffect);
+        assert.ok(movementEffect);
+        assert.deepEqual(Array.from(continuousEffect.statuses), [CONTINUOUS_ACTION_STATUS_ID]);
+        assert.deepEqual(Array.from(movementEffect.statuses), [MOVEMENT_ACTION_STATUS_ID]);
+        assert.match(continuousEffect.img, /continuous-action\.svg$/u);
+        assert.match(movementEffect.img, /movement-action\.svg$/u);
+        assert.equal(continuousEffect.name, `Kontinuierliche Handlung (${actionName})`);
+        assert.equal(movementEffect.name, `In Bewegung (${actionName})`);
+
+        assert.equal(await completeContinuousAction(fixture, { trigger: "movement" }), true);
+        assert.deepEqual(fixture.actor.effects, []);
+    }
+});
+
+test("an existing generic marker is retained while movement adds its own status", async () => {
+    const record = continuousActionRecord({ actionId: "walk" });
+    const fixture = continuousActionFixture(record);
+    installGlobals(fixture.user);
+    installGermanActionTranslations();
+    services.getActivePrimaryGm = () => fixture.user;
+    services.scheduleRender = () => {};
+    fixture.actor.effects = [testEffect({
+        name: "Continuous action",
+        description: "",
+        img: "modules/splittermond-smoother-fight/assets/icons/continuous-action.svg",
+        disabled: false,
+        showIcon: 2,
+        statuses: [CONTINUOUS_ACTION_STATUS_ID],
+        flags: { [MODULE_ID]: { [CONTINUOUS_ACTION_FLAG]: record } },
+    })];
+
+    assert.equal(await advanceContinuousActions(fixture.combat), true);
+    assert.equal(fixture.actor.effects.length, 2);
+    const continuousEffect = fixture.actor.effects.find((effect) => effect.statuses.has(CONTINUOUS_ACTION_STATUS_ID));
+    const movementEffect = fixture.actor.effects.find((effect) => effect.statuses.has(MOVEMENT_ACTION_STATUS_ID));
+    assert.ok(continuousEffect);
+    assert.ok(movementEffect);
+    assert.deepEqual(Array.from(continuousEffect.statuses), [CONTINUOUS_ACTION_STATUS_ID]);
+    assert.deepEqual(Array.from(movementEffect.statuses), [MOVEMENT_ACTION_STATUS_ID]);
+    assert.equal(continuousEffect.name, "Kontinuierliche Handlung (Laufen)");
+    assert.equal(movementEffect.name, "In Bewegung (Laufen)");
+    assert.match(movementEffect.img, /movement-action\.svg$/u);
+});
+
+test("an existing movement marker gains the missing continuous status", async () => {
+    const record = continuousActionRecord({ actionId: "sprint" });
+    const fixture = continuousActionFixture(record);
+    installGlobals(fixture.user);
+    services.getActivePrimaryGm = () => fixture.user;
+    services.scheduleRender = () => {};
+    fixture.actor.effects = [testEffect({
+        name: "In motion",
+        description: "",
+        img: "modules/splittermond-smoother-fight/assets/icons/movement-action.svg",
+        disabled: false,
+        showIcon: 2,
+        statuses: [MOVEMENT_ACTION_STATUS_ID],
+        flags: { [MODULE_ID]: { [CONTINUOUS_ACTION_FLAG]: record } },
+    })];
+
+    assert.equal(await advanceContinuousActions(fixture.combat), true);
+    assert.equal(fixture.actor.effects.length, 2);
+    assert.ok(fixture.actor.effects.some((effect) => effect.statuses.has(CONTINUOUS_ACTION_STATUS_ID)));
+    assert.ok(fixture.actor.effects.some((effect) => effect.statuses.has(MOVEMENT_ACTION_STATUS_ID)));
 });
 
 test("tick changes extend a continuous action and its tag is removed on completion", async () => {
@@ -303,6 +394,15 @@ test("the Foundry status definition is registered as an automatic always-visible
         hud: false,
         showIcon: 2,
     });
+    assert.deepEqual(CONFIG.statusEffects[MOVEMENT_ACTION_STATUS_ID], {
+        id: MOVEMENT_ACTION_STATUS_ID,
+        name: "SMOOTHER_FIGHT.StatusEffects.MovementAction.Name",
+        description: "SMOOTHER_FIGHT.StatusEffects.MovementAction.Description",
+        img: "modules/splittermond-smoother-fight/assets/icons/movement-action.svg",
+        changes: [],
+        hud: false,
+        showIcon: 2,
+    });
 });
 
 function continuousActionRecord(overrides = {}) {
@@ -371,8 +471,11 @@ function continuousActionFixture(record = null) {
 function testEffect(source) {
     const effect = {
         id: `effect-${Math.random()}`,
+        description: source.description,
         disabled: source.disabled,
         flags: structuredClone(source.flags),
+        img: source.img,
+        name: source.name,
         showIcon: source.showIcon,
         statuses: new Set(source.statuses),
         getFlag(scope, key) {
@@ -417,4 +520,21 @@ function installGlobals(user) {
     globalThis.ui = { notifications: { error: () => assert.fail("unexpected flag error") } };
     globalThis.foundry = { utils: { randomID: () => "continuous-random" } };
     globalThis.CONST = { ACTIVE_EFFECT_SHOW_ICON: { ALWAYS: 2 } };
+}
+
+function installGermanActionTranslations() {
+    const translations = {
+        "SMOOTHER_FIGHT.HUD.TickActions.standUpProne.Name": "Aufstehen (liegend)",
+        "SMOOTHER_FIGHT.HUD.TickActions.crawl.Name": "Kriechen",
+        "SMOOTHER_FIGHT.HUD.TickActions.walk.Name": "Laufen",
+        "SMOOTHER_FIGHT.HUD.TickActions.sprint.Name": "Sprinten",
+    };
+    globalThis.game.i18n.localize = (key) => translations[key] ?? key;
+    globalThis.game.i18n.format = (key, data) => (
+        key === "SMOOTHER_FIGHT.StatusEffects.ContinuousAction.AssignedName"
+            ? `Kontinuierliche Handlung (${data.action})`
+            : key === "SMOOTHER_FIGHT.StatusEffects.MovementAction.AssignedName"
+                ? `In Bewegung (${data.action})`
+                : key
+    );
 }

@@ -4,7 +4,13 @@
     "StatusEffects": {
       "ContinuousAction": {
         "Name": "Kontinuierliche Handlung",
+        "AssignedName": "Kontinuierliche Handlung ({action})",
         "Description": "Der Charakter führt eine kontinuierliche Handlung aus. Sie endet, sobald er am Abschluss-Tick tatsächlich an der Reihe ist, wenn eine Bewegung ihr Ziel erreicht oder bei vorbereitenden Handlungen mit dem zugehörigen Angriff beziehungsweise Zauber."
+      },
+      "MovementAction": {
+        "Name": "In Bewegung",
+        "AssignedName": "In Bewegung ({action})",
+        "Description": "Der Charakter führt gerade eine Bewegungshandlung aus. Der Status endet, sobald das Bewegungsziel erreicht oder die Bewegung abgebrochen wird."
       }
     },
     "Keybindings": {

@@ -23,6 +23,7 @@ Für ein vollständiges eigenes Icon-Set werden diese sechs Dateien mit unverän
 ## Statusmarker
 
 - `icons/continuous-action.svg`: automatisch zugewiesener Foundry-Status für eine laufende kontinuierliche Handlung
+- `icons/movement-action.svg`: automatisch zugewiesener Foundry-Status für eine laufende Bewegungshandlung
 
 Dieser Marker gehört zur Regellogik des Moduls und ist nicht Teil des austauschbaren HUD-Icon-Sets.
 
