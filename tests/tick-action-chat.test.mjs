@@ -1041,7 +1041,7 @@ test("single-target attack mechanics use the primary target without losing secon
     const actor = {
         id: "attacker",
         attacks: [attack],
-        getFlag: () => attack.id,
+        getFlag: (scope, key) => scope === "splittermond" && key === "preparedAttack" ? attack.id : null,
         rollAttack: async (attackId) => {
             rolled = true;
             assert.equal(attackId, attack.id);

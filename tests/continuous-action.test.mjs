@@ -287,6 +287,30 @@ test("cancelled rolls retain preparatory actions and submitted rolls complete th
     assert.equal(isTokenInContinuousAction(spellFixture.token, spellFixture.combat), false);
 });
 
+test("a submitted attack cancels a prepared spell while a cancelled attack roll retains it", async () => {
+    const target = { uuid: "Token.target", actor: { uuid: "Actor.target" } };
+    const fixture = continuousActionFixture(continuousActionRecord({ actionId: "focusMagic" }));
+    installGlobals(fixture.user);
+    game.combat = fixture.combat;
+    services.getRuntimeController = () => fixture.user;
+    services.getTargetSelectionForUser = () => ({ target, targets: [target] });
+    services.withTemporarySystemTargets = async (_targets, operation) => operation();
+    services.scheduleRender = () => {};
+    ui.notifications.info = () => {};
+    fixture.actor.attacks = [{ id: "sword", name: "Sword", isRanged: false }];
+    installSystemFlags(fixture.actor, { preparedSpell: "spell" });
+    let submitted = false;
+
+    assert.equal(await performAttack(fixture, "sword", {}, async () => submitted), false);
+    assert.equal(fixture.actor.getFlag("splittermond", "preparedSpell"), "spell");
+    assert.equal(isTokenInContinuousAction(fixture.token, fixture.combat), true);
+
+    submitted = true;
+    assert.equal(await performAttack(fixture, "sword", {}, async () => submitted), true);
+    assert.equal(fixture.actor.getFlag("splittermond", "preparedSpell"), null);
+    assert.equal(isTokenInContinuousAction(fixture.token, fixture.combat), false);
+});
+
 test("explicitly cancelling attack or spell preparation removes its marker", async () => {
     const attackFixture = continuousActionFixture(continuousActionRecord({ actionId: "readyRangedAttack" }));
     installGlobals(attackFixture.user);

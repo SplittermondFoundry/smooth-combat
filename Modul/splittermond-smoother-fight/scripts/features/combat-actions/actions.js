@@ -103,6 +103,9 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
                     : context.actor.rollAttack(attackId, preparedRoll.rollOptions)
             );
             if (success) await completeContinuousAction(context, { trigger: "attack" }).catch(() => false);
+            if (success && context.actor.getFlag?.("splittermond", "preparedSpell")) {
+                await cancelPreparedSpell(context);
+            }
             if (success && readiness.prepared) await clearPreparationApplication(context.actor, "attack");
             else if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
             if (success && preparationUse.consumeOnSuccess) {
