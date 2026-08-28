@@ -114,6 +114,7 @@ export function registerHooks() {
     Hooks.on("renderChatMessageHTML", (message, html) => services.prepareRenderedChatMessage(message, html));
     Hooks.on("renderChatMessage", (message, html) => services.prepareRenderedChatMessage(message, asElement(html)));
     Hooks.on("renderTokenHUD", (app, html) => services.renderTokenOwnerControl(app, html));
+    services.prepareExistingRenderedChatMessages();
 }
 
 function runAuthoritativeAttackPreparationCleanup(operation) {

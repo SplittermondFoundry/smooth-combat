@@ -37,6 +37,14 @@ export async function onCreateChatMessage(message) {
 
 export async function onUpdateChatMessage(message, changes) {
     const checkUpdated = hasSplittermondCheckUpdate(changes);
+    const offenseOutcomeUpdated = checkUpdated || hasContentUpdate(changes);
+    if (offenseOutcomeUpdated && isOffensiveCombatMessage(message) && maySynchronizeOffenseUpdate(message)) {
+        try {
+            await services.reopenDefensePhaseAfterOutcomeChange(message);
+        } catch (error) {
+            console.error(`${MODULE_ID} | Failed to reopen active defense after an updated offense`, error);
+        }
+    }
     if ((!checkUpdated && !hasDefenseContextUpdate(changes)) || !services.isDefenseMessage(message)) return;
     try {
         const author = message.author ?? game.users.get(message.user?.id ?? message.user);
@@ -60,6 +68,19 @@ export async function onUpdateChatMessage(message, changes) {
     } catch (error) {
         console.error(`${MODULE_ID} | Failed to process updated defense message`, error);
     }
+}
+
+function hasContentUpdate(changes) {
+    return Boolean(changes && typeof changes === "object" && Object.hasOwn(changes, "content"));
+}
+
+function maySynchronizeOffenseUpdate(message) {
+    if (services.isOwnMessage(message)) return true;
+    const author = message.author ?? game.users?.get?.(message.user?.id ?? message.user);
+    if (author?.active) return false;
+    if (!game.user?.isGM) return false;
+    const primaryGm = services.getActivePrimaryGm?.();
+    return !primaryGm || primaryGm.id === game.user.id;
 }
 
 function hasDefenseContextUpdate(changes) {
@@ -146,6 +167,7 @@ async function attachCombatContext(message) {
         outOfTurn: Boolean(activeCombatant && speakerCombatant && activeCombatant.id !== speakerCombatant.id),
         assignedUserId: assignedUser?.id ?? null,
         runtimeControllerId: runtimeController?.id ?? game.user.id,
+        initialCheckSucceeded: message.system?.checkReport?.succeeded === true,
         defensePhase: services.initialDefensePhaseForOffense(message),
         createdAt,
     };
@@ -250,4 +272,13 @@ export function prepareRenderedChatMessage(message, html) {
     captureSystemActiveDefense(message, html);
     captureSystemOffenseFollowUps(message, html);
     services.bindFumbleActions(message, html);
+}
+
+export function prepareExistingRenderedChatMessages(root = globalThis.document) {
+    if (!root?.querySelectorAll) return;
+    for (const html of root.querySelectorAll('.message[data-message-id]')) {
+        if (html.closest?.(`#${MODULE_ID}-hud`)) continue;
+        const message = game.messages?.get?.(html.dataset?.messageId);
+        if (message) prepareRenderedChatMessage(message, html);
+    }
 }

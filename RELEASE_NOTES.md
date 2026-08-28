@@ -17,6 +17,7 @@ Dieses Update macht mehrstufige Kampfvorgänge ausfallsicherer. Begonnene und er
 ## Verbesserungen und Fehlerbehebungen
 
 - Optimierung des Release-Prozesses.
+- Wird ein knapp misslungener Angriff durch einen nachträglich eingesetzten **Splitterpunkt** erfolgreich, öffnet sich die Abwehrphase nun ohne Reload. Die **Aktive Abwehr** erscheint sofort auf der Angriffskarte; auch bereits beim Modulstart dargestellte Karten erhalten zuverlässig die rote Verzichtsoption.
 - Vorbereitete Fernkampfangriffe und Zauber passen ihre Aktionsbeschriftung jetzt an die tatsächlich verfügbare Breite an. Dadurch überlagern lange Bezeichnungen wie **Vorbereiteter Fernkampfangriff** nicht mehr die Schaltfläche zum Auslösen.
 - Schadensanwendungen verwenden ein eindeutiges Zustandsmodell: **bereit → wird angewendet → abgeschlossen**. Ein begonnener Versuch gilt nicht länger automatisch als erfolgreich.
 - Kann sicher festgestellt werden, dass kein Schaden angewendet wurde – etwa weil das Ziel fehlt, nicht berechtigt ist oder Kosten nicht verbraucht werden konnten –, wird die Aktion für einen erneuten Versuch freigegeben.

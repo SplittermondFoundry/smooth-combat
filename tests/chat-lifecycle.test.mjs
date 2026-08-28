@@ -16,6 +16,7 @@ const harness = {
     runtimeController: null,
     primaryTargetUuid: null,
     pendingKinds: new Map(),
+    reopenedOffenses: [],
 };
 
 function record(name, ...args) {
@@ -69,6 +70,10 @@ configureServices({
     initialDefensePhaseForOffense: () => "unavailable",
     normalizePendingDefense: (value) => value,
     processDefenseMessage: async (...args) => record("processDefenseMessage", ...args),
+    reopenDefensePhaseAfterOutcomeChange: async (message) => {
+        harness.reopenedOffenses.push(message);
+        return message;
+    },
     setRequiredFlag: async (message, key, value) => {
         record("setRequiredFlag", message, key, value);
         if (key === "context") harness.contexts.set(message, value);
@@ -105,6 +110,7 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
     harness.fumble = fumble;
     harness.primaryTargetUuid = null;
     harness.pendingKinds = new Map();
+    harness.reopenedOffenses = [];
 
     const actor = { id: "actor-attacker", uuid: "Actor.attacker" };
     const attackerToken = {
@@ -144,6 +150,7 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
         },
         _dice3danimating: diceActive,
         _dice3dPendingRenders: diceActive ? 1 : 0,
+        system: { checkReport: { succeeded: false } },
     };
     const hooks = createHooksHarness();
 
@@ -252,6 +259,7 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
             outOfTurn: false,
             assignedUserId: fixture.assignedUser.id,
             runtimeControllerId: fixture.runtimeController.id,
+            initialCheckSucceeded: false,
             defensePhase: "unavailable",
             createdAt: context.createdAt,
         });
@@ -344,4 +352,21 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
         assert.equal(harness.pendingKinds.get(fixture.actor.id), successor);
         assert.equal(harness.contexts.get(fixture.message)?.actionKind, pendingKind.kind);
     });
+});
+
+test("a content-only rerender that turns an offense successful reopens active defense", async (t) => {
+    const gameDescriptor = Object.getOwnPropertyDescriptor(globalThis, "game");
+    t.after(() => {
+        if (gameDescriptor) Object.defineProperty(globalThis, "game", gameDescriptor);
+        else delete globalThis.game;
+    });
+    const fixture = createFixture({ diceActive: false });
+    fixture.message.content = '<button data-localaction="activeDefense">Abwehr</button>';
+
+    await onUpdateChatMessage(fixture.message, {
+        content: fixture.message.content,
+    });
+
+    assert.deepEqual(harness.reopenedOffenses, [fixture.message]);
+    assert.equal(callsOf("processDefenseMessage").length, 0);
 });

@@ -16,6 +16,7 @@ export {
     isDiceAnimationPending,
     onCreateChatMessage,
     onUpdateChatMessage,
+    prepareExistingRenderedChatMessages,
     prepareRenderedChatMessage,
     waitForChatMessage,
     waitForDefenseProcessing,

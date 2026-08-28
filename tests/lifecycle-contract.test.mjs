@@ -98,6 +98,7 @@ const serviceStubs = {
     markCombatEventDeletionPending: (...args) => record("markCombatEventDeletionPending", args),
     clearCombatEventExpansionRequest: (...args) => record("clearCombatEventExpansionRequest", args),
     prepareRenderedChatMessage: (...args) => record("prepareRenderedChatMessage", args),
+    prepareExistingRenderedChatMessages: (...args) => record("prepareExistingRenderedChatMessages", args),
     renderTokenOwnerControl: (...args) => record("renderTokenOwnerControl", args),
     resolveToken: (...args) => {
         record("resolveToken", args);
@@ -229,6 +230,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
     registerSocket();
 
     assert.deepEqual(hookRegistrations.map(({ name }) => name), EXPECTED_HOOKS);
+    assert.deepEqual(callsOf("prepareExistingRenderedChatMessages"), [[]]);
     assert.equal(socketRegistrations.length, 1);
     assert.equal(socketRegistrations[0].channel, "module.splittermond-smoother-fight");
     const socketHandler = socketRegistrations[0].callback;

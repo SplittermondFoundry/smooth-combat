@@ -24,6 +24,7 @@ import {
     defenseAllowsModification,
     defenseAwaitsResponse,
     defensePhaseForOffense,
+    reopenDefensePhaseAfterOutcomeChange,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/phase.js";
 import { activeDefenseState } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/state.js";
 import { setRequiredFlag } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
@@ -403,6 +404,34 @@ test("declining active defense is persistent and rejects a delayed defense resul
     assert.equal(await processDefenseMessage(defense, pendingFor(root, defense, 1)), undefined);
     assert.equal(latestOffense(root), root);
     assert.equal(root.flags[MODULE_ID].context.defensePhase, "declined");
+});
+
+test("a splinterpoint success reopens an initially unavailable active defense phase", async () => {
+    resetHarness();
+    const root = createAttack("attack-offense-splinterpoint", attackReport({ succeeded: false }), {
+        defensePhase: "unavailable",
+        initialCheckSucceeded: false,
+        primaryTargetTokenUuid: "Token.splinterpoint-target",
+    });
+    root.content = '<button data-localaction="activeDefense">Abwehr</button>';
+
+    assert.equal(defensePhaseForOffense(root), "open", "the rendered success is usable before the flag write finishes");
+    assert.equal(await reopenDefensePhaseAfterOutcomeChange(root), root);
+    assert.equal(root.flags[MODULE_ID].context.defensePhase, "open");
+    assert.equal(root.flags[MODULE_ID].context.defenseOpenReason, "outcome-improved");
+    assert.equal(defenseAwaitsResponse(root), true);
+});
+
+test("a rendered system defense action repairs an older unavailable phase without an initial outcome marker", () => {
+    resetHarness();
+    const root = createAttack("legacy-offense-splinterpoint", attackReport({ succeeded: false }), {
+        defensePhase: "unavailable",
+        primaryTargetTokenUuid: "Token.legacy-splinterpoint-target",
+    });
+    root.content = '<button data-localaction="activeDefense">Abwehr</button>';
+
+    assert.equal(defensePhaseForOffense(root), "open");
+    assert.equal(defenseAwaitsResponse(root), true);
 });
 
 test("started damage closes stale defense phases even without an explicit phase update", async () => {

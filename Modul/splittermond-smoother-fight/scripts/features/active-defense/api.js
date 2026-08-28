@@ -17,6 +17,7 @@ export {
     defensePhaseForOffense,
     hasOffenseFollowUpStarted,
     initialDefensePhaseForOffense,
+    reopenDefensePhaseAfterOutcomeChange,
 } from "./phase.js";
 
 export {

@@ -67,6 +67,62 @@ test("an open active-defense action gains a directly adjacent decline button", (
     assert.equal(root.wrapper.children[1].dataset.messageId, "attack");
 });
 
+test("an open defense phase restores a missing active-defense action", (t) => {
+    const previousDocument = globalThis.document;
+    const currentUser = { id: "defender", isGM: false };
+    const actions = {
+        children: [],
+        append(child) {
+            this.children.push(child);
+        },
+    };
+    const root = {
+        wrapper: null,
+        defenseButton: null,
+        querySelector: () => actions,
+        querySelectorAll(selector) {
+            if (selector === ".sf-chat-defense-response") return [];
+            if (selector.includes("activeDefense")) return this.defenseButton ? [this.defenseButton] : [];
+            if (selector === ".splittermond-chat-action, .add-tick[data-ticks]") {
+                return this.defenseButton ? [this.defenseButton] : [];
+            }
+            return [];
+        },
+    };
+    globalThis.document = {
+        createElement: (tag) => {
+            const element = {
+                tag,
+                children: [],
+                dataset: {},
+                classList: { values: [], add(value) { this.values.push(value); } },
+                closest: () => null,
+                setAttribute(name, value) { this[name] = value; },
+                append(...children) { this.children.push(...children); },
+                replaceWith(wrapper) { root.wrapper = wrapper; },
+            };
+            if (tag === "button" && !root.defenseButton) root.defenseButton = element;
+            return element;
+        },
+    };
+    globalThis.game = {
+        i18n: { localize: (key) => key },
+        user: currentUser,
+    };
+    t.after(() => {
+        if (previousDocument === undefined) delete globalThis.document;
+        else globalThis.document = previousDocument;
+    });
+
+    enforceOffenseDefensePhaseControls(root, { id: "attack", type: "attackRollMessage" });
+
+    assert.equal(actions.children.length, 1);
+    assert.equal(actions.children[0].dataset.localaction, "activeDefense");
+    assert.match(actions.children[0].className, /sf-synthetic-active-defense/u);
+    assert.equal(root.wrapper.children[0], actions.children[0]);
+    assert.equal(root.wrapper.children[1].dataset.sfAction, "decline-active-defense");
+});
+
 test("fumble ownership follows the character assignment instead of broad actor ownership", () => {
     const currentUser = { id: "unassigned-player", isGM: false };
     const assignedUser = { id: "assigned-player", isGM: false };

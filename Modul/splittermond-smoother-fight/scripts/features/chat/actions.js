@@ -495,6 +495,7 @@ export function enforceOffenseDefensePhaseControls(element, message) {
             .forEach((button) => button.remove());
     }
     if (!services.defenseAwaitsResponse(message)) return;
+    ensureActiveDefenseControl(element, message);
     decorateActiveDefenseResponseControls(element, message);
     for (const control of element.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks]")) {
         if (!isOffenseFollowUpControl(control)) continue;
@@ -503,6 +504,26 @@ export function enforceOffenseDefensePhaseControls(element, message) {
         control.classList.add("is-awaiting-defense");
         control.title = t("SMOOTHER_FIGHT.HUD.DefenseFollowUpBlocked");
     }
+}
+
+function ensureActiveDefenseControl(element, message) {
+    const selector = '[data-localaction="activeDefense" i], [data-local-action="activeDefense" i]';
+    if (element.querySelectorAll(selector).length || !services.canUserDeclineActiveDefense(game.user, message)) return;
+    const actions = element.querySelector?.([
+        ".sf-promoted-actions",
+        ".splittermond.check.attack > .actions",
+        ".splittermond.check.spell > .actions",
+        ".splittermond.check.attack .actions.splittermond-chat-action-container",
+        ".splittermond.check.spell .actions.splittermond-chat-action-container",
+    ].join(", "));
+    if (!actions) return;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "splittermond-chat-action sf-synthetic-active-defense";
+    button.dataset.localaction = "activeDefense";
+    button.innerHTML = `<i class="fa-solid fa-shield-halved" aria-hidden="true"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.Defense"))}`;
+    actions.append(button);
 }
 
 function decorateActiveDefenseResponseControls(element, message) {
