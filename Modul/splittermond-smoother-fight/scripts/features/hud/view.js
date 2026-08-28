@@ -150,11 +150,12 @@ export async function buildHud(context) {
                     token: target,
                     actor: target.actor,
                     eyebrow: `${t("SMOOTHER_FIGHT.HUD.PrimaryTarget")}${targetDistanceSuffix}`,
+                    headerActions: buildTargetHeaderActions(context),
                     action: "open-token-sheet",
                     highlighted: services.isCurrentUserTarget(target),
                     primary: true,
                     showDefenses: canViewDefenseValues(target.actor),
-                })}${buildTargetDefeatControl(context)}${services.canChooseTarget(context) ? `<button type="button" class="sf-primary-target-remove" data-sf-action="remove-target" data-token-uuid="${escapeAttr(target.uuid)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName }))}" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName }))}"><i class="fa-solid fa-xmark"></i></button>` : ""}</div></div>` : noTargetPanel()}
+                })}</div></div>` : noTargetPanel()}
             </div>
         </div>
     `;
@@ -190,8 +191,10 @@ async function buildConcealedHud(context) {
 function concealedActorPanel(label) {
     return `
         <aside class="sf-portrait sf-actor sf-concealed-actor" aria-label="${escapeAttr(label)}">
-            <div class="sf-portrait-image">
+            <div class="sf-portrait-header">
                 <span class="sf-eyebrow">${escapeHtml(t("SMOOTHER_FIGHT.HUD.Active"))}</span>
+            </div>
+            <div class="sf-portrait-image">
                 <span class="sf-concealed-symbol" aria-hidden="true"><i class="fa-solid fa-circle-question"></i></span>
             </div>
             <div class="sf-portrait-name" aria-hidden="true">?</div>
@@ -220,7 +223,7 @@ function buildGmCheatToggle() {
     return `<button type="button" class="sf-hud-toggle sf-cheat-roll-toggle ${active ? "is-active" : ""}" data-sf-action="toggle-cheat-roll" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" aria-pressed="${active}"><i class="fa-solid fa-dice"></i></button>`;
 }
 
-function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted = false, primary = false, showDefenses = true }) {
+function portraitPanel({ side, token, actor, eyebrow, headerActions = "", action = "", highlighted = false, primary = false, showDefenses = true }) {
     const image = actor?.img || token?.texture?.src || "icons/svg/mystery-man.svg";
     const tokenReference = token?.uuid ? `data-sf-token-uuid="${escapeAttr(token.uuid)}"` : "";
     const name = token?.name ?? actor?.name ?? "–";
@@ -234,9 +237,12 @@ function portraitPanel({ side, token, actor, eyebrow, action = "", highlighted =
     return `
         <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""} ${primary ? "sf-is-primary-target" : ""}" ${tokenReference} aria-label="${escapeAttr(`${eyebrow}: ${name}`)}">
             ${focusButton}
+            <div class="sf-portrait-header">
+                <span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>
+                ${headerActions ? `<div class="sf-portrait-header-actions">${headerActions}</div>` : ""}
+            </div>
             <div class="sf-portrait-image">
                 <img class="sf-portrait-art" src="${escapeAttr(image)}" alt="" aria-hidden="true">
-                <span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>
                 ${highlighted ? `<span class="sf-target-alert"><i class="fa-solid fa-bullseye"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YouAreTarget"))}</span></span>` : ""}
                 ${services.feedbackMarkup(token, actor)}
             </div>
@@ -275,6 +281,17 @@ function buildTargetDefeatControl(context) {
     const targetName = target.name ?? target.actor?.name ?? "–";
     const label = `${t("SMOOTHER_FIGHT.HUD.MarkDefeated")}: ${targetName}`;
     return `<button type="button" class="sf-primary-target-defeat" data-sf-action="mark-target-defeated" data-token-uuid="${escapeAttr(tokenReference)}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid fa-skull"></i></button>`;
+}
+
+function buildTargetHeaderActions(context) {
+    const target = context.target;
+    if (!target) return "";
+    const defeatControl = buildTargetDefeatControl(context);
+    if (!services.canChooseTarget(context)) return defeatControl;
+    const targetName = target.name ?? target.actor?.name ?? "–";
+    const removeLabel = t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName });
+    const removeControl = `<button type="button" class="sf-primary-target-remove" data-sf-action="remove-target" data-token-uuid="${escapeAttr(target.uuid)}" title="${escapeAttr(removeLabel)}" aria-label="${escapeAttr(removeLabel)}"><i class="fa-solid fa-xmark"></i></button>`;
+    return `${defeatControl}${removeControl}`;
 }
 
 function buildSecondaryTargets(context) {

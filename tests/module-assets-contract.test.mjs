@@ -192,7 +192,9 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-portrait-art\s*\{[^}]*object-fit:\s*cover/su);
     assert.match(flattenedCss, /\.sf-portrait-image::after\s*\{[^}]*linear-gradient/su);
     assert.match(flattenedCss, /--sf-side-panel-width:\s*172px/u);
-    assert.match(flattenedCss, /--sf-portrait-height:\s*212px/u);
+    assert.match(flattenedCss, /--sf-portrait-height:\s*246px/u);
+    assert.match(flattenedCss, /--sf-portrait-header-height:\s*34px/u);
+    assert.match(flattenedCss, /\.sf-portrait-header\s*\{[^}]*height:\s*var\(--sf-portrait-header-height\)/su);
     assert.match(
         flattenedCss,
         /\.sf-movement-sections\s*\{[^}]*grid-template-columns:\s*max-content minmax\(max-content, 1fr\) minmax\(max-content, 3fr\)/su,
@@ -204,7 +206,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "3dc167f99e36836ce1f28e5403ae6039ad7f3305f040cae4fc5bd30077f197cd",
+        "2bf4aedac124090b0dc2dfb627f921edcec5934d55a6bc6db7e94f2e14aadfcf",
     );
 });
 

@@ -408,6 +408,38 @@ test("the world option reveals a foreign target's health and focus", async () =>
     assert.match(revealed, /5\/11/u);
 });
 
+test("active actor and primary target portraits share the same dedicated header", async () => {
+    installFixture();
+    const targetActor = {
+        img: "target.webp",
+        name: "Target actor",
+        derivedValues: {},
+        system: {},
+        testUserPermission: () => false,
+    };
+    const target = {
+        actor: targetActor,
+        name: "Foreign target",
+        uuid: "Scene.scene.Token.foreign-target",
+    };
+    harness.targetSelection = {
+        target,
+        targets: [target],
+        primaryTargetTokenUuid: target.uuid,
+        primaryTargetActorUuid: null,
+    };
+
+    const html = await buildHud(getHudContext());
+    const actorCard = html.match(/<aside class="sf-portrait sf-actor[^"]*"[\s\S]*?<\/aside>/u)?.[0];
+    const targetCard = html.match(/<aside class="sf-portrait sf-target[^"]*"[\s\S]*?<\/aside>/u)?.[0];
+
+    assert.ok(actorCard);
+    assert.ok(targetCard);
+    assert.match(actorCard, /<div class="sf-portrait-header">\s*<span class="sf-eyebrow">SMOOTHER_FIGHT\.HUD\.Active<\/span>\s*<\/div>\s*<div class="sf-portrait-image">/u);
+    assert.match(targetCard, /<div class="sf-portrait-header">\s*<span class="sf-eyebrow">SMOOTHER_FIGHT\.HUD\.PrimaryTarget<\/span>\s*<\/div>\s*<div class="sf-portrait-image">/u);
+    assert.doesNotMatch(html, /class="sf-portrait-image">\s*<span class="sf-eyebrow">/u);
+});
+
 test("the GM can mark a zero-health primary target combatant defeated with one click", async () => {
     const { combat } = installFixture();
     globalThis.game.user = { id: "gm", isGM: true, name: "GM" };
@@ -443,10 +475,15 @@ test("the GM can mark a zero-health primary target combatant defeated with one c
     };
 
     const html = await buildHud(getHudContext());
+    const defeatControlIndex = html.indexOf('class="sf-primary-target-defeat"');
+    const targetHeaderIndex = html.lastIndexOf('class="sf-portrait-header"', defeatControlIndex);
+    const targetImageIndex = html.indexOf('class="sf-portrait-image"', targetHeaderIndex);
 
     assert.match(html, /class="sf-primary-target-defeat"/u);
     assert.match(html, /data-sf-action="mark-target-defeated"/u);
     assert.match(html, /data-token-uuid="Scene\.scene\.Token\.zero-health-target"/u);
+    assert.ok(targetHeaderIndex >= 0 && targetHeaderIndex < defeatControlIndex);
+    assert.ok(defeatControlIndex < targetImageIndex);
     assert.equal(await markZeroHealthTargetDefeated(getHudContext(), target.uuid), true);
     assert.deepEqual(updates, [{ defeated: true }]);
     assert.doesNotMatch(await buildHud(getHudContext()), /data-sf-action="mark-target-defeated"/u);
