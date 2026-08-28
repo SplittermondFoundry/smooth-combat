@@ -6,8 +6,10 @@ import {
 } from "./action-tooltips.js";
 
 import {
+    findCombatantForToken,
     getPersonalHudCandidates,
     getPersonalHudContext,
+    isActorAtZeroHealth,
 } from "./context.js";
 
 import {
@@ -152,7 +154,7 @@ export async function buildHud(context) {
                     highlighted: services.isCurrentUserTarget(target),
                     primary: true,
                     showDefenses: canViewDefenseValues(target.actor),
-                })}${services.canChooseTarget(context) ? `<button type="button" class="sf-primary-target-remove" data-sf-action="remove-target" data-token-uuid="${escapeAttr(target.uuid)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName }))}" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName }))}"><i class="fa-solid fa-xmark"></i></button>` : ""}</div></div>` : noTargetPanel()}
+                })}${buildTargetDefeatControl(context)}${services.canChooseTarget(context) ? `<button type="button" class="sf-primary-target-remove" data-sf-action="remove-target" data-token-uuid="${escapeAttr(target.uuid)}" title="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName }))}" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName }))}"><i class="fa-solid fa-xmark"></i></button>` : ""}</div></div>` : noTargetPanel()}
             </div>
         </div>
     `;
@@ -262,6 +264,17 @@ function noTargetPanel() {
             <small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoTargetDetail"))}</small>
         </aside>
     `;
+}
+
+function buildTargetDefeatControl(context) {
+    const target = context.target;
+    if (!game.user?.isGM || !isActorAtZeroHealth(target?.actor)) return "";
+    const combatant = findCombatantForToken(context.combat, target);
+    const tokenReference = services.tokenUuid(target) ?? target?.id ?? null;
+    if (!combatant || combatant.isDefeated || !tokenReference) return "";
+    const targetName = target.name ?? target.actor?.name ?? "–";
+    const label = `${t("SMOOTHER_FIGHT.HUD.MarkDefeated")}: ${targetName}`;
+    return `<button type="button" class="sf-primary-target-defeat" data-sf-action="mark-target-defeated" data-token-uuid="${escapeAttr(tokenReference)}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid fa-skull"></i></button>`;
 }
 
 function buildSecondaryTargets(context) {

@@ -998,6 +998,32 @@
     background: rgba(5, 15, 18, 0.72);
 }
 
+#splittermond-smoother-fight-hud .sf-primary-target-defeat {
+    position: absolute;
+    z-index: 5;
+    top: 5px;
+    left: 5px;
+    width: 32px;
+    height: 32px;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    padding: 0;
+    border: 1px solid rgba(255, 170, 163, 0.72);
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(139, 34, 27, 0.9);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.46);
+}
+
+#splittermond-smoother-fight-hud .sf-primary-target-defeat:hover,
+#splittermond-smoother-fight-hud .sf-primary-target-defeat:focus-visible {
+    border-color: #fff;
+    color: #fff;
+    background: var(--sf-danger);
+}
+
 #splittermond-smoother-fight-hud .sf-primary-target-remove:hover {
     border-color: var(--sf-danger);
     color: #ffaaa3;

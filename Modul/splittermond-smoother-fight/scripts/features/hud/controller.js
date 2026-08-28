@@ -3,7 +3,9 @@ import { hudState } from "./state.js";
 import { services } from "../../core/services.js";
 
 import {
+    findCombatantForToken,
     getHudContext,
+    isActorAtZeroHealth,
     resolveHudActionContext,
     selectPersonalCombatantFromMenu,
 } from "./context.js";
@@ -138,6 +140,17 @@ function normalizeTickActionSearchText(value) {
         .trim()
         .toLocaleLowerCase()
         .replaceAll("ß", "ss");
+}
+
+export async function markZeroHealthTargetDefeated(context, tokenReference) {
+    if (!game.user?.isGM || !context?.target || !tokenReference) return false;
+    const target = context.target?.document ?? context.target;
+    const references = [services.tokenUuid(target), target?.id].filter(Boolean);
+    if (!references.includes(tokenReference) || !isActorAtZeroHealth(target.actor)) return false;
+    const combatant = findCombatantForToken(context.combat, target);
+    if (!combatant || combatant.isDefeated || typeof combatant.update !== "function") return false;
+    await combatant.update({ defeated: true });
+    return true;
 }
 
 export async function renderHud() {
@@ -394,6 +407,9 @@ class SmootherFightHud {
                     break;
                 case "toggle-combatant-defeated":
                     await services.requireGm(() => context.combatant.update({ defeated: !context.combatant.isDefeated }));
+                    break;
+                case "mark-target-defeated":
+                    await services.requireGm(() => markZeroHealthTargetDefeated(context, target.dataset.tokenUuid));
                     break;
                 case "remove-combatant":
                     await services.requireGm(() => services.removeCombatant(context));

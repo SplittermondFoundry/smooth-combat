@@ -84,6 +84,7 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /data-sf-context-actor-id/u);
     assert.match(hudView, /sf-is-primary-target/u);
     assert.match(hudView, /data-sf-action="remove-target"/u);
+    assert.match(hudView, /data-sf-action="mark-target-defeated"/u);
     assert.match(hudView, /SMOOTHER_FIGHT\.HUD\.PrimaryTarget/u);
     assert.match(hudView, /\$\{buildSecondaryTargets\(context\)\}<div class="sf-primary-target-panel">/u);
     assert.match(hudView, /<details class="sf-visibility-menu/u);
@@ -106,6 +107,7 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudController, /bindSpellListFilters/u);
     assert.match(hudController, /case "toggle-favorite-tick-action"/u);
     assert.match(hudController, /case "clear-attack-preparation"/u);
+    assert.match(hudController, /case "mark-target-defeated"/u);
     assert.match(hudController, /action === "respond-active-defense"/u);
     assert.match(hudController, /action === "decline-active-defense"/u);
     assert.doesNotMatch(hudView, /sf-tick-action-tooltip/u);
@@ -202,7 +204,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "254d17fafabda8d60afbe9c86bc474f635ad42c278c4462e82d6afdabc7e882e",
+        "3dc167f99e36836ce1f28e5403ae6039ad7f3305f040cae4fc5bd30077f197cd",
     );
 });
 

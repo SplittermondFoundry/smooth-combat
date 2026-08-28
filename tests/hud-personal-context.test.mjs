@@ -12,6 +12,7 @@ import {
 } from "../Modul/splittermond-smoother-fight/scripts/features/hud/context.js";
 import { buildTickActionReference } from "../Modul/splittermond-smoother-fight/scripts/features/hud/tick-action-reference.js";
 import { buildHud } from "../Modul/splittermond-smoother-fight/scripts/features/hud/view.js";
+import { markZeroHealthTargetDefeated } from "../Modul/splittermond-smoother-fight/scripts/features/hud/controller.js";
 import { toggleFavoriteTickAction } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
 import { getAttackPreparation } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/attack-preparation.js";
 
@@ -40,6 +41,7 @@ configureServices({
     getAssignedUser: (combatant) => combatant.assignedUser ?? null,
     getAttackPreparation,
     getControlledTokenDocument: () => harness.controlledToken,
+    getGmCheatRollPreset: () => null,
     getRuntimeController: (combatant) => combatant.runtimeController ?? null,
     getTargetSelectionForUser: () => harness.targetSelection,
     getPendingActiveDefense: () => harness.pendingDefense,
@@ -404,6 +406,91 @@ test("the world option reveals a foreign target's health and focus", async () =>
     const revealed = await buildHud(getHudContext());
     assert.match(revealed, /7\/13/u);
     assert.match(revealed, /5\/11/u);
+});
+
+test("the GM can mark a zero-health primary target combatant defeated with one click", async () => {
+    const { combat } = installFixture();
+    globalThis.game.user = { id: "gm", isGM: true, name: "GM" };
+    const targetActor = {
+        img: "target.webp",
+        name: "Target actor",
+        derivedValues: {},
+        system: { healthBar: { value: 0, max: 13 } },
+    };
+    const target = {
+        actor: targetActor,
+        id: "zero-health-target",
+        name: "Zero-health target",
+        uuid: "Scene.scene.Token.zero-health-target",
+    };
+    const updates = [];
+    const targetCombatant = {
+        id: "target-combatant",
+        isDefeated: false,
+        token: target,
+        tokenId: target.id,
+        update: async (changes) => {
+            updates.push(changes);
+            targetCombatant.isDefeated = Boolean(changes.defeated);
+        },
+    };
+    combat.combatants.push(targetCombatant);
+    harness.targetSelection = {
+        target,
+        targets: [target],
+        primaryTargetTokenUuid: target.uuid,
+        primaryTargetActorUuid: null,
+    };
+
+    const html = await buildHud(getHudContext());
+
+    assert.match(html, /class="sf-primary-target-defeat"/u);
+    assert.match(html, /data-sf-action="mark-target-defeated"/u);
+    assert.match(html, /data-token-uuid="Scene\.scene\.Token\.zero-health-target"/u);
+    assert.equal(await markZeroHealthTargetDefeated(getHudContext(), target.uuid), true);
+    assert.deepEqual(updates, [{ defeated: true }]);
+    assert.doesNotMatch(await buildHud(getHudContext()), /data-sf-action="mark-target-defeated"/u);
+});
+
+test("the target defeat shortcut stays hidden without every required condition", async () => {
+    const { combat } = installFixture();
+    const target = {
+        actor: {
+            name: "Target actor",
+            derivedValues: {},
+            system: { healthBar: { value: 0, max: 13 } },
+        },
+        id: "conditional-target",
+        name: "Conditional target",
+        uuid: "Scene.scene.Token.conditional-target",
+    };
+    const targetCombatant = {
+        id: "conditional-combatant",
+        isDefeated: false,
+        token: target,
+        tokenId: target.id,
+        update: async () => assert.fail("an ineligible target must not be updated"),
+    };
+    combat.combatants.push(targetCombatant);
+    harness.targetSelection = {
+        target,
+        targets: [target],
+        primaryTargetTokenUuid: target.uuid,
+        primaryTargetActorUuid: null,
+    };
+
+    assert.doesNotMatch(await buildHud(getHudContext()), /data-sf-action="mark-target-defeated"/u, "players never see the shortcut");
+    assert.equal(await markZeroHealthTargetDefeated(getHudContext(), target.uuid), false);
+
+    globalThis.game.user = { id: "gm", isGM: true, name: "GM" };
+    target.actor.system.healthBar.value = 1;
+    assert.doesNotMatch(await buildHud(getHudContext()), /data-sf-action="mark-target-defeated"/u, "positive health hides the shortcut");
+    assert.equal(await markZeroHealthTargetDefeated(getHudContext(), target.uuid), false);
+
+    target.actor.system.healthBar.value = 0;
+    combat.combatants.pop();
+    assert.doesNotMatch(await buildHud(getHudContext()), /data-sf-action="mark-target-defeated"/u, "non-combat targets cannot be defeated");
+    assert.equal(await markZeroHealthTargetDefeated(getHudContext(), target.uuid), false);
 });
 
 test("the active combatant's defenses and resources follow the foreign-stat world options", async () => {

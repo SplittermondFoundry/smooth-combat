@@ -7,6 +7,10 @@ import {
     selectPersonalCombatant,
 } from "../../combat-rules.js";
 
+import {
+    numericValue,
+} from "../../shared/values.js";
+
 export function getHudContext() {
     const combat = game.combat;
     if (!combat?.started) return null;
@@ -56,6 +60,26 @@ export function getPersonalHudCandidates(activeContext = getHudContext()) {
             owned,
         };
     }).filter((candidate) => candidate.owned && candidate.actor);
+}
+
+export function findCombatantForToken(combat, tokenOrObject) {
+    const token = tokenOrObject?.document ?? tokenOrObject;
+    if (!combat || !token) return null;
+    const tokenUuid = services.tokenUuid(token);
+    const tokenId = token.id ?? null;
+    return Array.from(combat.combatants ?? []).find((combatant) => {
+        const resolved = combatant.token?.document ?? combatant.token ?? services.resolveCombatantToken(combatant);
+        const combatantTokenUuid = services.tokenUuid(resolved);
+        if (tokenUuid && combatantTokenUuid) return combatantTokenUuid === tokenUuid;
+        const combatantTokenId = resolved?.id ?? combatant.tokenId ?? null;
+        return Boolean(tokenId && combatantTokenId && tokenId === combatantTokenId);
+    }) ?? null;
+}
+
+export function isActorAtZeroHealth(actor) {
+    const value = actor?.system?.healthBar?.value;
+    if (value === null || value === undefined || value === "") return false;
+    return numericValue(value, Number.NaN) <= 0;
 }
 
 export function getPersonalHudContext(activeContext = getHudContext()) {
