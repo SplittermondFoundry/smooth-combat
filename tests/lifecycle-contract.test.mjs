@@ -39,6 +39,8 @@ const EXPECTED_HOOKS = [
     "createChatMessage",
     "updateChatMessage",
     "deleteChatMessage",
+    "diceSoNiceMessagePreProcess",
+    "diceSoNiceMessageProcessed",
     "diceSoNiceRollComplete",
     "renderChatMessageHTML",
     "renderChatMessage",
@@ -97,6 +99,7 @@ const serviceStubs = {
     },
     markCombatEventDeletionPending: (...args) => record("markCombatEventDeletionPending", args),
     clearCombatEventExpansionRequest: (...args) => record("clearCombatEventExpansionRequest", args),
+    getMessageContext: (message) => message?.flags?.["splittermond-smoother-fight"]?.context ?? null,
     prepareRenderedChatMessage: (...args) => record("prepareRenderedChatMessage", args),
     prepareExistingRenderedChatMessages: (...args) => record("prepareExistingRenderedChatMessages", args),
     renderTokenOwnerControl: (...args) => record("renderTokenOwnerControl", args),
@@ -207,6 +210,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         user: { id: "current-user", isGM: false },
         users: new Map(),
         messages: new Map(),
+        modules: new Map(),
         socket: {
             on: (channel, callback) => socketRegistrations.push({ channel, callback }),
             emit: (...args) => record("socketEmit", args),
@@ -334,6 +338,32 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         await Promise.resolve();
         assert.deepEqual(callsOf("onCreateChatMessage"), [[createdMessage]]);
         assert.deepEqual(callsOf("scheduleRender"), [[], [0]]);
+
+        const recalculatedMessage = {
+            id: "recalculated",
+            flags: {
+                "splittermond-smoother-fight": {
+                    context: { recalculatedFrom: "original" },
+                },
+            },
+        };
+        gameStub.messages.set(recalculatedMessage.id, recalculatedMessage);
+        const currentInterception = { willTrigger3DRoll: true };
+        handlersFor(hookRegistrations, "diceSoNiceMessagePreProcess")[0](recalculatedMessage.id, currentInterception);
+        assert.equal(currentInterception.willTrigger3DRoll, false);
+
+        gameStub.modules.set("dice-so-nice", { version: "6.2.9" });
+        const currentProcessedInterception = { willTrigger3DRoll: true };
+        handlersFor(hookRegistrations, "diceSoNiceMessageProcessed")[0](
+            recalculatedMessage.id,
+            currentProcessedInterception
+        );
+        assert.equal(currentProcessedInterception.willTrigger3DRoll, true);
+
+        gameStub.modules.set("dice-so-nice", { version: "5.3.4" });
+        const legacyInterception = { willTrigger3DRoll: true };
+        handlersFor(hookRegistrations, "diceSoNiceMessageProcessed")[0](recalculatedMessage.id, legacyInterception);
+        assert.equal(legacyInterception.willTrigger3DRoll, false);
 
         callLog.length = 0;
         const htmlElement = new FakeHTMLElement();

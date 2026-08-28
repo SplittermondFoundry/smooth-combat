@@ -40,6 +40,7 @@ const harness = {
     nextMessageId: 1,
     activeGm: null,
     rejectSetFlag: null,
+    waitForDiceSoNice: async () => undefined,
 };
 
 function clone(value) {
@@ -214,6 +215,7 @@ configureServices({
     scheduleRender: () => {},
     setCombatEventExpansionRequest: () => {},
     waitForChatMessage: async (messageId) => harness.messages.get(messageId) ?? null,
+    waitForDiceSoNice: (...args) => harness.waitForDiceSoNice(...args),
 });
 
 function resetHarness() {
@@ -240,6 +242,7 @@ function resetHarness() {
     harness.nextMessageId = 1;
     harness.activeGm = null;
     harness.rejectSetFlag = null;
+    harness.waitForDiceSoNice = async () => undefined;
     installGlobals();
 }
 
@@ -485,6 +488,56 @@ test("parallel defenses against one root attack form one complete canonical succ
     assert.equal(lowerDefense.flags[MODULE_ID].context.resultingDefenseValue, 24);
     assert.equal(lowerDefense.flags[MODULE_ID].context.effectiveDefenseValue, 27);
     assert.equal(higherDefense.flags[MODULE_ID].context.resultingDefenseValue, 27);
+});
+
+test("a recreated attack retains its roll without triggering Dice So Nice again", async () => {
+    resetHarness();
+    const root = createAttack("attack-dsn-suppression");
+    root.flags["dice-so-nice"] = { appearance: { colorset: "custom" } };
+    const defense = createDefense("defense-dsn-suppression", 27, "defender-dsn-suppression");
+
+    await processDefenseMessage(defense, pendingFor(root, defense, 1));
+
+    const successor = latestOffense(root);
+    assert.notEqual(successor, root);
+    assert.deepEqual(successor.system.checkReport.roll, root.system.checkReport.roll);
+    assert.deepEqual(successor.flags["dice-so-nice"], {
+        appearance: { colorset: "custom" },
+        skip: true,
+    });
+    assert.equal(root.flags["dice-so-nice"].skip, undefined);
+});
+
+test("active-defense processing creates no successor before Dice So Nice completes", async () => {
+    resetHarness();
+    const root = createAttack("attack-waits-for-defense-dice");
+    const defense = createDefense("defense-waits-for-defense-dice", 27, "defender-waits-for-defense-dice");
+    let releaseDice;
+    let markWaitStarted;
+    const waitStarted = new Promise((resolve) => {
+        markWaitStarted = resolve;
+    });
+    harness.waitForDiceSoNice = async (message) => {
+        assert.equal(message, defense);
+        markWaitStarted();
+        await new Promise((resolve) => {
+            releaseDice = resolve;
+        });
+    };
+
+    const processing = processDefenseMessage(defense, pendingFor(root, defense, 1));
+    await waitStarted;
+
+    assert.equal(latestOffense(root), root);
+    assert.equal(
+        Array.from(harness.messages.values()).filter((message) => message.type === "attackRollMessage").length,
+        1
+    );
+
+    releaseDice();
+    await processing;
+
+    assert.notEqual(latestOffense(root), root);
 });
 
 test("a sequential duplicate defense exits before rewriting its persisted context", async () => {

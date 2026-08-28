@@ -47,6 +47,7 @@ export async function onUpdateChatMessage(message, changes) {
     }
     if ((!checkUpdated && !hasDefenseContextUpdate(changes)) || !services.isDefenseMessage(message)) return;
     try {
+        await waitForDiceSoNice(message);
         const author = message.author ?? game.users.get(message.user?.id ?? message.user);
         const pending = services.normalizePendingDefense(services.getMessageContext(message));
         const processForAuthor = Boolean(

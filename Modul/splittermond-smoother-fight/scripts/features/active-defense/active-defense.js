@@ -157,6 +157,7 @@ export async function processDefenseMessage(
 
 async function processDefenseMessageOnce(message, pendingOverride = null, { allowForeign = false } = {}) {
     if ((!allowForeign && !services.isOwnMessage(message)) || !getSetting("defenseRecalculation", true)) return;
+    await services.waitForDiceSoNice(message);
     const check = services.getDefenseCheck(message);
     if (!check) return;
 

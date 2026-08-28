@@ -202,6 +202,36 @@ test("updated defense checks queue behind processing while internal context upda
     ]]);
 });
 
+test("an updated defense waits for Dice So Nice before recalculating the attack", async (t) => {
+    const gameDescriptor = Object.getOwnPropertyDescriptor(globalThis, "game");
+    const hooksDescriptor = Object.getOwnPropertyDescriptor(globalThis, "Hooks");
+    t.after(() => {
+        if (gameDescriptor) Object.defineProperty(globalThis, "game", gameDescriptor);
+        else delete globalThis.game;
+        if (hooksDescriptor) Object.defineProperty(globalThis, "Hooks", hooksDescriptor);
+        else delete globalThis.Hooks;
+    });
+    const fixture = createFixture();
+    fixture.currentUser.isGM = true;
+    harness.defense = true;
+
+    const processing = onUpdateChatMessage(fixture.message, {
+        "flags.splittermond-smoother-fight.context.attackMessageId": "attack-message",
+    });
+
+    await waitForDiceHook(fixture.hooks);
+    assert.equal(callsOf("processDefenseMessage").length, 0);
+
+    await completeDiceAnimation(fixture);
+    await processing;
+
+    assert.deepEqual(callsOf("processDefenseMessage").map(({ args }) => args), [[
+        fixture.message,
+        null,
+        { allowForeign: false, queueIfBusy: false },
+    ]]);
+});
+
 async function waitForDiceHook(hooks) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
         const callbacks = hooks.callbacks("diceSoNiceRollComplete");

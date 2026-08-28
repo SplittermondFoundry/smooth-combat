@@ -107,6 +107,8 @@ export function registerHooks() {
         services.clearCombatEventExpansionRequest();
         services.scheduleRender(0);
     });
+    Hooks.on("diceSoNiceMessagePreProcess", suppressRecalculatedOffenseDice);
+    Hooks.on("diceSoNiceMessageProcessed", suppressRecalculatedOffenseDiceLegacy);
     Hooks.on("diceSoNiceRollComplete", (messageId) => {
         if (game.messages?.get?.(messageId)) services.scheduleRender(0);
     });
@@ -115,6 +117,20 @@ export function registerHooks() {
     Hooks.on("renderChatMessage", (message, html) => services.prepareRenderedChatMessage(message, asElement(html)));
     Hooks.on("renderTokenHUD", (app, html) => services.renderTokenOwnerControl(app, html));
     services.prepareExistingRenderedChatMessages();
+}
+
+export function suppressRecalculatedOffenseDice(messageId, interception) {
+    if (!interception || typeof interception !== "object") return;
+    const message = game.messages?.get?.(messageId);
+    if (!services.getMessageContext?.(message)?.recalculatedFrom) return;
+    interception.willTrigger3DRoll = false;
+}
+
+function suppressRecalculatedOffenseDiceLegacy(messageId, interception) {
+    const version = String(game.modules?.get?.("dice-so-nice")?.version ?? "");
+    const majorVersion = Number.parseInt(version, 10);
+    if (Number.isFinite(majorVersion) && majorVersion >= 6) return;
+    suppressRecalculatedOffenseDice(messageId, interception);
 }
 
 function runAuthoritativeAttackPreparationCleanup(operation) {

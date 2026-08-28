@@ -17,6 +17,7 @@ Dieses Update macht mehrstufige Kampfvorgänge ausfallsicherer. Begonnene und er
 ## Verbesserungen und Fehlerbehebungen
 
 - Optimierung des Release-Prozesses.
+- Neu berechnete Angriffskarten nach einer **Aktiven Abwehr** behalten den ursprünglichen Würfelwurf, lösen diesen in **Dice So Nice** aber nicht länger ein zweites Mal als 3D-Animation aus und erscheinen erst nach dem vollständigen Abschluss des Abwehrwurfs.
 - Wird ein knapp misslungener Angriff durch einen nachträglich eingesetzten **Splitterpunkt** erfolgreich, öffnet sich die Abwehrphase nun ohne Reload. Die **Aktive Abwehr** erscheint sofort auf der Angriffskarte; auch bereits beim Modulstart dargestellte Karten erhalten zuverlässig die rote Verzichtsoption.
 - Vorbereitete Fernkampfangriffe und Zauber passen ihre Aktionsbeschriftung jetzt an die tatsächlich verfügbare Breite an. Dadurch überlagern lange Bezeichnungen wie **Vorbereiteter Fernkampfangriff** nicht mehr die Schaltfläche zum Auslösen.
 - Schadensanwendungen verwenden ein eindeutiges Zustandsmodell: **bereit → wird angewendet → abgeschlossen**. Ein begonnener Versuch gilt nicht länger automatisch als erfolgreich.

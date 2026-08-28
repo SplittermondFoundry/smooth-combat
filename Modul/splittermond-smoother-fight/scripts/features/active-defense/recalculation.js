@@ -253,6 +253,10 @@ async function applyEffectiveDefense(root, original, context, defenseValue, defe
             createdAt: Date.now(),
         },
     };
+    source.flags["dice-so-nice"] = {
+        ...(source.flags["dice-so-nice"] ?? {}),
+        skip: true,
+    };
     if (source.flags.splittermond?.chatCard) source.flags.splittermond.chatCard.messageId = null;
 
     let created = null;
