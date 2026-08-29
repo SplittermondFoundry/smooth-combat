@@ -96,6 +96,10 @@ const serviceStubs = {
     clearAttackPreparationForCombatant: async (...args) => record("clearAttackPreparationForCombatant", args),
     clearContinuousActionsForCombat: async (...args) => record("clearContinuousActionsForCombat", args),
     clearContinuousActionForCombatant: async (...args) => record("clearContinuousActionForCombatant", args),
+    clearContinuousActionInterruptionForDeletedCard: async (...args) => record(
+        "clearContinuousActionInterruptionForDeletedCard",
+        args,
+    ),
     clearMovementPlansForCombat: async (...args) => record("clearMovementPlansForCombat", args),
     clearMovementPlanForCombatant: async (...args) => record("clearMovementPlanForCombatant", args),
     onCreateChatMessage: (...args) => {
@@ -371,7 +375,9 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         behavior.isCombatEventMessage = () => true;
         const deletedMessage = { id: "deleted" };
         handlersFor(hookRegistrations, "deleteChatMessage")[0](deletedMessage);
+        await Promise.resolve();
         assert.deepEqual(callsOf("markCombatEventDeletionPending"), [[]]);
+        assert.deepEqual(callsOf("clearContinuousActionInterruptionForDeletedCard"), [[deletedMessage]]);
         assert.deepEqual(callsOf("clearCombatEventExpansionRequest"), [[]]);
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
 

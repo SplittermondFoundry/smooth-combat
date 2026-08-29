@@ -15,6 +15,10 @@ import {
     t,
 } from "../../shared/values.js";
 
+import {
+    clearContinuousActionInterruptionRequests,
+} from "./continuous-action-interruption-state.js";
+
 export const CONTINUOUS_ACTION_FLAG = "continuousAction";
 export const CONTINUOUS_ACTION_STATUS_ID = `${MODULE_ID}.continuous-action`;
 export const MOVEMENT_ACTION_STATUS_ID = `${MODULE_ID}.movement-action`;
@@ -88,7 +92,7 @@ export function getContinuousAction(tokenLike, combat = globalThis.game?.combat)
     const endTick = currentTick < action.endTick
         ? Math.max(action.endTick, finiteNumber(combatant.initiative, action.endTick))
         : action.endTick;
-    if (continuousActionCompletionTrigger(action) === "tick"
+    if (continuousActionBecomesReadyAtOwnTurn(action)
         && continuousActionReachedCompletionTick({ ...action, endTick }, combat)) {
         return null;
     }
@@ -134,7 +138,7 @@ export async function beginContinuousAction(context, {
     if (!record) return null;
 
     await withContinuousActionLock(token, async () => {
-        if (continuousActionCompletionTrigger(record) === "tick"
+        if (continuousActionBecomesReadyAtOwnTurn(record)
             && continuousActionReachedCompletionTick(record, combat)) {
             const previous = readContinuousAction(token);
             if (previous) await setRequiredDocumentFlag(token, CONTINUOUS_ACTION_FLAG, null);
@@ -198,13 +202,42 @@ export async function clearContinuousAction(tokenLike, { expectedId = null } = {
     const token = tokenDocument(tokenLike);
     const action = readContinuousAction(token);
     if (!token || !action || (expectedId && action.id !== expectedId)) return false;
-    return withContinuousActionLock(token, async () => {
+    const cleared = await withContinuousActionLock(token, async () => {
         const current = readContinuousAction(token);
         if (!current || (expectedId && current.id !== expectedId)) return false;
         await setRequiredDocumentFlag(token, CONTINUOUS_ACTION_FLAG, null);
         await removeContinuousActionEffects(token.actor, current);
         return true;
     });
+    if (cleared) await clearContinuousActionInterruptionRequests(token, {
+        actionRecordId: action.id,
+    });
+    return cleared;
+}
+
+export async function restoreContinuousAction(tokenLike, actionLike, combat = globalThis.game?.combat) {
+    const token = tokenDocument(tokenLike);
+    const action = normalizeContinuousAction(actionLike);
+    const combatant = combatantById(combat, action?.combatantId);
+    if (!token || !action || !combatant
+        || action.combatId !== optionalString(combat?.id)
+        || action.tokenUuid !== optionalString(token.uuid)) {
+        return null;
+    }
+
+    const restored = await withContinuousActionLock(token, async () => {
+        const current = readContinuousAction(token);
+        if (current) return current.id === action.id ? current : null;
+        if (continuousActionBecomesReadyAtOwnTurn(action)
+            && continuousActionReachedCompletionTick(action, combat)) return null;
+        await setRequiredDocumentFlag(token, CONTINUOUS_ACTION_FLAG, action);
+        await ensureContinuousActionEffects(token.actor, action).catch((error) => {
+            console.error(`${MODULE_ID} | Could not restore the continuous-action status effect`, error);
+        });
+        return action;
+    });
+    if (restored) services.scheduleRender?.(0);
+    return restored;
 }
 
 async function syncContinuousAction(token, combatant, combat) {
@@ -229,10 +262,13 @@ async function syncContinuousAction(token, combatant, combat) {
 
         const currentTick = combatTick(combat);
         const initiative = finiteNumber(combatant.initiative, action.endTick);
-        if (continuousActionCompletionTrigger(action) === "tick"
+        if (continuousActionBecomesReadyAtOwnTurn(action)
             && continuousActionReachedCompletionTick(action, combat)) {
             await setRequiredDocumentFlag(token, CONTINUOUS_ACTION_FLAG, null);
             await removeContinuousActionEffects(token.actor, action);
+            await clearContinuousActionInterruptionRequests(token, {
+                actionRecordId: action.id,
+            });
             return true;
         }
 
@@ -419,6 +455,10 @@ function readContinuousAction(token) {
 function continuousActionCompletionTrigger(action) {
     if (CONTINUOUS_ACTION_COMPLETION_TRIGGERS.has(action?.completionTrigger)) return action.completionTrigger;
     return defaultContinuousActionCompletionTrigger(action?.actionId ?? action);
+}
+
+function continuousActionBecomesReadyAtOwnTurn(action) {
+    return continuousActionCompletionTrigger(action) !== "movement";
 }
 
 function defaultContinuousActionCompletionTrigger(action) {

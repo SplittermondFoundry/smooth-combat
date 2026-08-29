@@ -45,6 +45,18 @@ export {
 } from "./continuous-action.js";
 
 export {
+    bindContinuousActionInterruptionCard,
+    clearContinuousActionInterruptionForDeletedCard,
+    confirmContinuousActionInterruptionForActiveDefense,
+    getPendingContinuousActionInterruption,
+    getPendingContinuousActionInterruptionsForCurrentUser,
+    interruptContinuousActionForActiveDefense,
+    reconcileContinuousActionInterruptionRoll,
+    requestContinuousActionInterruptionForDamage,
+    rollContinuousActionInterruption,
+} from "./continuous-action-interruption.js";
+
+export {
     abortMovementPlan,
     advancePendingMovements,
     cancelMovementPlanAfterManualMove,

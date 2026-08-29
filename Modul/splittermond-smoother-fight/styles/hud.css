@@ -1611,6 +1611,11 @@
     box-shadow: inset 0 0 0 1px rgba(242, 206, 135, 0.42);
 }
 
+#splittermond-smoother-fight-hud .sf-continuous-interruption-control {
+    flex: 1 1 220px;
+    grid-template-columns: minmax(0, 1fr);
+}
+
 #splittermond-smoother-fight-hud .sf-defense-response-control > button {
     min-width: 0;
     height: 49px;

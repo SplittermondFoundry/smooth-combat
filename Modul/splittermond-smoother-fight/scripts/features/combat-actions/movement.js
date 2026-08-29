@@ -169,6 +169,28 @@ export async function abortMovementPlan(tokenLike, combat = globalThis.game?.com
     return reachedMilestone;
 }
 
+export async function restoreInterruptedMovementPlan(tokenLike, planLike, combat = globalThis.game?.combat) {
+    const token = tokenDocument(tokenLike);
+    const plan = normalizeMovementPlan(planLike);
+    if (!token || !plan || !combat
+        || plan.combatId !== combat.id
+        || plan.tokenUuid !== token.uuid
+        || readMovementPlan(token)) return false;
+    const combatant = combatantsOf(combat).find((candidate) => candidate?.id === plan.combatantId);
+    if (!combatant) return false;
+
+    const interruptionMilestone = movementInterruptionMilestone(plan, combatTick(combat));
+    const completedFraction = Math.max(
+        normalizedFraction(plan.completedFraction),
+        normalizedFraction(interruptionMilestone.fraction),
+    );
+    if (completedFraction >= 1) return false;
+    await writeMovementPlan(token, { ...plan, completedFraction });
+    syncDefaultMovementRoutePreviews(combat);
+    services.scheduleRender?.(0);
+    return true;
+}
+
 export function getAbortableControlledTokenMovement(combat = globalThis.game?.combat) {
     const token = tokenDocument(services.getControlledTokenDocument?.());
     if (!token || !combat || !mayCurrentUserManageMovementPlan(token)) return null;
@@ -503,9 +525,12 @@ async function moveTokenAlongRoute(token, waypoints) {
 
 function readMovementPlan(tokenLike) {
     const token = tokenDocument(tokenLike);
-    const plan = token?.getFlag?.(MODULE_ID, MOVEMENT_PLAN_FLAG)
+    return normalizeMovementPlan(token?.getFlag?.(MODULE_ID, MOVEMENT_PLAN_FLAG)
         ?? token?.flags?.[MODULE_ID]?.[MOVEMENT_PLAN_FLAG]
-        ?? null;
+        ?? null);
+}
+
+function normalizeMovementPlan(plan) {
     if (!plan || plan.version !== MOVEMENT_PLAN_VERSION || !Array.isArray(plan.route)
         || !Array.isArray(plan.milestones)) return null;
     return plan;
@@ -559,7 +584,8 @@ function combatTick(combat) {
 }
 
 function combatantsOf(combat) {
-    return Array.from(combat?.combatants ?? combat?.turns ?? []);
+    const combatants = combat?.combatants ?? combat?.turns ?? [];
+    return Array.from(combatants?.values?.() ?? combatants);
 }
 
 function tokenDocument(tokenLike) {

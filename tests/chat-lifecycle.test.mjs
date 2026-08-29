@@ -70,6 +70,10 @@ configureServices({
     initialDefensePhaseForOffense: () => "unavailable",
     normalizePendingDefense: (value) => value,
     processDefenseMessage: async (...args) => record("processDefenseMessage", ...args),
+    reconcileContinuousActionInterruptionRoll: async (message) => {
+        record("reconcileContinuousActionInterruptionRoll", message);
+        return false;
+    },
     reopenDefensePhaseAfterOutcomeChange: async (message) => {
         harness.reopenedOffenses.push(message);
         return message;
@@ -80,6 +84,24 @@ configureServices({
         return true;
     },
     speakerTokenUuid: () => null,
+});
+
+test("updated checks reconcile a possible continuous-action interruption recovery", async (t) => {
+    const gameDescriptor = Object.getOwnPropertyDescriptor(globalThis, "game");
+    t.after(() => {
+        if (gameDescriptor) Object.defineProperty(globalThis, "game", gameDescriptor);
+        else delete globalThis.game;
+    });
+    const fixture = createFixture({ diceActive: false });
+
+    await onUpdateChatMessage(fixture.message, {
+        "system.checkReport.succeeded": true,
+    });
+
+    assert.deepEqual(
+        callsOf("reconcileContinuousActionInterruptionRoll").map(({ args }) => args),
+        [[fixture.message]],
+    );
 });
 
 function createHooksHarness() {

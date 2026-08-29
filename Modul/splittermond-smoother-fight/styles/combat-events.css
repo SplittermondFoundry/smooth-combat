@@ -394,6 +394,17 @@
     line-height: 1.35;
 }
 
+.chat-message .sf-continuous-action-interruption-card > header {
+    background: linear-gradient(135deg, #5b241f, #8a3d31);
+}
+
+.chat-message .sf-continuous-action-interruption-actions .splittermond-chat-action {
+    width: 100%;
+    margin: 0;
+    border-color: rgba(138, 61, 49, 0.55);
+    font-weight: 700;
+}
+
 .chat-message .sf-tick-action-chat-source {
     display: block;
     padding: 6px 12px 8px;

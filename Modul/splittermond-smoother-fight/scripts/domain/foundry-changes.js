@@ -2,7 +2,12 @@ export function hasSplittermondCheckUpdate(changes) {
     if (!changes || typeof changes !== "object" || Array.isArray(changes)) return false;
     if (Object.keys(changes).some((key) =>
         key === "flags.splittermond.check" || key.startsWith("flags.splittermond.check.")
+        || key === "system.checkReport" || key.startsWith("system.checkReport.")
     )) return true;
+
+    const system = changes.system;
+    if (system && typeof system === "object" && !Array.isArray(system)
+        && Object.hasOwn(system, "checkReport")) return true;
 
     const flags = changes.flags;
     if (!flags || typeof flags !== "object" || Array.isArray(flags)) return false;

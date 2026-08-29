@@ -29,6 +29,8 @@ const harness = {
     meleeRange: 2,
     movementTracking: true,
     pendingDefense: null,
+    pendingInterruption: null,
+    pendingInterruptions: null,
     player: null,
     revealTargetDefenses: false,
     revealTargetResources: false,
@@ -60,6 +62,8 @@ configureServices({
     getRuntimeController: (combatant) => combatant.runtimeController ?? null,
     getTargetSelectionForUser: () => harness.targetSelection,
     getPendingActiveDefense: () => harness.pendingDefense,
+    getPendingContinuousActionInterruption: () => harness.pendingInterruption,
+    getPendingContinuousActionInterruptionsForCurrentUser: () => harness.pendingInterruptions,
     isMovementRoutePreviewVisible: () => harness.routePreviewVisible,
     isMovementRoutePreviewPersistent: () => harness.routePreviewPersistent,
     isPreparingSpell: () => false,
@@ -130,6 +134,8 @@ function installFixture() {
     harness.meleeRange = 2;
     harness.movementTracking = true;
     harness.pendingDefense = null;
+    harness.pendingInterruption = null;
+    harness.pendingInterruptions = null;
     harness.revealTargetDefenses = false;
     harness.revealTargetResources = false;
     harness.renderCalls = 0;
@@ -306,6 +312,42 @@ test("a pending active defense uses a wide response button with a dedicated decl
     assert.match(html, /class="sf-defense-response" data-sf-action="respond-active-defense" data-message-id="attack-awaiting-defense"/u);
     assert.match(html, /class="sf-decline-defense" data-sf-action="decline-active-defense" data-message-id="attack-awaiting-defense"/u);
     assert.match(html, /fa-solid fa-xmark/u);
+});
+
+test("a pending continuous-action interruption is highlighted in personal HUD controls", async () => {
+    const { first } = installFixture();
+    harness.controlledToken = first.token;
+    harness.pendingInterruption = {
+        id: "interrupt-1",
+        actionId: "focusMagic",
+        difficulty: 18,
+    };
+
+    const html = await buildHud(getHudContext());
+
+    assert.match(html, /class="sf-action-menu sf-defense-response-control sf-continuous-interruption-control is-defense-alert"/u);
+    assert.match(html, /data-sf-action="roll-continuous-action-interruption" data-request-id="interrupt-1"/u);
+    assert.match(html, /ContinuousActionInterruptionHudDifficulty/u);
+});
+
+test("a GM sees a non-active damaged token's pending interruption in the active HUD", async () => {
+    const { first } = installFixture();
+    globalThis.game.user = { id: "gm", isGM: true, name: "GM" };
+    harness.pendingInterruptions = [{
+        request: {
+            id: "interrupt-non-active",
+            actionId: "focusMagic",
+            difficulty: 17,
+            tokenUuid: first.token.uuid,
+        },
+        token: first.token,
+    }];
+
+    const html = await buildHud(getHudContext());
+
+    assert.match(html, /data-request-id="interrupt-non-active"/u);
+    assert.match(html, new RegExp(`data-sf-token-uuid="${first.token.uuid}"`, "u"));
+    assert.match(html, new RegExp(first.token.name, "u"));
 });
 
 test("the primary target distance drives advisory attack and spell range states", async () => {

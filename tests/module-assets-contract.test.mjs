@@ -42,7 +42,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "f736bfee56ceeb49e6a97dc61cf6a3ce0567ed4c2940524cdb8fd97f580890f7",
+        "f4c2bf90c2ec4a51a8d13283e51007dbf49cc2326cf8d2e298c3a28ba502236a",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -51,6 +51,12 @@ test("Foundry manifest entry points remain stable", () => {
         "Splitterpunkt (Resonanz: weitere VTD +2 für {target})",
     );
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatPrimaryReason, "Splitterpunkt: +3 VTD");
+    assert.equal(german.SMOOTHER_FIGHT.HUD.ActiveDefenseInterruptionConfirm, "Ja");
+    assert.equal(german.SMOOTHER_FIGHT.HUD.ActiveDefenseInterruptionDecline, "Nein");
+    assert.equal(
+        german.SMOOTHER_FIGHT.HUD.RestoreContinuousAction,
+        "Kontinuierliche Handlung wiederherstellen",
+    );
     assert.equal(
         german.SMOOTHER_FIGHT.HUD.DefenseSplinterpointChatResonanceReason,
         "Splitterpunkt-Resonanz: weitere +2 VTD",
@@ -75,7 +81,7 @@ test("published DOM integration attributes remain available", () => {
     assert.match(assignmentTemplate, /data-owner-permission-warning/u);
     assert.match(assignmentTemplate, /\{\{#if showSetupHint\}\}/u);
 
-    const hudView = ["view.js", "tick-action-reference.js"]
+    const hudView = ["view.js", "response-controls.js", "tick-action-reference.js"]
         .map((file) => fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", file), "utf8"))
         .join("\n");
     const hudController = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "controller.js"), "utf8");
@@ -102,6 +108,7 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /data-sf-action="clear-attack-preparation"/u);
     assert.match(hudView, /data-sf-action="respond-active-defense"/u);
     assert.match(hudView, /data-sf-action="decline-active-defense"/u);
+    assert.match(hudView, /data-sf-action="roll-continuous-action-interruption"/u);
     assert.match(hudView, /data-sf-tick-action-category="\$\{escapeAttr\(action\.displayCategory\)\}"/u);
     assert.match(hudController, /bindTickActionReferenceFilters/u);
     assert.match(hudController, /bindSpellListFilters/u);
@@ -110,6 +117,7 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudController, /case "mark-target-defeated"/u);
     assert.match(hudController, /action === "respond-active-defense"/u);
     assert.match(hudController, /action === "decline-active-defense"/u);
+    assert.match(hudController, /case "roll-continuous-action-interruption"/u);
     assert.doesNotMatch(hudView, /sf-tick-action-tooltip/u);
     assert.doesNotMatch(hudView, /role="tooltip"[^`]*data-sf-action="share-tick-action"/u);
     assert.match(hudView, /data-sf-action="share-tick-action"/u);
@@ -206,7 +214,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "2bf4aedac124090b0dc2dfb627f921edcec5934d55a6bc6db7e94f2e14aadfcf",
+        "414eb602dcea67ab94ed73328309112e39eaabf93b9d726ac392d842d9944a4e",
     );
 });
 

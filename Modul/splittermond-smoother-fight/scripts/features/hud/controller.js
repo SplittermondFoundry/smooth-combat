@@ -345,6 +345,12 @@ class SmootherFightHud {
                 case "skill":
                     await services.requireOwner(context, () => context.actor.rollSkill(target.dataset.skillId));
                     break;
+                case "roll-continuous-action-interruption":
+                    await services.requireOwner(context, () => services.rollContinuousActionInterruption(
+                        target.dataset.sfTokenUuid || context,
+                        target.dataset.requestId
+                    ));
+                    break;
                 case "toggle-favorite-skill":
                     await services.requireOwner(context, () => {
                         requestActionMenuExpansion(context, target, "skills");
@@ -451,7 +457,10 @@ class SmootherFightHud {
                     await services.requireGm(() => services.removeCombatant(context));
                     break;
                 case "defense":
-                    await services.requireOwner(context, () => context.actor.activeDefenseDialog(target.dataset.defenseType));
+                    await services.requireOwner(context, () => services.beginStandaloneActiveDefense(
+                        context,
+                        target.dataset.defenseType
+                    ));
                     break;
                 case "defend-other":
                     await services.beginDefenderDefense(game.messages.get(target.dataset.messageId));

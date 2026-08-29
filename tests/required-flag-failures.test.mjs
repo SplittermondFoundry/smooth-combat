@@ -28,6 +28,7 @@ const harness = {
     completedDamageApplications: new Set(),
     errors: [],
     infos: [],
+    interruptionRequests: [],
     legacyLocks: new Set(),
     messages: new Map(),
     pendingDamageApplications: [],
@@ -171,6 +172,7 @@ configureServices({
     isDefenseMessage: () => false,
     isOwnMessage: (message) => (message.author?.id ?? message.user) === game.user.id,
     recordCompletedDamageApplication: (messageId) => harness.completedDamageApplications.add(messageId),
+    requestContinuousActionInterruptionForDamage: async (request) => harness.interruptionRequests.push(request),
     removePendingDamageApplication: (application) => {
         const index = harness.pendingDamageApplications.lastIndexOf(application);
         if (index >= 0) harness.pendingDamageApplications.splice(index, 1);
@@ -189,6 +191,7 @@ function resetHarness() {
     harness.completedDamageApplications.clear();
     harness.errors.length = 0;
     harness.infos.length = 0;
+    harness.interruptionRequests.length = 0;
     harness.legacyLocks.clear();
     harness.messages.clear();
     harness.pendingDamageApplications.length = 0;
@@ -746,6 +749,12 @@ test("parallel generic-damage clicks produce one completed application", async (
     assert.equal(actor.damageApplications, 1);
     assert.equal(getDamageApplicationState(message), "completed");
     assert.equal(message.setFlagCalls, 2);
+    assert.deepEqual(harness.interruptionRequests, [{
+        actorUuid: actor.uuid,
+        tokenUuid: null,
+        damage: 1,
+        sourceMessageId: message.id,
+    }]);
 });
 
 test("remote multi-target damage is completed only after every observed health cost", async () => {

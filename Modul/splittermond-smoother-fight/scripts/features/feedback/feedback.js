@@ -106,12 +106,11 @@ export function installHealthCostFeedbackInterceptor() {
         try {
             result = original.call(this, resource, cost, ...args);
         } catch (error) {
-            if (damageApplication) {
-                damageApplication.completionPromises?.push(Promise.resolve({
-                    status: "failed",
-                    healthChanged: healthCostTotal(this.system?.health) !== previous,
-                    error,
-                }));
+            if (tracksHealth) {
+                const current = healthCostTotal(this.system?.health);
+                const outcome = healthCostOutcome(this, previous, current, "failed", error);
+                if (damageApplication) damageApplication.completionPromises?.push(Promise.resolve(outcome));
+                else if (outcome.damage > 0) requestDamageInterruption(outcome);
             }
             throw error;
         }
@@ -121,17 +120,47 @@ export function installHealthCostFeedbackInterceptor() {
                 if (healthCostFeedbackKind(previous, current, true) === "damageBlocked") {
                     publishFeedback("damageBlocked", feedbackReferenceForActor(this));
                 }
-                return { status: "completed", healthChanged: current !== previous, error: null };
-            }, (error) => ({
-                status: "failed",
-                healthChanged: healthCostTotal(this.system?.health) !== previous,
-                error,
-            }));
+                return healthCostOutcome(this, previous, current, "completed", null);
+            }, (error) => healthCostOutcome(
+                this,
+                previous,
+                healthCostTotal(this.system?.health),
+                "failed",
+                error
+            ));
             if (damageApplication) damageApplication.completionPromises?.push(completion);
+            else void completion.then((outcome) => {
+                if (outcome.damage > 0) requestDamageInterruption(outcome);
+            });
         }
         return result;
     };
     Object.defineProperty(prototype, marker, { value: true });
+}
+
+function healthCostOutcome(actor, previous, current, status, error) {
+    return {
+        status,
+        actorUuid: actor?.uuid ?? null,
+        tokenUuid: feedbackReferenceForActor(actor).tokenUuid,
+        previousHealthCost: previous,
+        currentHealthCost: current,
+        damage: Math.max(0, Number(current) - Number(previous)),
+        healthChanged: current !== previous,
+        error,
+    };
+}
+
+function requestDamageInterruption(outcome) {
+    const operation = services.requestContinuousActionInterruptionForDamage?.({
+        actorUuid: outcome.actorUuid,
+        tokenUuid: outcome.tokenUuid,
+        damage: outcome.damage,
+    });
+    if (!operation || typeof operation.catch !== "function") return;
+    void operation.catch((error) => {
+        console.error(`${MODULE_ID} | Could not request a continuous-action interruption`, error);
+    });
 }
 
 export function resolveActorUuid(uuid) {

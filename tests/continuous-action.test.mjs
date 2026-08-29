@@ -235,20 +235,24 @@ test("a regular action that already reached its completion tick leaves no stale 
     assert.deepEqual(fixture.actor.effects, []);
 });
 
-test("preparatory actions survive their completion tick until the matching event", async () => {
+test("preparatory actions become ready only when their own same-tick turn starts", async () => {
     const record = continuousActionRecord({ actionId: "focusMagic" });
     const fixture = continuousActionFixture(record);
+    const ahead = { id: "ahead", initiative: record.endTick };
     installGlobals(fixture.user);
     services.getActivePrimaryGm = () => fixture.user;
     services.scheduleRender = () => {};
     fixture.combat.currentTick = record.endTick;
-    fixture.combat.combatant = fixture.combatant;
+    fixture.combat.turns = [ahead, fixture.combatant];
+    fixture.combat.combatant = ahead;
 
     assert.equal(await advanceContinuousActions(fixture.combat), true);
     assert.equal(isTokenInContinuousAction(fixture.token, fixture.combat), true);
-    assert.equal(await completeContinuousAction(fixture, { trigger: "attack" }), false);
-    assert.equal(await completeContinuousAction(fixture, { trigger: "spell" }), true);
+
+    fixture.combat.combatant = fixture.combatant;
+    assert.equal(await advanceContinuousActions(fixture.combat), true);
     assert.equal(isTokenInContinuousAction(fixture.token, fixture.combat), false);
+    assert.equal(await completeContinuousAction(fixture, { trigger: "spell" }), false);
 });
 
 test("cancelled rolls retain preparatory actions and submitted rolls complete them", async () => {

@@ -257,6 +257,7 @@ function watchPendingDefenseRoll(result, pending) {
 async function runPendingDefenseRoll(pending, operation) {
     if (!startPendingDefenseRoll(pending)) return null;
     try {
+        await interruptContinuousActionForDefense(pending, pending.defenseSkillId);
         return await operation();
     } finally {
         clearPendingDefense(pending.pendingDefenseId);
@@ -283,9 +284,12 @@ function interceptPendingDefenseActorRoll(actor, pending) {
         restore();
         if (!startPendingDefenseRoll(pending)) return originalActorRoll.apply(this, rollArgs);
         try {
-            const result = pending.distractingFeatureValue > 0
+            const result = Promise.resolve(interruptContinuousActionForDefense(
+                pending,
+                defenseSkillIdFromRollArguments(rollArgs, pending.defenseSkillId)
+            )).then(() => (pending.distractingFeatureValue > 0
                 ? invokeActiveDefenseRoll(originalActorRoll, this, rollArgs, pending.activeDefenseDifficulty)
-                : originalActorRoll.apply(this, rollArgs);
+                : originalActorRoll.apply(this, rollArgs)));
             watchPendingDefenseRoll(result, pending);
             return result;
         } catch (error) {
@@ -326,6 +330,7 @@ async function launchActorActiveDefense(actor, type, pending) {
     }
     const actorRollInterceptor = interceptPendingDefenseActorRoll(actor, pending);
     if (!actorRollInterceptor) {
+        await interruptContinuousActionForDefense(pending, null);
         clearPendingDefense(pending.pendingDefenseId);
         return actor.activeDefenseDialog(type || undefined);
     }
@@ -349,12 +354,15 @@ export async function beginActiveDefense(message) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNoLongerAvailable"));
         return;
     }
-    const { pending, target } = rememberPendingDefense(message);
+    const target = services.resolveToken(primaryTargetTokenUuid(services.getMessageContext(message)))
+        ?? getControlledTokenDocument()
+        ?? services.getHudContext()?.target;
     if (!target?.actor || !(game.user.isGM || target.actor.isOwner)) {
-        clearPendingDefense(pending.pendingDefenseId);
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNotAllowed"));
         return;
     }
+    if (!await confirmContinuousActionInterruption(target)) return;
+    const { pending } = rememberPendingDefense(message, target);
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.WaitingForDefense", { target: target.name }));
     const type = message.system?.checkReport?.defenseType ?? "defense";
     await launchActorActiveDefense(target.actor, type, pending);
@@ -374,6 +382,7 @@ export async function beginAdditionalTargetDefense(message) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNotAllowed"));
         return;
     }
+    if (!await confirmContinuousActionInterruption(target)) return;
     const { pending } = rememberPendingDefense(message, target, { defender: target });
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.WaitingForDefense", { target: target.name }));
     const type = message.system?.checkReport?.defenseType ?? context?.defenseType ?? "defense";
@@ -439,6 +448,7 @@ export async function beginDefenderDefense(message) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenderUnavailable"));
         return;
     }
+    if (!await confirmContinuousActionInterruption(current.token, current.defense.skill?.id)) return;
 
     const { pending } = rememberPendingDefense(message, target, {
         defender: current.token,
@@ -475,6 +485,90 @@ export async function beginDefenderDefense(message) {
         clearPendingDefense(pending.pendingDefenseId);
         throw error;
     }
+}
+
+export async function beginStandaloneActiveDefense(context, type) {
+    const actor = context?.actor;
+    const token = context?.token?.document ?? context?.token;
+    if (!actor || !token) return null;
+    if (!await confirmContinuousActionInterruption(token, directDefenseSkillId(type))) return null;
+
+    const normalizedType = String(type ?? "defense").toLocaleLowerCase();
+    if (!["defense", "vtd"].includes(normalizedType)) {
+        await services.interruptContinuousActionForActiveDefense?.(token, {
+            skillId: directDefenseSkillId(type),
+        });
+        return actor.activeDefenseDialog(type || undefined);
+    }
+
+    const interceptor = interceptStandaloneActiveDefenseRoll(actor, token);
+    if (!interceptor) {
+        await services.interruptContinuousActionForActiveDefense?.(token);
+        return actor.activeDefenseDialog(type || undefined);
+    }
+    try {
+        const dialog = await actor.activeDefenseDialog(type || undefined);
+        if (dialog && typeof dialog.close === "function") {
+            const originalClose = dialog.close;
+            dialog.close = function (...args) {
+                interceptor.restore();
+                return originalClose.apply(this, args);
+            };
+        } else {
+            interceptor.restore();
+        }
+        return dialog;
+    } catch (error) {
+        interceptor.restore();
+        throw error;
+    }
+}
+
+async function confirmContinuousActionInterruption(token, skillId = null) {
+    if (typeof services.confirmContinuousActionInterruptionForActiveDefense !== "function") return true;
+    return services.confirmContinuousActionInterruptionForActiveDefense(token, { skillId });
+}
+
+async function interruptContinuousActionForDefense(pending, skillId) {
+    if (typeof services.interruptContinuousActionForActiveDefense !== "function") return false;
+    const token = services.resolveToken(pending?.defenderTokenUuid ?? pending?.targetTokenUuid);
+    return services.interruptContinuousActionForActiveDefense(token, { skillId });
+}
+
+function interceptStandaloneActiveDefenseRoll(actor, token) {
+    const original = actor?.rollActiveDefense;
+    if (typeof original !== "function") return null;
+    const hadOwnRoll = Object.hasOwn(actor, "rollActiveDefense");
+    let installed = false;
+    const restore = () => {
+        if (!installed || actor.rollActiveDefense !== interceptRoll) return;
+        if (hadOwnRoll) actor.rollActiveDefense = original;
+        else delete actor.rollActiveDefense;
+        installed = false;
+    };
+    const interceptRoll = function (...rollArgs) {
+        restore();
+        const skillId = defenseSkillIdFromRollArguments(rollArgs);
+        return Promise.resolve(services.interruptContinuousActionForActiveDefense?.(token, { skillId }))
+            .then(() => original.apply(this, rollArgs));
+    };
+    try {
+        actor.rollActiveDefense = interceptRoll;
+        installed = actor.rollActiveDefense === interceptRoll;
+    } catch {
+        installed = false;
+    }
+    return installed ? { restore } : null;
+}
+
+function defenseSkillIdFromRollArguments(rollArgs, fallback = null) {
+    const defense = rollArgs.find((value) => value && typeof value === "object" && (value.skill || value.id));
+    return defense?.skill?.id ?? defense?.id ?? fallback;
+}
+
+function directDefenseSkillId(type) {
+    const normalized = String(type ?? "").toLocaleLowerCase();
+    return normalized === "acrobatics" ? "acrobatics" : null;
 }
 
 export function prepareDefenderRollOptions(choice, pending) {

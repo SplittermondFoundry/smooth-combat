@@ -135,6 +135,7 @@ export function registerHooks() {
     });
     Hooks.on("deleteChatMessage", (message) => {
         if (services.isCombatEventMessage(message)) services.markCombatEventDeletionPending();
+        runAuthoritativeCleanup(() => services.clearContinuousActionInterruptionForDeletedCard(message));
         services.clearCombatEventExpansionRequest();
         services.scheduleRender(0);
     });

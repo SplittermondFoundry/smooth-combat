@@ -2,6 +2,7 @@ export {
     beginActiveDefense,
     beginAdditionalTargetDefense,
     beginDefenderDefense,
+    beginStandaloneActiveDefense,
     canUserSubmitDefense,
     claimPendingDefenseForMessage,
     getControlledTokenDocument,

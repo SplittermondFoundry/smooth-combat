@@ -38,7 +38,15 @@ export async function onCreateChatMessage(message) {
 export async function onUpdateChatMessage(message, changes) {
     const checkUpdated = hasSplittermondCheckUpdate(changes);
     const offenseOutcomeUpdated = checkUpdated || hasContentUpdate(changes);
-    if (offenseOutcomeUpdated && isOffensiveCombatMessage(message) && maySynchronizeOffenseUpdate(message)) {
+    const maySynchronize = maySynchronizeMessageUpdate(message);
+    if (checkUpdated && maySynchronize) {
+        try {
+            await services.reconcileContinuousActionInterruptionRoll?.(message);
+        } catch (error) {
+            console.error(`${MODULE_ID} | Failed to restore a continuous action after a check update`, error);
+        }
+    }
+    if (offenseOutcomeUpdated && isOffensiveCombatMessage(message) && maySynchronize) {
         try {
             await services.reopenDefensePhaseAfterOutcomeChange(message);
         } catch (error) {
@@ -75,7 +83,7 @@ function hasContentUpdate(changes) {
     return Boolean(changes && typeof changes === "object" && Object.hasOwn(changes, "content"));
 }
 
-function maySynchronizeOffenseUpdate(message) {
+function maySynchronizeMessageUpdate(message) {
     if (services.isOwnMessage(message)) return true;
     const author = message.author ?? game.users?.get?.(message.user?.id ?? message.user);
     if (author?.active) return false;
@@ -272,6 +280,7 @@ export function prepareRenderedChatMessage(message, html) {
     enforceOffenseDefensePhaseControls(html, message);
     captureSystemActiveDefense(message, html);
     captureSystemOffenseFollowUps(message, html);
+    services.bindContinuousActionInterruptionCard?.(message, html);
     services.bindFumbleActions(message, html);
 }
 

@@ -49,6 +49,7 @@ export async function withTrackedDamageApplication(message, callback, action = "
         }
 
         const outcomes = await Promise.all(application.completionPromises);
+        await requestContinuousActionInterruptions(message, outcomes);
         if (callbackError) {
             await setDamageApplicationState(message, damageFailureState(outcomes));
             throw callbackError;
@@ -73,6 +74,32 @@ export async function withTrackedDamageApplication(message, callback, action = "
     } finally {
         if (application) services.removePendingDamageApplication(application);
         damageApplicationLocks.delete(message.id);
+    }
+}
+
+async function requestContinuousActionInterruptions(message, outcomes) {
+    const damageByActor = new Map();
+    for (const outcome of outcomes) {
+        const actorUuid = outcome?.actorUuid;
+        const damage = Number(outcome?.damage);
+        if (!actorUuid || !Number.isFinite(damage) || damage <= 0) continue;
+        const current = damageByActor.get(actorUuid) ?? { actorUuid, tokenUuid: outcome.tokenUuid ?? null, damage: 0 };
+        current.damage += damage;
+        current.tokenUuid ??= outcome.tokenUuid ?? null;
+        damageByActor.set(actorUuid, current);
+    }
+    const linkedTarget = resolveDamageApplicationTarget(message);
+    const results = await Promise.allSettled(Array.from(damageByActor.values(), (entry) => (
+        services.requestContinuousActionInterruptionForDamage?.({
+            ...entry,
+            tokenUuid: linkedTarget?.actor?.uuid === entry.actorUuid ? linkedTarget.uuid : entry.tokenUuid,
+            sourceMessageId: message.id,
+        })
+    )));
+    for (const result of results) {
+        if (result.status === "rejected") {
+            console.error(`${MODULE_ID} | Could not request a continuous-action interruption`, result.reason);
+        }
     }
 }
 

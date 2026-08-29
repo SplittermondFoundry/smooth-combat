@@ -760,6 +760,8 @@ test("Splittermond check updates are detected for flat and nested Foundry change
     assert.equal(hasSplittermondCheckUpdate({ "flags.splittermond.check.succeeded": true }), true);
     assert.equal(hasSplittermondCheckUpdate({ flags: { splittermond: { check: { succeeded: true } } } }), true);
     assert.equal(hasSplittermondCheckUpdate({ flags: { "splittermond.check": { succeeded: true } } }), true);
+    assert.equal(hasSplittermondCheckUpdate({ "system.checkReport.succeeded": true }), true);
+    assert.equal(hasSplittermondCheckUpdate({ system: { checkReport: { succeeded: true } } }), true);
     assert.equal(hasSplittermondCheckUpdate({ flags: { "splittermond-smoother-fight": { context: {} } } }), false);
     assert.equal(hasSplittermondCheckUpdate({ content: "updated card" }), false);
 });
