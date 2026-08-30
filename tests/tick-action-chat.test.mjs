@@ -351,6 +351,7 @@ test("an attack preparation appears as a temporary preselected system modifier w
             }]);
         },
     };
+    let observedOptions = null;
     const skill = {
         id: "staffs",
         get selectableModifier() {
@@ -358,6 +359,13 @@ test("an attack preparation appears as a temporary preselected system modifier w
                 ...(modifierManager._modifier.get("staffs") ?? []),
                 ...(modifierManager._modifier.get("skill.spear") ?? []),
             ].filter((modifier) => modifier.selectable);
+        },
+        async roll(options) {
+            observedOptions = options;
+            const namedModifier = modifierManager._modifier.get("skill.spear")
+                .find((modifier) => modifier.attributes.name === "Lücke suchen");
+            assert.equal(namedModifier.value.amount, 2);
+            return false;
         },
     };
     const attack = {
@@ -367,7 +375,6 @@ test("an attack preparation appears as a temporary preselected system modifier w
         isRanged: false,
         skill,
     };
-    let observedOptions = null;
     const actor = {
         id: "actor-named-opening",
         name: "Arrou",
@@ -388,11 +395,7 @@ test("an attack preparation appears as a temporary preselected system modifier w
         }),
         rollAttack: async (attackId, options) => {
             assert.equal(attackId, attack.id);
-            observedOptions = options;
-            const namedModifier = modifierManager._modifier.get("skill.spear")
-                .find((modifier) => modifier.attributes.name === "Lücke suchen");
-            assert.equal(namedModifier.value.amount, 2);
-            return false;
+            return skill.roll(options);
         },
     };
     attack.actor = actor;

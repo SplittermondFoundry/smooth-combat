@@ -36,9 +36,13 @@ import {
     clearAimPreparation,
     consumeAttackPreparation,
     getAttackPreparation,
-    prepareAttackPreparationRollOptions,
+    prepareAttackRollOptions,
     resolveAttackPreparationUse,
 } from "./attack-preparation.js";
+
+import {
+    combatPositionAttackModifiers,
+} from "./combat-position-modifier.js";
 
 import {
     warnIfAttackOutOfRange,
@@ -50,21 +54,28 @@ import {
 } from "./continuous-action.js";
 
 import {
-    prepareSmallMagicProtectionRollOptions,
+    prepareSpellTargetRollOptions,
 } from "./spell-target-modifier.js";
+
+import { isRangedAttack } from "./attack-type.js";
+
+import {
+    markTargetModifiersPrepared,
+} from "./system-roll-modifier-interceptor.js";
 
 export async function performAttack(context, attackId, rollOptions = {}, rollAttack = null) {
     context = liveRuntimeActionContext(context);
     if (!context) return false;
     const attack = context.actor.attacks?.find((candidate) => candidate.id === attackId);
     if (!attack) return false;
+    const ranged = isRangedAttack(attack);
     const preparedAttackId = context.actor.getFlag?.("splittermond", "preparedAttack");
-    const readiness = attackReadiness(isRangedAttack(attack), attack.id, preparedAttackId);
+    const readiness = attackReadiness(ranged, attack.id, preparedAttackId);
     if (actionRequiresTarget(readiness.ready) && !context.target) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
         return false;
     }
-    if (readiness.ready) warnIfAttackOutOfRange(context, attack, isRangedAttack(attack));
+    if (readiness.ready) warnIfAttackOutOfRange(context, attack, ranged);
     const preparation = getAttackPreparation(
         context.actor,
         context.combat?.id ?? globalThis.game?.combat?.id
@@ -72,7 +83,7 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
     const preparationUse = readiness.ready
         ? resolveAttackPreparationUse(preparation, {
             attackId: attack.id,
-            isRanged: isRangedAttack(attack),
+            isRanged: ranged,
             target: context.target,
         })
         : { applies: false, consumeOnSuccess: false, mismatch: null };
@@ -83,16 +94,26 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
             target: preparation?.targetName ?? "–",
         }));
     }
-    const preparedRoll = preparationUse.applies
-        ? prepareAttackPreparationRollOptions(attack, rollOptions, preparation, {
+    const positionModifiers = combatPositionAttackModifiers({
+        attacker: context.actor,
+        target: context.target,
+        attack,
+        isRanged: ranged,
+    });
+    const preparedRoll = prepareAttackRollOptions(
+        attack,
+        rollOptions,
+        preparationUse.applies ? preparation : null,
+        {
+            additionalModifiers: positionModifiers,
             includeAttackDefault: typeof rollAttack !== "function",
-        })
-        : { cleanup: () => {}, rollOptions };
+        }
+    );
     let completed = false;
     if (readiness.ready) {
         const pendingNonce = setPendingOffenseKind(
             context.actor.id,
-            isRangedAttack(attack) ? "ranged" : "attack",
+            ranged ? "ranged" : "attack",
             context
         );
         try {
@@ -100,7 +121,10 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
                 [context.target],
                 () => typeof rollAttack === "function"
                     ? rollAttack(attack, preparedRoll.rollOptions)
-                    : context.actor.rollAttack(attackId, preparedRoll.rollOptions)
+                    : context.actor.rollAttack(
+                        attackId,
+                        markTargetModifiersPrepared(preparedRoll.rollOptions)
+                    )
             );
             if (success) await completeContinuousAction(context, { trigger: "attack" }).catch(() => false);
             if (success && context.actor.getFlag?.("splittermond", "preparedSpell")) {
@@ -123,7 +147,7 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
             ticks: await getAttackSpeed(attack),
             label: `${localizeSystem("splittermond.attack", "Angriff")}: ${attack.name}`,
         });
-        if (completed && isRangedAttack(attack)) await clearAimPreparation(context.actor).catch(() => false);
+        if (completed && ranged) await clearAimPreparation(context.actor).catch(() => false);
     }
     services.scheduleRender();
     return completed;
@@ -206,12 +230,15 @@ export async function performSpell(context, spellId) {
     }
     if (prepared && targetDependent) warnIfSpellOutOfRange(context, spell);
     if (prepared) {
-        const preparedRoll = prepareSmallMagicProtectionRollOptions(spell, context.target);
+        const preparedRoll = prepareSpellTargetRollOptions(spell, context.target);
         const pendingNonce = setPendingOffenseKind(context.actor.id, "spell", context);
         try {
             const success = await services.withTemporarySystemTargets(
                 [context.target],
-                () => context.actor.rollSpell(spellId, preparedRoll.rollOptions)
+                () => context.actor.rollSpell(
+                    spellId,
+                    markTargetModifiersPrepared(preparedRoll.rollOptions)
+                )
             );
             if (success) {
                 await completeContinuousAction(context, { trigger: "spell" }).catch(() => false);
@@ -479,20 +506,9 @@ export async function getAttackSpeed(attack) {
     return numericValue(attack?.weaponSpeed);
 }
 
-export function isRangedAttack(attack) {
-    const item = attack?.item ?? attack;
-    if (typeof attack?.isRanged === "boolean") return attack.isRanged;
-    const rawSkill = attack?.skill?.id
-        ?? attack?.skill
-        ?? item?.skill?.id
-        ?? item?.system?.skill?.id
-        ?? item?.system?.skill;
-    const skillId = typeof rawSkill === "string" ? rawSkill : rawSkill?.id;
-    const rangedSkills = globalThis.CONFIG?.splittermond?.skillGroups?.ranged ?? ["throwing", "longrange"];
-    return Boolean(skillId && Array.from(rangedSkills).includes(skillId));
-}
-
 export function isRangedAttackMessage(message) {
     const report = message?.system?.checkReport;
     return isRangedAttack(report?.itemData ?? report?.attack ?? message?.system?.itemData);
 }
+
+export { isRangedAttack };

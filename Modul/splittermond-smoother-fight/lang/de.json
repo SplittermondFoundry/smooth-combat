@@ -11,6 +11,23 @@
         "Name": "In Bewegung",
         "AssignedName": "In Bewegung ({action})",
         "Description": "Der Charakter führt gerade eine Bewegungshandlung aus. Der Status endet, sobald das Bewegungsziel erreicht oder die Bewegung abgebrochen wird."
+      },
+      "CombatPositions": {
+        "kneeling": {
+          "Name": "Kniend",
+          "Description": "Der Charakter befindet sich in der Kampfposition Kniend. Aufstehen dauert normalerweise 3 Ticks.",
+          "Source": "Splittermond: Die Regeln, S. 159, 170"
+        },
+        "prone": {
+          "Name": "Liegend",
+          "Description": "Der Charakter befindet sich in der Kampfposition Liegend. Aufstehen dauert normalerweise 6 Ticks.",
+          "Source": "Splittermond: Die Regeln, S. 159, 170"
+        },
+        "flying": {
+          "Name": "Fliegend",
+          "Description": "Der Charakter befindet sich in der Kampfposition Fliegend.",
+          "Source": "Splittermond: Die Regeln, S. 170"
+        }
       }
     },
     "Keybindings": {
@@ -300,6 +317,28 @@
       "ClearAttackPreparation": "Angriffsvorbereitung verwerfen",
       "AttackPreparationCleared": "Angriffsvorbereitung verworfen.",
       "CombatControls": "Kampfsteuerung",
+      "CombatPosition": "Kampfposition",
+      "CombatPositionConflict": "Widersprüchliche Kampfpositionen",
+      "SetCombatPosition": "Kampfposition festlegen: {position}",
+      "CombatPositionChangeFailed": "Die Kampfposition konnte nicht geändert werden.",
+      "CombatPositions": {
+        "standing": "Stehend",
+        "kneeling": "Kniend",
+        "prone": "Liegend",
+        "flying": "Fliegend"
+      },
+      "CombatPositionModifiers": {
+        "own": {
+          "kneeling": "Kampfposition: kniend",
+          "prone": "Kampfposition: liegend",
+          "flying": "Kampfposition: fliegend"
+        },
+        "target": {
+          "kneeling": "Kampfposition: Gegner kniend",
+          "prone": "Kampfposition: Gegner liegend",
+          "flying": "Kampfposition: Gegner fliegend"
+        }
+      },
       "MovementTracker": "Bewegung",
       "MovementDistance": "{distance} m bewegt",
       "MovementMeters": "{distance} m",

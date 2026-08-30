@@ -26,6 +26,7 @@ const EXPECTED_HOOKS = [
     "userConnected",
     "sightRefresh",
     "updateToken",
+    "drawToken",
     "recordToken",
     "canvasReady",
     "preUpdateActor",
@@ -68,6 +69,9 @@ const serviceStubs = {
     clearMovementRoutePreview: (...args) => record("clearMovementRoutePreview", args),
     clearTemporaryMovementRoutePreview: (...args) => record("clearTemporaryMovementRoutePreview", args),
     refreshMovementRoutePreviewScale: (...args) => record("refreshMovementRoutePreviewScale", args),
+    refreshCombatPositionOverlay: async (...args) => record("refreshCombatPositionOverlay", args),
+    refreshCombatPositionOverlaysForActor: async (...args) => record("refreshCombatPositionOverlaysForActor", args),
+    refreshAllCombatPositionOverlays: async (...args) => record("refreshAllCombatPositionOverlays", args),
     syncDefaultMovementRoutePreviews: (...args) => record("syncDefaultMovementRoutePreviews", args),
     scheduleRenderAfterTokenMovement: (...args) => record("scheduleRenderAfterTokenMovement", args),
     resetCompletedMovementReversalApplication: (...args) => record("resetCompletedMovementReversalApplication", args),
@@ -121,6 +125,7 @@ const serviceStubs = {
     prepareExistingRenderedChatMessages: (...args) => record("prepareExistingRenderedChatMessages", args),
     renderTokenOwnerControl: (...args) => record("renderTokenOwnerControl", args),
     renderTokenMovementControl: (...args) => record("renderTokenMovementControl", args),
+    renderTokenCombatPositionControl: (...args) => record("renderTokenCombatPositionControl", args),
     resolveToken: (...args) => {
         record("resolveToken", args);
         return behavior.resolveToken(...args);
@@ -298,6 +303,18 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         assert.deepEqual(callsOf("resetCompletedMovementReversalApplication"), [[movedToken]]);
         assert.deepEqual(callsOf("cancelMovementPlanAfterManualMove"), [[movedToken, movementOptions, "player"]]);
         assert.deepEqual(callsOf("syncDefaultMovementRoutePreviews"), [[gameStub.combat]]);
+        assert.deepEqual(callsOf("refreshCombatPositionOverlay"), [[movedToken]]);
+
+        callLog.length = 0;
+        handlersFor(hookRegistrations, "drawToken")[0](movedToken);
+        assert.deepEqual(callsOf("refreshCombatPositionOverlay"), [[movedToken]]);
+
+        callLog.length = 0;
+        const actor = { id: "position-actor" };
+        const item = { id: "position-item", parent: actor };
+        handlersFor(hookRegistrations, "createItem")[0](item);
+        assert.deepEqual(callsOf("refreshCombatPositionOverlaysForActor"), [[actor]]);
+        assert.deepEqual(callsOf("scheduleRender"), [[]]);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "recordToken")[0](movedToken);
@@ -426,6 +443,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         ]);
         assert.deepEqual(callsOf("renderTokenOwnerControl"), [[{ id: "hud" }, htmlElement]]);
         assert.deepEqual(callsOf("renderTokenMovementControl"), [[{ id: "hud" }, htmlElement]]);
+        assert.deepEqual(callsOf("renderTokenCombatPositionControl"), [[{ id: "hud" }, htmlElement]]);
     });
 
     await t.test("target updates reject foreign players and accept self or GM updates", async () => {

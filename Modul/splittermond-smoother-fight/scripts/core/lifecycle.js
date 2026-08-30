@@ -18,6 +18,7 @@ import {
 
 export function registerHooks() {
     const combatProgressHooks = new Set(["combatStart", "combatRound", "combatTurn", "updateCombat"]);
+    const combatPositionItemHooks = new Set(["createItem", "updateItem", "deleteItem"]);
     const rerenderHooks = [
         "combatStart",
         "combatRound",
@@ -37,6 +38,9 @@ export function registerHooks() {
     ];
     rerenderHooks.forEach((hook) => Hooks.on(hook, (document) => {
         services.scheduleRender();
+        if (combatPositionItemHooks.has(hook)) {
+            void services.refreshCombatPositionOverlaysForActor(document?.parent ?? document?.actor);
+        }
         if (combatProgressHooks.has(hook)) {
             void services.advanceContinuousActions(document);
             void services.advancePendingMovements(document);
@@ -62,7 +66,9 @@ export function registerHooks() {
             services.scheduleRenderAfterTokenMovement(token);
         }
         services.syncDefaultMovementRoutePreviews(game.combat);
+        void services.refreshCombatPositionOverlay(token);
     });
+    Hooks.on("drawToken", (token) => void services.refreshCombatPositionOverlay(token));
     Hooks.on("recordToken", () => {
         if (getSetting("movementTracking", true)) services.scheduleRender(0);
     });
@@ -70,6 +76,7 @@ export function registerHooks() {
     Hooks.on("canvasReady", (...args) => {
         services.seedHealthFeedbackState(...args);
         services.syncDefaultMovementRoutePreviews(game.combat);
+        void services.refreshAllCombatPositionOverlays();
     });
     Hooks.on("preUpdateActor", services.rememberActorHealthCost);
     Hooks.on("updateActor", services.announceAppliedDamageFeedback);
@@ -150,6 +157,7 @@ export function registerHooks() {
     Hooks.on("renderTokenHUD", (app, html) => {
         services.renderTokenOwnerControl(app, html);
         services.renderTokenMovementControl(app, html);
+        services.renderTokenCombatPositionControl(app, html);
     });
     services.prepareExistingRenderedChatMessages();
 }

@@ -11,6 +11,23 @@
         "Name": "In motion",
         "AssignedName": "In motion ({action})",
         "Description": "The character is currently performing a movement action. The status ends when the destination is reached or the movement is cancelled."
+      },
+      "CombatPositions": {
+        "kneeling": {
+          "Name": "Kneeling",
+          "Description": "The character is in the kneeling combat position. Standing up normally takes 3 ticks.",
+          "Source": "Splittermond: Die Regeln, pp. 159, 170"
+        },
+        "prone": {
+          "Name": "Prone",
+          "Description": "The character is in the prone combat position. Standing up normally takes 6 ticks.",
+          "Source": "Splittermond: Die Regeln, pp. 159, 170"
+        },
+        "flying": {
+          "Name": "Flying",
+          "Description": "The character is in the flying combat position.",
+          "Source": "Splittermond: Die Regeln, p. 170"
+        }
       }
     },
     "Keybindings": {
@@ -300,6 +317,28 @@
       "ClearAttackPreparation": "Discard attack preparation",
       "AttackPreparationCleared": "Attack preparation discarded.",
       "CombatControls": "Combat controls",
+      "CombatPosition": "Combat position",
+      "CombatPositionConflict": "Conflicting combat positions",
+      "SetCombatPosition": "Set combat position: {position}",
+      "CombatPositionChangeFailed": "The combat position could not be changed.",
+      "CombatPositions": {
+        "standing": "Standing",
+        "kneeling": "Kneeling",
+        "prone": "Prone",
+        "flying": "Flying"
+      },
+      "CombatPositionModifiers": {
+        "own": {
+          "kneeling": "Combat position: kneeling",
+          "prone": "Combat position: prone",
+          "flying": "Combat position: flying"
+        },
+        "target": {
+          "kneeling": "Combat position: Target kneeling",
+          "prone": "Combat position: Target prone",
+          "flying": "Combat position: Target flying"
+        }
+      },
       "MovementTracker": "Movement",
       "MovementDistance": "{distance} m moved",
       "MovementMeters": "{distance} m",

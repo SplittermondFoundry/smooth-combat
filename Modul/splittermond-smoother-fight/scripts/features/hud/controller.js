@@ -435,6 +435,12 @@ class SmootherFightHud {
                 case "focus-combatant":
                     services.focusCombatantToken(context);
                     break;
+                case "set-combat-position":
+                    await services.requireOwner(context, async () => {
+                        await services.setCombatPosition(context.actor, target.dataset.combatPosition);
+                        services.scheduleRender(0);
+                    });
+                    break;
                 case "show-token":
                     services.showTokenOnCanvas(services.resolveToken(target.dataset.tokenUuid));
                     break;

@@ -42,7 +42,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "f4c2bf90c2ec4a51a8d13283e51007dbf49cc2326cf8d2e298c3a28ba502236a",
+        "2d69cac3fa55c58aaae851adb08a39dbd29b5ec2502e7787832a50c7cfda6364",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -81,7 +81,7 @@ test("published DOM integration attributes remain available", () => {
     assert.match(assignmentTemplate, /data-owner-permission-warning/u);
     assert.match(assignmentTemplate, /\{\{#if showSetupHint\}\}/u);
 
-    const hudView = ["view.js", "response-controls.js", "tick-action-reference.js"]
+    const hudView = ["view.js", "combat-position-menu.js", "response-controls.js", "tick-action-reference.js"]
         .map((file) => fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", file), "utf8"))
         .join("\n");
     const hudController = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "controller.js"), "utf8");
@@ -95,6 +95,9 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /\$\{buildSecondaryTargets\(context\)\}<div class="sf-primary-target-panel">/u);
     assert.match(hudView, /<details class="sf-visibility-menu/u);
     assert.match(hudView, /SMOOTHER_FIGHT\.HUD\.Visibility/u);
+    assert.match(hudView, /data-sf-action="set-combat-position"/u);
+    assert.match(hudView, /data-combat-position=/u);
+    assert.match(hudView, /services\.resolveCombatPosition/u);
     assert.match(hudView, /<details class="sf-tick-action-reference">/u);
     assert.match(hudView, /<summary title="\$\{escapeAttr\(triggerLabel\)\}"/u);
     assert.match(hudView, /class="sf-tick-action-popover" role="region"/u);
@@ -115,6 +118,8 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudController, /case "toggle-favorite-tick-action"/u);
     assert.match(hudController, /case "clear-attack-preparation"/u);
     assert.match(hudController, /case "mark-target-defeated"/u);
+    assert.match(hudController, /case "set-combat-position"/u);
+    assert.match(hudController, /services\.setCombatPosition\(context\.actor, target\.dataset\.combatPosition\)/u);
     assert.match(hudController, /action === "respond-active-defense"/u);
     assert.match(hudController, /action === "decline-active-defense"/u);
     assert.match(hudController, /case "roll-continuous-action-interruption"/u);

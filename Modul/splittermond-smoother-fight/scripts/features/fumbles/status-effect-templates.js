@@ -65,7 +65,7 @@ const STATUS_EFFECT_DEFINITIONS = Object.freeze({
         img: "icons/svg/falling.svg",
         description: "<p>Der Betroffene befindet sich in der Kampfposition Liegend. Aufstehen dauert normalerweise 6 Ticks.</p>",
         source: "Splittermond: Die Regeln, S. 159, 170",
-        modifier: "melee emphasis=\"Liegend: eigener Nahkampfangriff\" -6, slashing emphasis=\"Liegend: eigener Nahkampfangriff\" -6, chains emphasis=\"Liegend: eigener Nahkampfangriff\" -6, blades emphasis=\"Liegend: eigener Nahkampfangriff\" -6, staffs emphasis=\"Liegend: eigener Nahkampfangriff\" -6, throwing emphasis=\"Liegend: eigener Fernkampfangriff\" -6, longrange emphasis=\"Liegend: kein Armbrustangriff\" -6",
+        modifier: "",
         combatEvent: EMPTY_COMBAT_EVENT,
     }),
 });

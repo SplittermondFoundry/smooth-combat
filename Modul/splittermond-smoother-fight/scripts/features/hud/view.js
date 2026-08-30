@@ -1,10 +1,9 @@
 import { activeDefenseOptionSummaries } from "./defense-options.js";
+import { buildCombatPositionMenu } from "./combat-position-menu.js";
 import { services } from "../../core/services.js";
-
 import {
     spellFocusCosts,
 } from "./action-tooltips.js";
-
 import {
     findCombatantForToken,
     getPersonalHudCandidates,
@@ -378,6 +377,7 @@ function buildCombatControls(context) {
         <div class="sf-pause-buttons">${pauseButtons}</div>
         <div class="sf-tracker-buttons">
             <button type="button" data-sf-action="focus-combatant" class="sf-icon-button" title="${escapeAttr(focusLabel)}" aria-label="${escapeAttr(focusLabel)}"><i class="fa-solid fa-bullseye"></i><span class="sf-control-label">${escapeHtml(focusLabel)}</span></button>
+            ${buildCombatPositionMenu(context.actor)}
             ${gmControls}
         </div>
     </section>`;

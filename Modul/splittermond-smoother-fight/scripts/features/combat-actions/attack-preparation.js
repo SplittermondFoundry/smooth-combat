@@ -15,8 +15,8 @@ import {
 } from "../../shared/values.js";
 
 import {
-    installTemporarySelectableModifier,
-} from "../../shared/temporary-selectable-modifier.js";
+    prepareTemporaryRollModifiers,
+} from "../../shared/temporary-roll-modifiers.js";
 
 import {
     completeContinuousAction,
@@ -132,35 +132,34 @@ export function prepareAttackPreparationRollOptions(
     attack,
     rollOptions,
     preparation,
-    { includeAttackDefault = false } = {}
+    options = {}
 ) {
-    const name = t(`SMOOTHER_FIGHT.HUD.TickActions.${preparation.actionId}.Name`);
-    const cleanup = installTemporarySelectableModifier({
-        skill: attack?.skill,
-        modifierManager: attack?.actor?.modifier,
-        groupId: `skill.${attack?.id ?? ""}`,
-        recordId: `attack-preparation:${preparation.id}`,
-        name,
-        amount: preparation.bonus,
-    });
-    if (!cleanup) {
-        return {
-            cleanup: () => {},
-            rollOptions: applyAttackPreparationModifier(rollOptions, preparation),
-            usesNamedModifier: false,
-        };
-    }
+    return prepareAttackRollOptions(attack, rollOptions, preparation, options);
+}
 
-    const selected = Array.isArray(rollOptions?.preSelectedModifier)
-        ? rollOptions.preSelectedModifier
-        : includeAttackDefault ? [attack?.item?.name] : [];
+export function prepareAttackRollOptions(
+    attack,
+    rollOptions,
+    preparation = null,
+    { additionalModifiers = [], includeAttackDefault = false } = {}
+) {
+    const preparationModifier = attackPreparationRollModifier(preparation);
+    return prepareTemporaryRollModifiers({
+        skill: attack?.skill,
+        modifierManager: attack?.actor?.modifier ?? attack?.skill?.actor?.modifier,
+        groupId: `skill.${attack?.id ?? ""}`,
+        rollOptions,
+        modifiers: [preparationModifier, ...additionalModifiers].filter(Boolean),
+        defaultSelectedModifiers: includeAttackDefault ? [attack?.item?.name] : [],
+    });
+}
+
+export function attackPreparationRollModifier(preparation) {
+    if (!preparation) return null;
     return {
-        cleanup,
-        rollOptions: {
-            ...(rollOptions ?? {}),
-            preSelectedModifier: uniqueModifierNames([...selected, name]),
-        },
-        usesNamedModifier: true,
+        amount: preparation.bonus,
+        name: t(`SMOOTHER_FIGHT.HUD.TickActions.${preparation.actionId}.Name`),
+        recordId: `attack-preparation:${preparation.id}`,
     };
 }
 
@@ -227,17 +226,6 @@ export async function clearAttackPreparationForCombatant(combatant) {
 function attackPreparationTargetMatches(preparation, target) {
     if (preparation.targetTokenUuid) return preparation.targetTokenUuid === target?.uuid;
     return Boolean(preparation.targetActorUuid && preparation.targetActorUuid === target?.actor?.uuid);
-}
-
-function uniqueModifierNames(names) {
-    const seen = new Set();
-    return names.filter((name) => {
-        const normalized = String(name ?? "").trim();
-        const key = normalized.toLocaleLowerCase();
-        if (!normalized || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
 }
 
 function optionalString(value) {

@@ -7,7 +7,9 @@ import { registerSettingsMenu } from "./features/assignments/settings-app.js";
 import * as chatApi from "./features/chat/api.js";
 import * as combatActionsApi from "./features/combat-actions/api.js";
 import { registerContinuousActionStatusEffect } from "./features/combat-actions/continuous-action.js";
+import { installSystemRollModifierInterceptor } from "./features/combat-actions/system-roll-modifier-interceptor.js";
 import * as combatEventsApi from "./features/combat-events/api.js";
+import * as combatPositionsApi from "./features/combat-positions/api.js";
 import * as feedbackApi from "./features/feedback/api.js";
 import {
     installHealthCostFeedbackInterceptor,
@@ -32,6 +34,7 @@ configureServices(
     chatApi,
     combatActionsApi,
     combatEventsApi,
+    combatPositionsApi,
     feedbackApi,
     fumblesApi,
     gmCheatApi,
@@ -52,10 +55,12 @@ Hooks.once("ready", async () => {
     await migrateAudioFeedbackSettings();
     services.installGmCheatRollInterceptor();
     installHealthCostFeedbackInterceptor();
+    installSystemRollModifierInterceptor();
     mountHud();
     seedHealthFeedbackState();
     registerHooks();
     registerSocket();
+    void services.refreshAllCombatPositionOverlays();
     void combatActionsApi.advanceContinuousActions(game.combat);
     void combatActionsApi.advancePendingMovements(game.combat);
     combatActionsApi.syncDefaultMovementRoutePreviews(game.combat);
