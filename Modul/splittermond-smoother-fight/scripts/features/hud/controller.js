@@ -64,6 +64,9 @@ import {
     t,
 } from "../../shared/values.js";
 
+export const DEFEATED_TOKEN_OVERLAY_ICON = "icons/svg/skull.svg";
+const DEFEATED_TOKEN_OVERLAY_FLAG = "defeatedTokenOverlay";
+
 export function mountHud() {
     hudState.hud = new SmootherFightHud();
     hudState.hud.mount();
@@ -148,9 +151,89 @@ export async function markZeroHealthTargetDefeated(context, tokenReference) {
     const references = [services.tokenUuid(target), target?.id].filter(Boolean);
     if (!references.includes(tokenReference) || !isActorAtZeroHealth(target.actor)) return false;
     const combatant = findCombatantForToken(context.combat, target);
-    if (!combatant || combatant.isDefeated || typeof combatant.update !== "function") return false;
-    await combatant.update({ defeated: true });
+    if (!combatant || combatant.isDefeated) return false;
+    return setCombatantDefeatedWithOverlay(combatant, true);
+}
+
+export async function setCombatantDefeatedWithOverlay(combatant, defeated) {
+    const defeatedStatusId = globalThis.CONFIG?.specialStatusEffects?.DEFEATED ?? "dead";
+    if (!combatant?.actor || typeof combatant.update !== "function") return false;
+    const active = Boolean(defeated);
+    await combatant.update({ defeated: active });
+    if (active) await ensureDefeatedTokenOverlay(combatant.actor, defeatedStatusId);
+    else await removeDefeatedTokenOverlay(combatant.actor, defeatedStatusId);
     return true;
+}
+
+async function ensureDefeatedTokenOverlay(actor, statusId) {
+    let effect = defeatedOverlayEffects(actor, statusId)[0] ?? null;
+    if (!effect) {
+        if (typeof actor.createEmbeddedDocuments !== "function") {
+            throw new Error("The defeated token overlay could not be created.");
+        }
+        const created = await actor.createEmbeddedDocuments("ActiveEffect", [defeatedOverlayEffectData(statusId)]);
+        effect = defeatedOverlayEffects({ effects: created }, statusId)[0]
+            ?? defeatedOverlayEffects(actor, statusId)[0]
+            ?? null;
+    }
+    if (!effect) throw new Error("The defeated token overlay could not be resolved.");
+    if (defeatedOverlayMatches(effect)) return;
+    if (typeof effect.update !== "function") throw new Error("The defeated token overlay could not be configured.");
+    await effect.update({
+        img: DEFEATED_TOKEN_OVERLAY_ICON,
+        disabled: false,
+        showIcon: activeEffectAlwaysVisibility(),
+        "flags.core.overlay": true,
+        [`flags.${MODULE_ID}.${DEFEATED_TOKEN_OVERLAY_FLAG}`]: true,
+    });
+}
+
+async function removeDefeatedTokenOverlay(actor, statusId) {
+    const ids = defeatedOverlayEffects(actor, statusId)
+        .map((effect) => effect.id ?? effect._id)
+        .filter(Boolean);
+    if (!ids.length) return;
+    if (typeof actor.deleteEmbeddedDocuments !== "function") {
+        throw new Error("The defeated token overlay could not be removed.");
+    }
+    await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+}
+
+function defeatedOverlayEffectData(statusId) {
+    return {
+        name: globalThis.game?.i18n?.localize?.("EFFECT.StatusDead") ?? "Defeated",
+        img: DEFEATED_TOKEN_OVERLAY_ICON,
+        changes: [],
+        disabled: false,
+        showIcon: activeEffectAlwaysVisibility(),
+        statuses: [statusId],
+        flags: {
+            core: { overlay: true },
+            [MODULE_ID]: { [DEFEATED_TOKEN_OVERLAY_FLAG]: true },
+        },
+    };
+}
+
+function defeatedOverlayEffects(actor, statusId) {
+    return Array.from(actor?.effects ?? []).filter((effect) => {
+        const statuses = effect?.statuses;
+        const hasStatus = statuses?.has?.(statusId) ?? Array.from(statuses ?? []).includes(statusId);
+        if (!hasStatus) return false;
+        if (effect.flags?.[MODULE_ID]?.[DEFEATED_TOKEN_OVERLAY_FLAG]) return true;
+        return Number(statuses?.size ?? statuses?.length ?? 0) === 1;
+    });
+}
+
+function defeatedOverlayMatches(effect) {
+    return effect.img === DEFEATED_TOKEN_OVERLAY_ICON
+        && effect.disabled !== true
+        && effect.showIcon === activeEffectAlwaysVisibility()
+        && effect.flags?.core?.overlay === true
+        && effect.flags?.[MODULE_ID]?.[DEFEATED_TOKEN_OVERLAY_FLAG] === true;
+}
+
+function activeEffectAlwaysVisibility() {
+    return globalThis.CONST?.ACTIVE_EFFECT_SHOW_ICON?.ALWAYS ?? 2;
 }
 
 export async function abortSelectedTokenMovement(combat, tokenReference) {
@@ -454,7 +537,10 @@ class SmootherFightHud {
                     await services.requireGm(() => services.toggleCombatantVisibility(context));
                     break;
                 case "toggle-combatant-defeated":
-                    await services.requireGm(() => context.combatant.update({ defeated: !context.combatant.isDefeated }));
+                    await services.requireGm(() => setCombatantDefeatedWithOverlay(
+                        context.combatant,
+                        !context.combatant.isDefeated
+                    ));
                     break;
                 case "mark-target-defeated":
                     await services.requireGm(() => markZeroHealthTargetDefeated(context, target.dataset.tokenUuid));

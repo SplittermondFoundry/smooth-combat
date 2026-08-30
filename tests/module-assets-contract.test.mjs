@@ -118,6 +118,7 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudController, /case "toggle-favorite-tick-action"/u);
     assert.match(hudController, /case "clear-attack-preparation"/u);
     assert.match(hudController, /case "mark-target-defeated"/u);
+    assert.match(hudController, /case "toggle-combatant-defeated":\s*await services\.requireGm\(\(\) => setCombatantDefeatedWithOverlay\(/u);
     assert.match(hudController, /case "set-combat-position"/u);
     assert.match(hudController, /services\.setCombatPosition\(context\.actor, target\.dataset\.combatPosition\)/u);
     assert.match(hudController, /action === "respond-active-defense"/u);

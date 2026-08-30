@@ -14,7 +14,9 @@ import { buildTickActionReference } from "../Modul/splittermond-smoother-fight/s
 import { buildHud } from "../Modul/splittermond-smoother-fight/scripts/features/hud/view.js";
 import {
     abortSelectedTokenMovement,
+    DEFEATED_TOKEN_OVERLAY_ICON,
     markZeroHealthTargetDefeated,
+    setCombatantDefeatedWithOverlay,
     toggleSelectedTokenPersistentMovementRoute,
     toggleSelectedTokenMovementRoute,
 } from "../Modul/splittermond-smoother-fight/scripts/features/hud/controller.js";
@@ -122,6 +124,27 @@ function combatant(id, controller, { owner = false } = {}) {
         hidden: false,
         initiative: 20,
         runtimeController: controller,
+    };
+}
+
+function activeEffectFixture(id, source) {
+    return {
+        id,
+        disabled: source.disabled,
+        flags: structuredClone(source.flags),
+        img: source.img,
+        showIcon: source.showIcon,
+        statuses: new Set(source.statuses),
+        async update(changes) {
+            for (const [key, value] of Object.entries(changes)) {
+                if (key === "flags.core.overlay") this.flags.core.overlay = value;
+                else if (key === "flags.splittermond-smoother-fight.defeatedTokenOverlay") {
+                    this.flags["splittermond-smoother-fight"] ??= {};
+                    this.flags["splittermond-smoother-fight"].defeatedTokenOverlay = value;
+                } else this[key] = value;
+            }
+            return this;
+        },
     };
 }
 
@@ -559,14 +582,25 @@ test("active actor and primary target portraits share the same dedicated header"
     assert.doesNotMatch(html, /class="sf-portrait-image">\s*<span class="sf-eyebrow">/u);
 });
 
-test("the GM can mark a zero-health primary target combatant defeated with one click", async () => {
+test("the GM can mark a zero-health primary target combatant defeated with a skull overlay", async (t) => {
     const { combat } = installFixture();
     globalThis.game.user = { id: "gm", isGM: true, name: "GM" };
+    const originalConfig = globalThis.CONFIG;
+    globalThis.CONFIG = { specialStatusEffects: { DEFEATED: "dead" } };
+    t.after(() => globalThis.CONFIG = originalConfig);
+    const createdEffects = [];
     const targetActor = {
+        effects: [],
         img: "target.webp",
         name: "Target actor",
         derivedValues: {},
         system: { healthBar: { value: 0, max: 13 } },
+        createEmbeddedDocuments: async (type, sources) => {
+            createdEffects.push({ type, sources });
+            const effects = sources.map((source, index) => activeEffectFixture(`defeated-${index}`, source));
+            targetActor.effects.push(...effects);
+            return effects;
+        },
     };
     const target = {
         actor: targetActor,
@@ -576,6 +610,7 @@ test("the GM can mark a zero-health primary target combatant defeated with one c
     };
     const updates = [];
     const targetCombatant = {
+        actor: targetActor,
         id: "target-combatant",
         isDefeated: false,
         token: target,
@@ -605,7 +640,60 @@ test("the GM can mark a zero-health primary target combatant defeated with one c
     assert.ok(defeatControlIndex < targetImageIndex);
     assert.equal(await markZeroHealthTargetDefeated(getHudContext(), target.uuid), true);
     assert.deepEqual(updates, [{ defeated: true }]);
+    assert.equal(DEFEATED_TOKEN_OVERLAY_ICON, "icons/svg/skull.svg");
+    assert.equal(createdEffects.length, 1);
+    assert.equal(createdEffects[0].type, "ActiveEffect");
+    assert.deepEqual(createdEffects[0].sources[0], {
+        name: "EFFECT.StatusDead",
+        img: "icons/svg/skull.svg",
+        changes: [],
+        disabled: false,
+        showIcon: 2,
+        statuses: ["dead"],
+        flags: {
+            core: { overlay: true },
+            "splittermond-smoother-fight": { defeatedTokenOverlay: true },
+        },
+    });
     assert.doesNotMatch(await buildHud(getHudContext()), /data-sf-action="mark-target-defeated"/u);
+});
+
+test("the active combatant defeat control adds and removes the same skull overlay", async (t) => {
+    const { active } = installFixture();
+    const originalConfig = globalThis.CONFIG;
+    globalThis.CONFIG = { specialStatusEffects: { DEFEATED: "dead" } };
+    t.after(() => globalThis.CONFIG = originalConfig);
+    const combatantUpdates = [];
+    const createdEffects = [];
+    const deletedEffects = [];
+    active.actor.effects = [];
+    active.update = async (changes) => {
+        combatantUpdates.push(changes);
+        active.isDefeated = Boolean(changes.defeated);
+    };
+    active.actor.createEmbeddedDocuments = async (type, sources) => {
+        assert.equal(type, "ActiveEffect");
+        createdEffects.push(...sources);
+        const effects = sources.map((source, index) => activeEffectFixture(`active-defeated-${index}`, source));
+        active.actor.effects.push(...effects);
+        return effects;
+    };
+    active.actor.deleteEmbeddedDocuments = async (type, ids) => {
+        assert.equal(type, "ActiveEffect");
+        deletedEffects.push(...ids);
+        active.actor.effects = active.actor.effects.filter((effect) => !ids.includes(effect.id));
+    };
+
+    assert.equal(await setCombatantDefeatedWithOverlay(active, true), true);
+    assert.equal(await setCombatantDefeatedWithOverlay(active, false), true);
+
+    assert.deepEqual(combatantUpdates, [{ defeated: true }, { defeated: false }]);
+    assert.equal(createdEffects.length, 1);
+    assert.equal(createdEffects[0].img, "icons/svg/skull.svg");
+    assert.deepEqual(createdEffects[0].statuses, ["dead"]);
+    assert.equal(createdEffects[0].flags.core.overlay, true);
+    assert.deepEqual(deletedEffects, ["active-defeated-0"]);
+    assert.deepEqual(active.actor.effects, []);
 });
 
 test("the target defeat shortcut stays hidden without every required condition", async () => {
