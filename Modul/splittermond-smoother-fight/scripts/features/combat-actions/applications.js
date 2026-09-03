@@ -6,6 +6,8 @@ import {
     MODULE_ID,
 } from "../../core/constants.js";
 
+import { getApplicableCombat } from "../../core/combat-compatibility.js";
+
 import {
     APPLICATION_STALE_AFTER_MS,
     effectiveApplicationState,
@@ -135,9 +137,10 @@ export function getMovementReversalApplicationStatus(tokenLike, now = Date.now()
 export async function revertTokenMovementApplication(context) {
     const token = context?.token?.document ?? context?.token;
     if (!token || typeof token.revertRecordedMovement !== "function") return false;
+    const destination = movementReversalDestination(token);
     if (typeof token.setFlag !== "function") {
         const reverted = await token.revertRecordedMovement();
-        if (!reverted) return false;
+        if (!movementReversalSucceeded(token, destination, reverted)) return false;
         await token.clearMovementHistory?.();
         services.scheduleRender(0);
         return true;
@@ -158,11 +161,14 @@ export async function revertTokenMovementApplication(context) {
         try {
             reverted = await token.revertRecordedMovement();
         } catch (error) {
-            const changed = tokenPositionFingerprint(token) !== previousPosition;
-            await persistMovementFailureState(token, changed ? "uncertain" : "idle", applying);
-            throw error;
+            if (!movementReversalSucceeded(token, destination, false)) {
+                const changed = tokenPositionFingerprint(token) !== previousPosition;
+                await persistMovementFailureState(token, changed ? "uncertain" : "idle", applying);
+                throw error;
+            }
+            console.debug(`${MODULE_ID} | Movement reversal threw after reaching its recorded origin`, error);
         }
-        if (!reverted) {
+        if (!movementReversalSucceeded(token, destination, reverted)) {
             const changed = tokenPositionFingerprint(token) !== previousPosition;
             await setMovementReversalApplicationState(token, changed ? "uncertain" : "idle");
             return false;
@@ -262,7 +268,7 @@ function preparedItemId(actor, kind) {
 }
 
 function combatantInitiative(combatant) {
-    const current = game.combat?.combatants?.get?.(combatant?.id) ?? combatant;
+    const current = getApplicableCombat()?.combatants?.get?.(combatant?.id) ?? combatant;
     return Number(current?.initiative);
 }
 
@@ -283,6 +289,27 @@ function movementHistoryFingerprint(token) {
 
 function tokenPositionFingerprint(token) {
     return JSON.stringify([token?.x, token?.y, token?.elevation]);
+}
+
+function movementReversalDestination(token) {
+    const source = token?.movementHistory;
+    const history = Array.isArray(source) ? source : [];
+    const destination = history[0];
+    const x = Number(destination?.x);
+    const y = Number(destination?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return {
+        x,
+        y,
+        ...(destination.elevation === undefined ? {} : { elevation: Number(destination.elevation) }),
+    };
+}
+
+function movementReversalSucceeded(token, destination, reverted) {
+    if (!destination) return Boolean(reverted);
+    if (Number(token?.x) !== destination.x || Number(token?.y) !== destination.y) return false;
+    return destination.elevation === undefined
+        || Number(token?.elevation ?? 0) === destination.elevation;
 }
 
 function scheduleStaleRender(key, record) {

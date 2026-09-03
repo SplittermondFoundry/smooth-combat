@@ -2,6 +2,8 @@ import { hudState } from "./state.js";
 
 import { services } from "../../core/services.js";
 
+import { getApplicableCombat } from "../../core/combat-compatibility.js";
+
 import {
     isCombatantVisibleToUser,
     selectPersonalCombatant,
@@ -12,7 +14,7 @@ import {
 } from "../../shared/values.js";
 
 export function getHudContext() {
-    const combat = game.combat;
+    const combat = getApplicableCombat();
     if (!combat?.started) return null;
     const combatant = combat.combatant ?? combat.turns?.[0] ?? null;
     if (!combatant) return null;
@@ -118,7 +120,7 @@ export function selectPersonalCombatantFromMenu(activeContext, combatantId) {
     services.scheduleRender(0);
 }
 
-export function syncActiveCombatantTokenSelection(combat = game.combat) {
+export function syncActiveCombatantTokenSelection(combat = getApplicableCombat()) {
     if (!combat) return false;
     const combatant = combat.combatant ?? combat.turns?.[0] ?? null;
     const actor = combatant?.actor ?? null;
@@ -135,6 +137,31 @@ export function syncActiveCombatantTokenSelection(combat = game.combat) {
     const controlledReference = services.tokenUuid(controlledToken) ?? controlledToken?.id ?? null;
     const activeReference = services.tokenUuid(token) ?? token.id ?? null;
     if (controlledReference !== activeReference) tokenObject.control({ releaseOthers: true });
+    return true;
+}
+
+export function reconcileControlledCombatTokenSelection(combat = getApplicableCombat()) {
+    if (!combat?.started) return false;
+    if (syncActiveCombatantTokenSelection(combat)) return true;
+    if (game.user?.isGM) return false;
+
+    const controlledToken = services.getControlledTokenDocument();
+    if (!controlledToken || findCombatantForToken(combat, controlledToken)) return false;
+
+    const personalContext = getPersonalHudContext({ combat });
+    const personalToken = personalContext?.token?.document ?? personalContext?.token ?? null;
+    const personalTokenObject = personalToken?.object ?? globalThis.canvas?.tokens?.get?.(personalToken?.id);
+    if (personalContext?.combatant && personalTokenObject?.control) {
+        hudState.personalCombatId = combat.id;
+        hudState.personalCombatantId = personalContext.combatant.id;
+        personalTokenObject.control({ releaseOthers: true });
+        return true;
+    }
+
+    const controlledTokenObject = controlledToken?.object
+        ?? globalThis.canvas?.tokens?.get?.(controlledToken?.id);
+    if (!controlledTokenObject?.release) return false;
+    controlledTokenObject.release();
     return true;
 }
 

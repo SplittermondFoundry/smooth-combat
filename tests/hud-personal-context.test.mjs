@@ -3,9 +3,11 @@ import test from "node:test";
 
 import { configureServices } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
 import {
+    findCombatantForToken,
     getHudContext,
     getPersonalHudCandidates,
     getPersonalHudContext,
+    reconcileControlledCombatTokenSelection,
     resetPersonalCombatantSelection,
     selectPersonalCombatantFromMenu,
     syncActiveCombatantTokenSelection,
@@ -223,6 +225,36 @@ test("an owned controlled token selects personal HUD controls outside the player
     assert.equal(personalContext?.personal, true);
 });
 
+test("the HUD follows the active scene combat instead of a stale viewed combat", () => {
+    const { active, combat } = installFixture();
+    const scene = { id: "battle-scene" };
+    const defeated = combatant("defeated", harness.player, { owner: true });
+    defeated.isDefeated = true;
+    const staleCombat = {
+        id: "stale-combat",
+        started: true,
+        isActive: false,
+        scene,
+        combatant: defeated,
+        combatants: [defeated],
+        turns: [defeated],
+    };
+    combat.isActive = true;
+    combat.scene = scene.id;
+    globalThis.game.combat = staleCombat;
+    globalThis.game.combats = new Map([
+        [staleCombat.id, staleCombat],
+        [combat.id, combat],
+    ]);
+    globalThis.canvas.scene = scene;
+
+    const context = getHudContext();
+
+    assert.equal(context?.combat, combat);
+    assert.equal(context?.combatant, active);
+    assert.notEqual(context?.combatant, defeated);
+});
+
 test("the personal combatant menu selects HUD controls outside the player's turn", () => {
     const { active, first } = installFixture();
     const activeContext = getHudContext();
@@ -259,6 +291,18 @@ test("the active GM-controlled combatant becomes the GM's selected canvas token"
     assert.deepEqual(harness.controlCalls, [{ id: first.id, options: { releaseOthers: true } }]);
 });
 
+test("reload keeps selecting the active GM-controlled combatant", () => {
+    const { combat, first, second } = installFixture();
+    const gm = { id: "gm", isGM: true, name: "GM" };
+    globalThis.game.user = gm;
+    first.runtimeController = gm;
+    combat.combatant = first;
+    harness.controlledToken = second.token;
+
+    assert.equal(reconcileControlledCombatTokenSelection(combat), true);
+    assert.deepEqual(harness.controlCalls, [{ id: first.id, options: { releaseOthers: true } }]);
+});
+
 test("successive tick turns keep switching the selected canvas token", () => {
     const { combat, first, second } = installFixture();
 
@@ -272,6 +316,44 @@ test("successive tick turns keep switching the selected canvas token", () => {
         { id: second.id, options: { releaseOthers: true } },
         { id: first.id, options: { releaseOthers: true } },
     ]);
+});
+
+test("reload replaces an identically named defeated token with the exact in-combat token", () => {
+    const { combat, first } = installFixture();
+    combat.combatants = [combat.combatant, first];
+    combat.turns = [combat.combatant, first];
+    first.actor.name = "Feenhörnchen";
+    first.token.name = "Feenhörnchen";
+    const defeatedToken = {
+        id: "token-defeated-feenhoernchen",
+        uuid: "Scene.scene.Token.token-defeated-feenhoernchen",
+        name: "Feenhörnchen",
+        actor: first.actor,
+        object: { release: () => assert.fail("the valid in-combat replacement should release the stale token") },
+    };
+    harness.controlledToken = defeatedToken;
+
+    assert.equal(reconcileControlledCombatTokenSelection(combat), true);
+    assert.deepEqual(harness.controlCalls, [{ id: first.id, options: { releaseOthers: true } }]);
+    assert.equal(harness.controlledToken, first.token);
+    assert.equal(findCombatantForToken(combat, harness.controlledToken), first);
+});
+
+test("reload releases an out-of-combat token instead of guessing between combatants", () => {
+    const { combat, first } = installFixture();
+    let released = false;
+    const defeatedToken = {
+        id: "token-defeated-feenhoernchen",
+        uuid: "Scene.scene.Token.token-defeated-feenhoernchen",
+        name: "Feenhörnchen",
+        actor: first.actor,
+        object: { release: () => released = true },
+    };
+    harness.controlledToken = defeatedToken;
+
+    assert.equal(reconcileControlledCombatTokenSelection(combat), true);
+    assert.equal(released, true);
+    assert.deepEqual(harness.controlCalls, []);
 });
 
 test("favorite tick actions are pinned once above the regular categories", () => {
@@ -337,6 +419,24 @@ test("a pending active defense uses a wide response button with a dedicated decl
     assert.match(html, /fa-solid fa-xmark/u);
 });
 
+test("a pending Defender decision uses the same dedicated decline action for the exact helper token", async () => {
+    const { first } = installFixture();
+    harness.controlledToken = first.token;
+    harness.pendingDefense = {
+        message: { id: "attack-awaiting-defender" },
+        target: { uuid: "Token.target", name: "Protected target" },
+        defender: first.token,
+        role: "defender",
+    };
+
+    const html = await buildHud(getHudContext());
+
+    assert.match(html, /data-sf-action="respond-defender-defense"/u);
+    assert.match(html, /data-defender-token-uuid="Scene\.scene\.Token\.token-first"/u);
+    assert.match(html, /data-sf-action="decline-active-defense"[^>]*data-defender-token-uuid="Scene\.scene\.Token\.token-first"/u);
+    assert.match(html, /SMOOTHER_FIGHT\.HUD\.DefenderAction/u);
+});
+
 test("a pending continuous-action interruption is highlighted in personal HUD controls", async () => {
     const { first } = installFixture();
     harness.controlledToken = first.token;
@@ -386,7 +486,17 @@ test("the primary target distance drives advisory attack and spell range states"
     ];
     first.actor.spells = [
         { id: "bolt", name: "Bolt", img: "bolt.webp", difficulty: "VTD", range: "7 m", castDuration: 5 },
-        { id: "touch", name: "Touch", img: "touch.webp", difficulty: "KW", range: "Berührung", castDuration: 3 },
+        { id: "touch", name: "Touch", img: "touch.webp", difficulty: 18, range: "Berührung", castDuration: 3 },
+        {
+            id: "caster",
+            name: "Caster",
+            img: "caster.webp",
+            difficulty: 18,
+            range: "Zauberer",
+            castDuration: 3,
+            skill: { id: "firemagic", label: "Fire magic" },
+            system: { skill: "firemagic" },
+        },
     ];
     const target = {
         id: "target",
@@ -419,15 +529,37 @@ test("the primary target distance drives advisory attack and spell range states"
     assert.match(html, /class="sf-attack-option-roll [^"]*is-range-outside" data-sf-action="attack" data-attack-id="sword"/u);
     assert.match(html, /class="sf-attack-option-roll [^"]*is-range-within" data-sf-action="attack" data-attack-id="bow"/u);
     assert.match(html, /data-spell-id="bolt" class="[^"]*is-range-outside/u);
-    assert.match(html, /data-spell-id="touch" class="[^"]*is-range-unknown/u);
+    assert.match(html, /data-spell-id="touch" class="[^"]*is-range-outside/u);
+    const casterWithoutMastery = html.match(/<button[^>]*data-spell-id="caster"[\s\S]*?<\/button>/u)?.[0];
+    assert.ok(casterWithoutMastery);
+    assert.doesNotMatch(casterWithoutMastery, /is-range-/u);
+    assert.doesNotMatch(casterWithoutMastery, /sf-action-range-status/u);
     assert.match(html, /SMOOTHER_FIGHT\.HUD\.AttackRangeOutside/u);
     assert.match(html, /SMOOTHER_FIGHT\.HUD\.RangeWithin/u);
     assert.match(html, /SMOOTHER_FIGHT\.HUD\.SpellRangeOutside/u);
-    assert.match(html, /SMOOTHER_FIGHT\.HUD\.RangeUnknown/u);
+    assert.doesNotMatch(html, /SMOOTHER_FIGHT\.HUD\.RangeUnknown/u);
 
     harness.meleeRange = 8;
     const extendedMeleeRange = await buildHud(getHudContext());
     assert.match(extendedMeleeRange, /class="sf-attack-option-roll [^"]*is-range-within" data-sf-action="attack" data-attack-id="sword"/u);
+
+    target.x = 100;
+    first.actor.items = [{
+        type: "mastery",
+        name: "Hand des Zauberers",
+        system: { id: "hand-des-zauberers", skill: "firemagic" },
+    }];
+    const adjacentTouchRange = await buildHud(getHudContext());
+    assert.match(adjacentTouchRange, /data-spell-id="touch" class="[^"]*is-range-within/u);
+    assert.match(adjacentTouchRange, /data-spell-id="caster" class="[^"]*is-range-within/u);
+
+    first.actor.items[0].system.skill = "windmagic";
+    const wrongSchoolMastery = await buildHud(getHudContext());
+    assert.match(wrongSchoolMastery, /data-spell-id="touch" class="[^"]*is-range-within/u);
+    const casterWithWrongSchoolMastery = wrongSchoolMastery.match(/<button[^>]*data-spell-id="caster"[\s\S]*?<\/button>/u)?.[0];
+    assert.ok(casterWithWrongSchoolMastery);
+    assert.doesNotMatch(casterWithWrongSchoolMastery, /is-range-/u);
+    assert.doesNotMatch(casterWithWrongSchoolMastery, /sf-action-range-status/u);
 });
 
 test("a pending attack preparation is visible and dismissible in personal HUD controls", async () => {
@@ -550,6 +682,48 @@ test("the world option reveals a foreign target's health and focus", async () =>
     assert.match(revealed, /5\/11/u);
 });
 
+test("a player sees a defeated primary target without receiving its hidden health", async () => {
+    const { combat } = installFixture();
+    const targetActor = {
+        img: "target.webp",
+        name: "Defeated target actor",
+        derivedValues: {},
+        system: {
+            healthBar: { value: 0, max: 21 },
+            focusBar: { value: 2, max: 2 },
+        },
+        testUserPermission: () => false,
+    };
+    const target = {
+        actor: targetActor,
+        id: "defeated-target",
+        name: "Defeated target",
+        uuid: "Scene.scene.Token.defeated-target",
+    };
+    combat.combatants.push({
+        actor: targetActor,
+        id: "defeated-target-combatant",
+        isDefeated: true,
+        token: target,
+        tokenId: target.id,
+    });
+    harness.targetSelection = {
+        target,
+        targets: [target],
+        primaryTargetTokenUuid: target.uuid,
+        primaryTargetActorUuid: null,
+    };
+
+    const html = await buildHud(getHudContext());
+
+    assert.match(html, /class="sf-portrait sf-target [^"]*sf-is-primary-target[^"]*sf-is-defeated/u);
+    assert.match(html, /class="sf-primary-target-defeated-status"/u);
+    assert.match(html, /SMOOTHER_FIGHT\.HUD\.Defeated/u);
+    assert.doesNotMatch(html, /0\/21/u);
+    assert.doesNotMatch(html, /2\/2/u);
+    assert.doesNotMatch(html, /data-sf-action="mark-target-defeated"/u);
+});
+
 test("active actor and primary target portraits share the same dedicated header", async () => {
     installFixture();
     const targetActor = {
@@ -655,7 +829,9 @@ test("the GM can mark a zero-health primary target combatant defeated with a sku
             "splittermond-smoother-fight": { defeatedTokenOverlay: true },
         },
     });
-    assert.doesNotMatch(await buildHud(getHudContext()), /data-sf-action="mark-target-defeated"/u);
+    const defeatedHtml = await buildHud(getHudContext());
+    assert.doesNotMatch(defeatedHtml, /data-sf-action="mark-target-defeated"/u);
+    assert.match(defeatedHtml, /class="sf-primary-target-defeated-status"/u);
 });
 
 test("the active combatant defeat control adds and removes the same skull overlay", async (t) => {

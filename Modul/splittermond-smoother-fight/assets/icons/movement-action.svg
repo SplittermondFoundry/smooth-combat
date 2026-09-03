@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
   <title id="title">In Bewegung</title>
   <path fill="#fff" d="M42 3a7 7 0 1 1 0 14 7 7 0 0 1 0-14ZM27.5 16.5l10-2.5 8.5 9 10 4-2.8 6-11.4-4.6-5.3-5.6-4.2 12.4 8.2 7.3V61h-7V46.3l-8.2-6.7-5.8 9.7L8 57l-4-5.8 10.4-7 7.2-12.1-8.3 3.1-6.8-8.7 5.5-4.3 3.7 4.8 11.8-4.4v-6.1Z"/>
 </svg>

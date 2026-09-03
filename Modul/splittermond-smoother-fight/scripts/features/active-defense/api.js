@@ -7,6 +7,7 @@ export {
     claimPendingDefenseForMessage,
     getControlledTokenDocument,
     getEligibleDefenderChoices,
+    getRunningActiveDefense,
     isDefenseMessageProcessing,
     normalizePendingDefense,
     processDefenseMessage,
@@ -16,6 +17,8 @@ export {
     defenseAllowsModification,
     defenseAwaitsResponse,
     defensePhaseForOffense,
+    hasActorDeclinedDefense,
+    hasDefenseParticipantDecided,
     hasOffenseFollowUpStarted,
     initialDefensePhaseForOffense,
     reopenDefensePhaseAfterOutcomeChange,
@@ -37,3 +40,11 @@ export {
     recoverDefenseSplinterpointApplication,
     requestDefenseSplinterpoint,
 } from "./splinterpoints.js";
+
+export {
+    receivePublishedPendingDefense,
+} from "./pending.js";
+
+export {
+    installSystemActionBarActiveDefenseInterceptor,
+} from "./system-action-bar.js";

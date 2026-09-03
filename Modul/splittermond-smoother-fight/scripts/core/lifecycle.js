@@ -1,5 +1,7 @@
 import { services } from "./services.js";
 
+import { getApplicableCombat } from "./combat-compatibility.js";
+
 import {
     hasTokenPositionUpdate,
     isOffensiveCombatMessage,
@@ -47,25 +49,27 @@ export function registerHooks() {
         }
     }));
     Hooks.on("controlToken", (token, controlled) => {
+        services.installSystemActionBarActiveDefenseInterceptor?.();
         if (!controlled) services.clearTemporaryMovementRoutePreview(token);
         services.scheduleRender(0);
     });
     Hooks.on("canvasTearDown", () => services.clearMovementRoutePreview());
     Hooks.on("canvasPan", () => services.refreshMovementRoutePreviewScale());
     Hooks.on("userConnected", () => {
+        const combat = getApplicableCombat();
         services.scheduleRender(0);
-        void services.advanceContinuousActions(game.combat);
-        void services.advancePendingMovements(game.combat);
+        void services.advanceContinuousActions(combat);
+        void services.advancePendingMovements(combat);
     });
     Hooks.on("sightRefresh", () => services.scheduleRender(0));
     Hooks.on("updateToken", (token, changes, options, userId) => {
         if (Object.hasOwn(changes ?? {}, "hidden")) services.scheduleRender(0);
         if (hasTokenPositionUpdate(changes)) {
-            void services.resetCompletedMovementReversalApplication(token);
+            runAuthoritativeCleanup(() => services.resetCompletedMovementReversalApplication(token));
             void services.cancelMovementPlanAfterManualMove(token, options, userId);
             services.scheduleRenderAfterTokenMovement(token);
         }
-        services.syncDefaultMovementRoutePreviews(game.combat);
+        services.syncDefaultMovementRoutePreviews(getApplicableCombat());
         void services.refreshCombatPositionOverlay(token);
     });
     Hooks.on("drawToken", (token) => void services.refreshCombatPositionOverlay(token));
@@ -74,8 +78,12 @@ export function registerHooks() {
     });
 
     Hooks.on("canvasReady", (...args) => {
+        const combat = getApplicableCombat();
         services.seedHealthFeedbackState(...args);
-        services.syncDefaultMovementRoutePreviews(game.combat);
+        services.reconcileControlledCombatTokenSelection(combat);
+        void services.advanceContinuousActions(combat);
+        void services.advancePendingMovements(combat);
+        services.syncDefaultMovementRoutePreviews(combat);
         void services.refreshAllCombatPositionOverlays();
     });
     Hooks.on("preUpdateActor", services.rememberActorHealthCost);
@@ -97,7 +105,7 @@ export function registerHooks() {
     });
 
     Hooks.on("updateCombatant", (combatant) => {
-        const combat = combatant?.parent ?? game.combat;
+        const combat = combatant?.parent ?? getApplicableCombat();
         setTimeout(() => {
             services.syncActiveCombatantTokenSelection(combat);
             services.announceTurnFeedback(combat);
@@ -125,6 +133,13 @@ export function registerHooks() {
         ]));
     });
     Hooks.on("deleteCombatant", (combatant) => {
+        const combat = combatant?.parent ?? getApplicableCombat();
+        setTimeout(() => {
+            services.reconcileControlledCombatTokenSelection(combat);
+            services.announceTurnFeedback(combat);
+            void services.advanceContinuousActions(combat);
+            void services.advancePendingMovements(combat);
+        }, 0);
         runAuthoritativeCleanup(() => Promise.all([
             services.clearAttackPreparationForCombatant(combatant),
             services.clearContinuousActionForCombatant(combatant),
@@ -219,6 +234,55 @@ export function registerSocket() {
             return;
         }
 
+        if (payload.type === "active-defense-pending" && payload.senderId !== game.user.id) {
+            const sender = game.users.get(payload.senderId);
+            const pending = payload.pending;
+            if (!sender || !pending || typeof pending !== "object") return;
+            if (payload.active !== false) {
+                const offense = game.messages.get(pending.attackMessageId);
+                const context = services.getMessageContext(offense);
+                const expectedTargetUuid = context?.primaryTargetTokenUuid ?? context?.targetTokenUuid;
+                const publishedTargetUuid = pending.primaryTargetTokenUuid ?? pending.targetTokenUuid;
+                const target = services.resolveToken(publishedTargetUuid);
+                const defender = services.resolveToken(pending.defenderTokenUuid);
+                const ownsParticipant = sender.isGM || [target, defender].some((token) =>
+                    token?.actor?.testUserPermission?.(sender, "OWNER")
+                );
+                if (!offense
+                    || !isOffensiveCombatMessage(offense)
+                    || !expectedTargetUuid
+                    || expectedTargetUuid !== publishedTargetUuid
+                    || !ownsParticipant) return;
+            }
+            services.receivePublishedPendingDefense(pending, sender.id, payload.active !== false);
+            return;
+        }
+
+        if (payload.type === "movement-plan-abort-request"
+            && payload.recipientId === game.user.id && game.user.isGM) {
+            const sender = game.users.get(payload.senderId);
+            const result = sender
+                ? await services.applyRemoteMovementPlanAbort(payload, sender)
+                : { applied: false, error: "invalid" };
+            game.socket.emit(SOCKET, {
+                type: "movement-plan-abort-result",
+                senderId: game.user.id,
+                recipientId: payload.senderId,
+                requestId: payload.requestId,
+                tokenUuid: payload.tokenUuid,
+                planId: payload.planId,
+                ...result,
+            });
+            return;
+        }
+
+        if (payload.type === "movement-plan-abort-result" && payload.recipientId === game.user.id) {
+            const sender = game.users.get(payload.senderId);
+            if (!sender?.isGM) return;
+            services.finishRemoteMovementPlanAbort(payload, sender);
+            return;
+        }
+
         if (payload.type === "damage-application-request" && payload.recipientId === game.user.id && game.user.isGM) {
             const sender = game.users.get(payload.senderId);
             const message = game.messages.get(payload.messageId);
@@ -248,13 +312,100 @@ export function registerSocket() {
             return;
         }
 
+        if (payload.type === "defense-numbing-damage-request" && payload.recipientId === game.user.id && game.user.isGM) {
+            const sender = game.users.get(payload.senderId);
+            const message = game.messages.get(payload.messageId);
+            let result = { state: "idle", error: "invalid" };
+            if (sender && message && services.isDefenseMessage(message)) {
+                result = await services.applyRemoteDefenseNumbingDamage(message, payload.damage, sender);
+            }
+            game.socket.emit(SOCKET, {
+                type: "defense-numbing-damage-result",
+                senderId: game.user.id,
+                recipientId: payload.senderId,
+                requestId: payload.requestId,
+                messageId: payload.messageId,
+                ...result,
+            });
+            return;
+        }
+
+        if (payload.type === "defense-numbing-damage-result" && payload.recipientId === game.user.id) {
+            const sender = game.users.get(payload.senderId);
+            if (!sender?.isGM) return;
+            services.finishRemoteDefenseNumbingDamage(payload, sender);
+            return;
+        }
+
         if (payload.type === "damage-application-completed" && payload.recipientId === game.user.id && game.user.isGM) {
             const sender = game.users.get(payload.senderId);
             const message = game.messages.get(payload.messageId);
-            const actor = services.resolveActorUuid(payload.actorUuid) ?? services.resolveToken(payload.tokenUuid)?.actor ?? null;
-            if (!sender || !message || !services.isDamageMessage(message) || !services.mayUserApplyDamageToActor(sender, actor)) return;
-            await services.setDamageApplicationState(message, "completed", { initiatedBy: sender.id });
-            services.scheduleRender(0);
+            let result = { state: "idle", error: "invalid" };
+            if (sender && message && services.isDamageMessage(message)) {
+                result = await services.finalizeRemoteDamageApplication(message, payload, sender);
+            }
+            game.socket.emit(SOCKET, {
+                type: "damage-application-result",
+                senderId: game.user.id,
+                recipientId: payload.senderId,
+                requestId: payload.requestId,
+                messageId: payload.messageId,
+                ...result,
+            });
+            return;
+        }
+
+        if (payload.type === "legacy-tick-advance-request" && payload.recipientId === game.user.id && game.user.isGM) {
+            const sender = game.users.get(payload.senderId);
+            const message = game.messages.get(payload.messageId);
+            let result = { applied: false, error: "invalid" };
+            if (sender && message) {
+                result = await services.applyRemoteLegacyTickAdvance(message, {
+                    offeredTicks: payload.offeredTicks,
+                    ticks: payload.ticks,
+                }, sender);
+            }
+            game.socket.emit(SOCKET, {
+                type: "legacy-tick-advance-result",
+                senderId: game.user.id,
+                recipientId: payload.senderId,
+                requestId: payload.requestId,
+                messageId: payload.messageId,
+                ...result,
+            });
+            return;
+        }
+
+        if (payload.type === "legacy-tick-advance-result" && payload.recipientId === game.user.id) {
+            const sender = game.users.get(payload.senderId);
+            if (!sender?.isGM) return;
+            services.finishRemoteLegacyTickAdvance(payload, sender);
+            return;
+        }
+
+        if (payload.type === "fumble-action-request" && payload.recipientId === game.user.id && game.user.isGM) {
+            const sender = game.users.get(payload.senderId);
+            const message = game.messages.get(payload.messageId);
+            let result = { applied: false, error: "invalid" };
+            if (sender && message && services.getFumbleData(message)) {
+                result = await services.applyRemoteFumbleAction(message, payload.action, sender);
+            }
+            game.socket.emit(SOCKET, {
+                type: "fumble-action-result",
+                senderId: game.user.id,
+                recipientId: payload.senderId,
+                requestId: payload.requestId,
+                messageId: payload.messageId,
+                action: payload.action,
+                ...result,
+            });
+            return;
+        }
+
+        if (payload.type === "fumble-action-result" && payload.recipientId === game.user.id) {
+            const sender = game.users.get(payload.senderId);
+            if (!sender?.isGM) return;
+            services.finishRemoteFumbleAction(payload, sender);
             return;
         }
 
@@ -262,8 +413,8 @@ export function registerSocket() {
             const sender = game.users.get(payload.senderId);
             const offense = game.messages.get(payload.messageId);
             if (!sender || !offense || !isOffensiveCombatMessage(offense)) return;
-            if (!services.canUserDeclineActiveDefense(sender, offense)) return;
-            await services.declineActiveDefenseForUser(offense, sender);
+            if (!services.canUserDeclineActiveDefense(sender, offense, payload.defenderTokenUuid)) return;
+            await services.declineActiveDefenseForUser(offense, sender, payload.defenderTokenUuid);
             return;
         }
 

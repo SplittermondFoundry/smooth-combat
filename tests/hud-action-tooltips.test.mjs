@@ -5,8 +5,11 @@ import {
     bindActionTooltips,
     buildAttackTooltipModel,
     buildEquipmentTooltipModel,
+    buildSpellTooltipModel,
     resolveActionItem,
+    scheduleActionTooltipClear,
 } from "../Modul/splittermond-smoother-fight/scripts/features/hud/action-tooltips.js";
+import { hudState } from "../Modul/splittermond-smoother-fight/scripts/features/hud/state.js";
 
 const translations = {
     "SMOOTHER_FIGHT.HUD.AttackRangeValue": "{range} m",
@@ -23,6 +26,39 @@ globalThis.game = {
         format: (key, data) => (translations[key] ?? key).replace(/\{([^}]+)\}/gu, (_match, name) => data[name]),
     },
 };
+
+test("spell tooltip model exposes the spell's mechanical details", () => {
+    const spell = {
+        name: "Segnung",
+        skill: { label: "Schicksalsmagie" },
+        system: {
+            skill: "fatemagic",
+            skillLevel: 1,
+            difficulty: 18,
+            costs: "4V1",
+            castDuration: { display: "3 T" },
+            range: "Berührung",
+            effectDuration: "kanalisiert",
+            effectArea: "5 m",
+            spellType: "Segen, Leben",
+            features: { features: "Heilung" },
+            damage: "1W6",
+        },
+    };
+
+    assert.deepEqual(buildSpellTooltipModel(spell), {
+        school: "Schicksalsmagie 1",
+        difficulty: "18",
+        focusCosts: "4V1",
+        castDuration: "3 T",
+        range: "Berührung",
+        effectDuration: "kanalisiert",
+        effectArea: "5 m",
+        spellTypes: "Segen, Leben",
+        features: "Heilung",
+        damage: "1W6",
+    });
+});
 
 test("attack tooltip model exposes current melee combat values without ranged-only state", () => {
     const attack = {
@@ -145,4 +181,36 @@ test("tooltip binding covers attacks and equipment on hover and keyboard focus",
     bindActionTooltips(root, { actor });
     assert.deepEqual([...attackListeners.keys()], ["mouseenter", "mouseleave", "focus", "blur"]);
     assert.deepEqual([...equipmentListeners.keys()], ["mouseenter", "mouseleave", "focus", "blur"]);
+});
+
+test("an action tooltip remains open while the pointer moves into its scroll area", async (t) => {
+    const previousTooltip = hudState.actionTooltip;
+    let tooltipHovered = true;
+    let removed = false;
+    const anchor = {
+        matches: () => false,
+        removeAttribute: () => undefined,
+    };
+    const element = {
+        matches: () => tooltipHovered,
+        remove: () => {
+            removed = true;
+        },
+    };
+    hudState.actionTooltip = { anchor, element, closeTimer: null };
+    t.after(() => {
+        if (hudState.actionTooltip?.closeTimer) clearTimeout(hudState.actionTooltip.closeTimer);
+        hudState.actionTooltip = previousTooltip;
+    });
+
+    scheduleActionTooltipClear(anchor, 0);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(hudState.actionTooltip?.element, element);
+    assert.equal(removed, false);
+
+    tooltipHovered = false;
+    scheduleActionTooltipClear(anchor, 0);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(hudState.actionTooltip, null);
+    assert.equal(removed, true);
 });

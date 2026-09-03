@@ -1,10 +1,13 @@
 export {
+    applyRemoteFumbleAction,
     attachFumbleActions,
     bindFumbleActions,
     createFumbleData,
     decorateFumbleCard,
     enforceFumbleActionState,
+    finishRemoteFumbleAction,
     getFumbleData,
+    hasPendingFumbleActions,
     handleFumbleAction,
     isFumbleTableMessage,
     recoverFumbleAction,

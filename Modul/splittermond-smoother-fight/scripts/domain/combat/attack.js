@@ -18,6 +18,16 @@ export function attackOutcomeChanged(previousReport, nextReport) {
         || Boolean(previousReport?.succeeded) !== Boolean(nextReport?.succeeded);
 }
 
+export function vtdSplinterpointPreventsHit(report, defenseIncrease = 3) {
+    const rollTotal = Number(report?.roll?.total);
+    const difficulty = Number(report?.difficulty);
+    const increase = Number(defenseIncrease);
+    if (!report?.succeeded || report?.isFumble) return false;
+    if (!Number.isFinite(rollTotal) || !Number.isFinite(difficulty) || !Number.isFinite(increase)) return false;
+    if (increase <= 0 || rollTotal < difficulty) return false;
+    return rollTotal < difficulty + increase;
+}
+
 export function attackReadiness(isRanged, attackId, preparedAttackId) {
     const prepared = Boolean(isRanged && attackId && attackId === preparedAttackId);
     return {

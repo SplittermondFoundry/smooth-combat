@@ -1,6 +1,8 @@
 import {
     assessAttackRange,
     assessSpellRange,
+    hasSorcerersHandForSpell,
+    spellRangeKind,
 } from "../../domain/combat/range.js";
 
 import {
@@ -34,12 +36,19 @@ export function attackRangePresentation(attack, isRanged, measurement) {
     ), "attack");
 }
 
-export function spellRangePresentation(spell, measurement) {
+export function spellRangePresentation(spell, measurement, actor = spell?.actor) {
     if (!measurement) return null;
+    const listedRange = spell?.range ?? spell?.system?.range;
+    const casterHasSorcerersHand = hasSorcerersHandForSpell(actor, spell);
+    if (spellRangeKind(listedRange) === "caster" && !casterHasSorcerersHand) return null;
     return presentation(assessSpellRange(
         measurement.distance,
-        spell?.range ?? spell?.system?.range,
-        { metric: measurement.metric }
+        listedRange,
+        {
+            metric: measurement.metric,
+            adjacent: measurement.adjacent,
+            casterHasSorcerersHand,
+        }
     ), "spell");
 }
 

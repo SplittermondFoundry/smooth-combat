@@ -3,13 +3,12 @@ import { services } from "../../core/services.js";
 import {
     movementActionMilestones,
     movementDueMilestones,
+    movementFractionAtPosition,
     movementInterruptionMilestone,
     movementPathThroughFractions,
 } from "../../domain/combat/movement.js";
 
-import {
-    MODULE_ID,
-} from "../../core/constants.js";
+import { MODULE_ID } from "../../core/constants.js";
 
 import {
     setRequiredDocumentFlag,
@@ -44,9 +43,14 @@ import {
     toggleMovementRoutePreviewCanvas,
 } from "./movement-preview.js";
 
+import {
+    requestRemoteMovementPlanAbort,
+} from "./movement-abort-requests.js";
+
 const MOVEMENT_PLAN_FLAG = "movementPlan";
 const MOVEMENT_PLAN_VERSION = 1;
 const SCHEDULED_MOVEMENT_OPTION = "splittermondSmootherFightMovement";
+const MOVEMENT_FRACTION_EPSILON = 0.000_001;
 const movementLocks = new Set();
 const movementAdvanceRequests = new Set();
 const movementAdvanceTasks = new Map();
@@ -68,9 +72,9 @@ export async function performTrackedMovementAction(context, action) {
 
     try {
         const distance = readTokenMovementDistance(token);
-        const plan = movementPlan(context, action, route);
+        let plan = movementPlan(context, action, route);
         const reverted = await revertTokenMovementApplication(context);
-        if (!reverted) {
+        if (!reverted || !tokenReachedWaypoint(token, route.waypoints[0])) {
             ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.MovementPlanRevertFailed"));
             return false;
         }
@@ -83,12 +87,18 @@ export async function performTrackedMovementAction(context, action) {
         }
 
         try {
-            await beginContinuousAction(context, {
+            const continuousAction = await beginContinuousAction(context, {
                 actionId: action.id,
                 completionTrigger: "movement",
                 startTick: plan.startTick,
                 endTick: plan.milestones.at(-1)?.tick,
             });
+            if (!continuousAction?.id) throw new Error("Could not start the tracked movement action");
+            const linkedPlan = { ...plan, continuousActionId: continuousAction.id };
+            if (!await writeMovementPlanIfCurrent(token, plan, linkedPlan)) {
+                throw new Error("The movement plan changed while its continuous action was starting");
+            }
+            plan = linkedPlan;
         } catch (error) {
             await rollbackMovementPlan(token, route, plan, context.combat);
             throw error;
@@ -106,12 +116,18 @@ export async function performTrackedMovementAction(context, action) {
             return false;
         }
 
-        const card = await services.createTickActionChatCard(context, action.id, actualTicks, {
-            movementDistance: distance,
-        });
+        try {
+            const card = await services.createTickActionChatCard(context, action.id, actualTicks, {
+                movementDistance: distance,
+            });
+            if (!card) ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.MovementCardFailed"));
+        } catch (error) {
+            console.error(`${MODULE_ID} | Could not create the chat card for committed movement`, error);
+            ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.MovementCardFailed"));
+        }
         syncDefaultMovementRoutePreviews(context.combat);
         services.scheduleRender(0);
-        return Boolean(card);
+        return true;
     } finally {
         movementPlanningLocks.delete(lockKey);
     }
@@ -136,6 +152,33 @@ export async function advancePendingMovements(combat = globalThis.game?.combat) 
 export async function abortMovementPlan(tokenLike, combat = globalThis.game?.combat) {
     const token = tokenDocument(tokenLike);
     if (!token || !combat || !mayCurrentUserManageMovementPlan(token)) return false;
+    if (!isCurrentUserMovementAuthority()) {
+        return requestRemoteMovementPlanAbort(token, combat, movementPlanIdentity(readMovementPlan(token)));
+    }
+    return abortMovementPlanAuthoritatively(token, combat);
+}
+
+export async function applyRemoteMovementPlanAbort(payload, sender) {
+    if (!globalThis.game?.user?.isGM || !isCurrentUserMovementAuthority() || !sender) {
+        return { applied: false, error: "unauthorized" };
+    }
+    const combat = resolveCombat(payload?.combatId);
+    const token = services.resolveToken?.(payload?.tokenUuid);
+    const plan = readMovementPlan(token);
+    if (!combat || !token || !plan || plan.combatId !== combat.id
+        || movementPlanIdentity(plan) !== String(payload?.planId ?? "")
+        || !mayUserManageMovementPlan(token, sender)) {
+        return { applied: false, error: "invalid" };
+    }
+    try {
+        return { applied: await abortMovementPlanAuthoritatively(token, combat) };
+    } catch (error) {
+        console.error(`${MODULE_ID} | Could not process remote movement abort`, error);
+        return { applied: false, error: "failed" };
+    }
+}
+
+async function abortMovementPlanAuthoritatively(token, combat) {
     const interruptionTick = combatTick(combat);
     const lockKey = token.uuid ?? token.id;
     if (!lockKey) return false;
@@ -144,9 +187,10 @@ export async function abortMovementPlan(tokenLike, combat = globalThis.game?.com
     const plan = readMovementPlan(token);
     if (!plan || plan.combatId !== combat.id) return false;
     const milestone = movementInterruptionMilestone(plan, interruptionTick);
-    const completedFraction = normalizedFraction(plan.completedFraction);
+    const completedFraction = movementPlanPositionFraction(token, plan)
+        ?? normalizedFraction(plan.completedFraction);
     let reachedMilestone = true;
-    if (milestone.fraction > completedFraction) {
+    if (milestone.fraction > completedFraction + MOVEMENT_FRACTION_EPSILON) {
         const fractions = plan.milestones
             .map(({ fraction }) => normalizedFraction(fraction))
             .filter((fraction) => fraction > completedFraction && fraction <= milestone.fraction)
@@ -157,16 +201,20 @@ export async function abortMovementPlan(tokenLike, combat = globalThis.game?.com
             completedFraction,
             fractions,
         );
-        reachedMilestone = waypoints.length > 0 && await moveTokenAlongRoute(token, waypoints);
-        await token.clearMovementHistory?.();
+        const completedByFoundry = waypoints.length
+            ? await moveTokenAlongRoute(token, waypoints) === true
+            : false;
+        await clearScheduledMovementHistory(token);
+        const actualFraction = movementPlanPositionFraction(token, plan);
+        reachedMilestone = completedByFoundry || (actualFraction !== null
+            && actualFraction + MOVEMENT_FRACTION_EPSILON >= milestone.fraction);
     }
 
-    await clearMovementPlan(token);
-    await completeTrackedMovement(token, plan, combat);
+    if (!await finishMovementPlan(token, plan, combat)) return false;
     if (reachedMilestone) ui.notifications.info(t("SMOOTHER_FIGHT.HUD.MovementPlanAborted"));
     else ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.MovementPlanStopped"));
     services.scheduleRender(0);
-    return reachedMilestone;
+    return true;
 }
 
 export async function restoreInterruptedMovementPlan(tokenLike, planLike, combat = globalThis.game?.combat) {
@@ -179,11 +227,9 @@ export async function restoreInterruptedMovementPlan(tokenLike, planLike, combat
     const combatant = combatantsOf(combat).find((candidate) => candidate?.id === plan.combatantId);
     if (!combatant) return false;
 
-    const interruptionMilestone = movementInterruptionMilestone(plan, combatTick(combat));
-    const completedFraction = Math.max(
-        normalizedFraction(plan.completedFraction),
-        normalizedFraction(interruptionMilestone.fraction),
-    );
+    const actualFraction = movementPlanPositionFraction(token, plan);
+    if (actualFraction === null) return false;
+    const completedFraction = Math.max(normalizedFraction(plan.completedFraction), actualFraction);
     if (completedFraction >= 1) return false;
     await writeMovementPlan(token, { ...plan, completedFraction });
     syncDefaultMovementRoutePreviews(combat);
@@ -256,11 +302,16 @@ export function syncDefaultMovementRoutePreviews(combat = globalThis.game?.comba
         }
         const reference = token.uuid ?? token.id;
         if (!reference) continue;
+        if (!mayCurrentUserViewMovementPlan(token)) {
+            changed = clearMovementRoutePreviewCanvas(token) || changed;
+            defaultPreviewPlanKeys.delete(reference);
+            continue;
+        }
         activeReferences.add(reference);
         if (isMovementRoutePreviewCanvasVisible(token)) {
             changed = refreshMovementRoutePreviewCanvas(token, plan) || changed;
         }
-        if (!showByDefault || !mayCurrentUserManageMovementPlan(token)) continue;
+        if (!showByDefault) continue;
         const planKey = movementPlanPreviewKey(plan);
         const decision = defaultPreviewPlanKeys.get(reference);
         if (decision?.planKey === planKey) {
@@ -319,8 +370,12 @@ export function renderTokenMovementControl(app, html) {
 export async function cancelMovementPlanAfterManualMove(tokenLike, options = {}, userId = null) {
     const token = tokenDocument(tokenLike);
     if (!token || options?.[SCHEDULED_MOVEMENT_OPTION]) return false;
-    if (movementLocks.has(token.uuid ?? token.id)) return false;
-    if (userId && userId !== globalThis.game?.user?.id) return false;
+    if (!isCurrentUserManualMovementAuthority(token, userId)) return false;
+    const lockKey = token.uuid ?? token.id;
+    if (lockKey && movementLocks.has(lockKey) && userId === globalThis.game?.user?.id) {
+        return false;
+    }
+    if (lockKey) await movementAdvanceTasks.get(lockKey);
     const plan = readMovementPlan(token);
     if (!plan) {
         const completed = await completeContinuousAction({ token, combat: globalThis.game?.combat }, {
@@ -330,8 +385,7 @@ export async function cancelMovementPlanAfterManualMove(tokenLike, options = {},
         if (completed) services.scheduleRender(0);
         return completed;
     }
-    await clearMovementPlan(token);
-    await completeTrackedMovement(token, plan);
+    if (!await finishMovementPlan(token, plan)) return false;
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.MovementPlanCancelled"));
     services.scheduleRender(0);
     return true;
@@ -344,7 +398,7 @@ export async function clearMovementPlansForCombat(combat) {
     for (const token of tokens) {
         const plan = readMovementPlan(token);
         if (!plan || plan.combatId !== combat.id) continue;
-        await clearMovementPlan(token);
+        await clearMovementPlan(token, plan);
         changed = true;
     }
     return changed;
@@ -353,15 +407,19 @@ export async function clearMovementPlansForCombat(combat) {
 export async function clearMovementPlanForCombatant(combatant) {
     if (!combatant || !isCurrentUserMovementAuthority()) return false;
     const token = tokenDocument(combatant.token);
-    if (!readMovementPlan(token)) return false;
-    await clearMovementPlan(token);
+    const plan = readMovementPlan(token);
+    if (!plan || plan.combatantId !== combatant.id) return false;
+    await clearMovementPlan(token, plan);
     return true;
 }
 
 function movementPlan(context, action, route) {
     const startTick = combatantTick(context?.combatant, context?.combat);
+    const id = globalThis.foundry?.utils?.randomID?.()
+        ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     return {
         version: MOVEMENT_PLAN_VERSION,
+        id,
         actionId: action.id,
         combatId: context.combat?.id ?? null,
         combatantId: context.combatant?.id ?? null,
@@ -372,8 +430,7 @@ function movementPlan(context, action, route) {
         segmentLengths: route.segmentLengths,
         startTick,
         tokenUuid: tokenDocument(context.token)?.uuid ?? null,
-        previewId: globalThis.foundry?.utils?.randomID?.()
-            ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        previewId: id,
     };
 }
 
@@ -452,46 +509,86 @@ async function drainTokenMovementAdvances(token, combat, lockKey) {
 }
 
 async function advanceTokenMovementPlan(token, plan, due, combat) {
-    const fractions = due.map((milestone) => milestone.fraction);
-    const waypoints = movementPathThroughFractions(
-        plan.route,
-        plan.segmentLengths,
-        plan.completedFraction,
-        fractions,
-    );
-    if (!waypoints.length) {
-        await clearMovementPlan(token);
-        await completeTrackedMovement(token, plan, combat);
-        return false;
-    }
-    const completed = await moveTokenAlongRoute(token, waypoints);
-    await token.clearMovementHistory?.();
-    if (!completed) {
-        await clearMovementPlan(token);
-        await completeTrackedMovement(token, plan, combat);
-        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.MovementPlanStopped"));
-        return false;
+    if (!movementPlanIsCurrent(token, plan)) return false;
+    const previousFraction = normalizedFraction(plan.completedFraction);
+    const targetFraction = Math.max(...due.map(({ fraction }) => normalizedFraction(fraction)));
+    const observedBefore = movementPlanPositionFraction(token, plan);
+    const startingFraction = Math.max(previousFraction, observedBefore ?? previousFraction);
+    let completedByFoundry = false;
+    if (startingFraction + MOVEMENT_FRACTION_EPSILON < targetFraction) {
+        const fractions = due
+            .map((milestone) => normalizedFraction(milestone.fraction))
+            .filter((fraction) => fraction > startingFraction + MOVEMENT_FRACTION_EPSILON);
+        const waypoints = movementPathThroughFractions(
+            plan.route,
+            plan.segmentLengths,
+            startingFraction,
+            fractions,
+        );
+        if (!waypoints.length) {
+            ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.MovementPlanStillPending"));
+            return false;
+        }
+        completedByFoundry = await moveTokenAlongRoute(token, waypoints) === true;
+        await clearScheduledMovementHistory(token);
     }
 
-    const completedFraction = fractions.at(-1);
-    if (completedFraction >= 1) {
-        await clearMovementPlan(token);
-        await completeTrackedMovement(token, plan, combat);
-    } else await writeMovementPlan(token, { ...plan, completedFraction });
-    return true;
+    const observedAfter = movementPlanPositionFraction(token, plan);
+    const reachedFraction = Math.max(previousFraction, observedAfter ?? previousFraction);
+    const completedFraction = Math.min(targetFraction, reachedFraction);
+    const progressed = completedFraction > previousFraction + MOVEMENT_FRACTION_EPSILON;
+    const reachedTarget = completedByFoundry
+        || completedFraction + MOVEMENT_FRACTION_EPSILON >= targetFraction;
+    if (!reachedTarget) {
+        if (progressed) await writeMovementProgressIfCurrent(token, plan, completedFraction);
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.MovementPlanStillPending"));
+        return progressed;
+    }
+
+    if (targetFraction >= 1 - MOVEMENT_FRACTION_EPSILON) {
+        return finishMovementPlan(token, plan, combat);
+    }
+    return writeMovementProgressIfCurrent(token, plan, targetFraction);
 }
 
 async function rollbackMovementPlan(token, route, plan, combat) {
-    await clearMovementPlan(token).catch(() => false);
-    await completeTrackedMovement(token, plan, combat).catch(() => false);
+    await finishMovementPlan(token, plan, combat).catch(() => false);
     await restoreSelectedRoute(token, route).catch(() => false);
 }
 
 function completeTrackedMovement(token, plan, combat = globalThis.game?.combat) {
     return completeContinuousAction({ token, combat }, {
         actionIds: [plan?.actionId],
+        expectedId: plan?.continuousActionId ?? null,
         trigger: "movement",
     });
+}
+
+async function finishMovementPlan(token, plan, combat = globalThis.game?.combat) {
+    const current = readMovementPlan(token);
+    if (current && !sameMovementPlan(current, plan)) return false;
+    await completeTrackedMovement(token, current ?? plan, combat);
+    const remaining = readMovementPlan(token);
+    if (!remaining) return true;
+    if (!sameMovementPlan(remaining, plan)) return false;
+    await clearMovementPlan(token, remaining);
+    return true;
+}
+
+async function writeMovementProgressIfCurrent(token, plan, completedFraction) {
+    const current = readMovementPlan(token);
+    if (!sameMovementPlan(current, plan)) return false;
+    await writeMovementPlan(token, {
+        ...current,
+        completedFraction: normalizedFraction(completedFraction),
+    });
+    return true;
+}
+
+async function writeMovementPlanIfCurrent(token, expected, replacement) {
+    if (!sameMovementPlan(readMovementPlan(token), expected)) return false;
+    await writeMovementPlan(token, replacement);
+    return true;
 }
 
 async function restoreSelectedRoute(token, route) {
@@ -540,10 +637,12 @@ function writeMovementPlan(token, plan) {
     return setRequiredDocumentFlag(token, MOVEMENT_PLAN_FLAG, plan);
 }
 
-function clearMovementPlan(token) {
+function clearMovementPlan(token, expectedPlan = null) {
+    if (expectedPlan && !sameMovementPlan(readMovementPlan(token), expectedPlan)) {
+        return Promise.resolve(false);
+    }
     clearMovementRoutePreviewCanvas(token);
-    if (typeof token.unsetFlag === "function") return token.unsetFlag(MODULE_ID, MOVEMENT_PLAN_FLAG);
-    return token.setFlag?.(MODULE_ID, MOVEMENT_PLAN_FLAG, null) ?? Promise.resolve(false);
+    return setRequiredDocumentFlag(token, MOVEMENT_PLAN_FLAG, null);
 }
 
 function serializeWaypoint(point) {
@@ -567,6 +666,56 @@ function distinctConsecutiveWaypoints(waypoints) {
 function samePosition(left, right) {
     return left?.x === right?.x && left?.y === right?.y
         && Number(left?.elevation ?? 0) === Number(right?.elevation ?? 0);
+}
+
+function tokenReachedWaypoint(token, waypoint) {
+    if (!token || !waypoint || Number(token.x) !== Number(waypoint.x)
+        || Number(token.y) !== Number(waypoint.y)) return false;
+    return waypoint.elevation === undefined
+        || Number(token.elevation ?? 0) === Number(waypoint.elevation);
+}
+
+function movementPlanPositionFraction(token, plan) {
+    return movementFractionAtPosition(plan?.route, plan?.segmentLengths, token, {
+        minimumFraction: normalizedFraction(plan?.completedFraction),
+    });
+}
+
+function movementPlanIdentity(plan) {
+    if (!plan) return "";
+    return String(plan.id ?? plan.previewId ?? [
+        plan.combatId,
+        plan.combatantId,
+        plan.tokenUuid,
+        plan.actionId,
+        plan.startTick,
+        plan.createdBy,
+    ].join(":"));
+}
+
+function sameMovementPlan(left, right) {
+    const leftIdentity = movementPlanIdentity(left);
+    return Boolean(leftIdentity && leftIdentity === movementPlanIdentity(right));
+}
+
+function movementPlanIsCurrent(token, plan) {
+    return sameMovementPlan(readMovementPlan(token), plan);
+}
+
+async function clearScheduledMovementHistory(token) {
+    try {
+        await token.clearMovementHistory?.();
+        return true;
+    } catch (error) {
+        console.error(`${MODULE_ID} | Could not clear scheduled movement history`, error);
+        return false;
+    }
+}
+
+function resolveCombat(combatId) {
+    if (!combatId) return null;
+    return globalThis.game?.combats?.get?.(combatId)
+        ?? (globalThis.game?.combat?.id === combatId ? globalThis.game.combat : null);
 }
 
 function combatantTick(combatant, combat) {
@@ -605,6 +754,34 @@ function mayCurrentUserManageMovementPlan(token) {
     return Boolean(token?.actor?.isOwner && runtimeController?.id === user.id);
 }
 
+function mayUserManageMovementPlan(token, user) {
+    if (!token || !user) return false;
+    if (user.isGM) return true;
+    const ownsActor = typeof token.actor?.testUserPermission === "function"
+        ? token.actor.testUserPermission(user, "OWNER")
+        : Boolean(user.id === globalThis.game?.user?.id && token.actor?.isOwner);
+    const runtimeController = services.getRuntimeController?.(token);
+    return Boolean(ownsActor && runtimeController?.id === user.id);
+}
+
+function mayCurrentUserViewMovementPlan(token) {
+    const user = globalThis.game?.user;
+    if (!user) return false;
+    if (user.isGM) return true;
+    if (services.isTokenPerceivableByUser?.(token, user) === false) return false;
+    if (!getSetting("privateMovementRoutes", false)) return true;
+    return mayCurrentUserManageMovementPlan(token);
+}
+
 function isCurrentUserMovementAuthority() {
     return services.getActivePrimaryGm?.()?.id === globalThis.game?.user?.id;
+}
+
+function isCurrentUserManualMovementAuthority(token, userId) {
+    const primaryGm = services.getActivePrimaryGm?.();
+    const user = globalThis.game?.user;
+    if (!user) return false;
+    if (primaryGm) return primaryGm.id === user.id;
+    if (userId && userId !== user.id) return false;
+    return mayCurrentUserManageMovementPlan(token);
 }

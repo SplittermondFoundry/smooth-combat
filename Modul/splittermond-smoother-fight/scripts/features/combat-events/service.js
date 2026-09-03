@@ -2,6 +2,8 @@ import { combatEventState } from "./state.js";
 
 import { services } from "../../core/services.js";
 
+import { getApplicableCombat } from "../../core/combat-compatibility.js";
+
 import {
     isOffensiveCombatMessage,
 } from "../../combat-rules.js";
@@ -10,7 +12,47 @@ import {
     getSetting,
 } from "../../shared/values.js";
 
+import {
+    analyzeCombatEventGroups,
+} from "./workflow.js";
+
+import {
+    combatWorkflowAllowsTick,
+} from "../../domain/combat-flow.js";
+
 export function collectCombatEventGroups(context) {
+    return collectCombatEventPresentation(context).groups;
+}
+
+export function collectCombatEventPresentation(context) {
+    const groups = collectAllCombatEventGroups(context);
+    return analyzeCombatEventGroups(groups, {
+        maxCards: getSetting("maxCards", 3),
+        pendingDefense: services.getRunningActiveDefense?.(),
+    });
+}
+
+function getCombatWorkflowFocus(contextOrCombat = getApplicableCombat()) {
+    const combat = contextOrCombat?.combat ?? contextOrCombat;
+    if (!combat) return null;
+    return collectCombatEventPresentation({ combat }).focus;
+}
+
+export function getBlockingCombatWorkflow(contextOrCombat = getApplicableCombat()) {
+    const focus = getCombatWorkflowFocus(contextOrCombat);
+    return focus?.blocking ? focus : null;
+}
+
+export function canAdvanceCombatWorkflowTicks(message, contextOrCombat = getApplicableCombat()) {
+    const blocker = getBlockingCombatWorkflow(contextOrCombat);
+    return combatWorkflowAllowsTick({
+        isGM: game.user?.isGM,
+        blocker,
+        messageId: message?.id,
+    });
+}
+
+function collectAllCombatEventGroups(context) {
     const messages = Array.from(game.messages?.contents ?? game.messages ?? [])
         .filter((message) => message.visible !== false);
     const combatActorIds = new Set(Array.from(context.combat.combatants ?? []).map((c) => c.actorId).filter(Boolean));
@@ -28,6 +70,7 @@ export function collectCombatEventGroups(context) {
         damages: [],
         defenses: [],
         fumbles: [],
+        interruptions: [],
     }));
     for (const message of messages) {
         if (services.isDiceAnimationPending(message)) continue;
@@ -42,7 +85,7 @@ export function collectCombatEventGroups(context) {
             })
             : null;
         group ??= fumble?.sourceMessageId
-            ? groups.find((candidate) => candidate.primary.id === fumble.sourceMessageId)
+            ? findEventGroupForSource(groups, fumble.sourceMessageId)
             : cardContext?.attackMessageId
             ? groups.find((candidate) => candidate.primary.id === cardContext.attackMessageId)
             : null;
@@ -62,8 +105,36 @@ export function collectCombatEventGroups(context) {
         else (services.isDamageMessage(message) ? group.damages : group.defenses).push(message);
     }
 
-    const max = Number(getSetting("maxCards", 3)) || 3;
-    return groups.slice(-max);
+    for (const message of messages) {
+        if (!services.isContinuousActionInterruptionPending?.(message, context.combat)) continue;
+        const interruption = services.getContinuousActionInterruptionCard?.(message);
+        if (!interruption || (interruption.combatId && interruption.combatId !== context.combat.id)) continue;
+        const group = findEventGroupForSource(groups, interruption.sourceMessageId);
+        if (group) {
+            group.interruptions.push(message);
+            continue;
+        }
+        groups.push({
+            primary: message,
+            kind: "interruption",
+            damages: [],
+            defenses: [],
+            fumbles: [],
+            interruptions: [],
+        });
+    }
+
+    return groups;
+}
+
+function findEventGroupForSource(groups, sourceMessageId) {
+    if (!sourceMessageId) return null;
+    return groups.find((group) => [
+        group.primary,
+        ...group.damages,
+        ...group.defenses,
+        ...group.fumbles,
+    ].some((message) => message.id === sourceMessageId)) ?? null;
 }
 
 export function setCombatEventCardsCollapsed(collapsed) {

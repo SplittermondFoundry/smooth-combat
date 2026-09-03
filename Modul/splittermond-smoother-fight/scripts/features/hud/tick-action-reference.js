@@ -13,7 +13,7 @@ import {
     t,
 } from "../../shared/values.js";
 
-export function buildTickActionReference(actor) {
+export function buildTickActionReference(actor, { blocked = false, blockedLabel = "" } = {}) {
     const availableActions = combatTickActionsFor("custom");
     const favoriteIds = normalizeFavoriteTickActionIds(
         actor.getFlag?.(MODULE_ID, "favoriteTickActionIds"),
@@ -52,7 +52,7 @@ export function buildTickActionReference(actor) {
         const advanceTicks = tickActionAdvanceValue(action, "custom");
         const actionControl = action.actionable === false
             ? `<span class="sf-tick-action-name">${escapeHtml(actionName)}</span>`
-            : `<button type="button" class="sf-tick-action-link" data-sf-action="share-tick-action" data-tick-action-id="${escapeAttr(action.id)}" data-tick-action-ticks="custom" data-tick-action-advance="${escapeAttr(advanceTicks)}" title="${escapeAttr(shareLabel)}" aria-label="${escapeAttr(shareLabel)}">${escapeHtml(actionName)}</button>`;
+            : `<button type="button" class="sf-tick-action-link" data-sf-action="share-tick-action" data-tick-action-id="${escapeAttr(action.id)}" data-tick-action-ticks="custom" data-tick-action-advance="${escapeAttr(advanceTicks)}" title="${escapeAttr(blocked ? blockedLabel : shareLabel)}" aria-label="${escapeAttr(shareLabel)}" ${blocked ? "disabled" : ""}>${escapeHtml(actionName)}</button>`;
         const sourceLabel = action.source ? t("SMOOTHER_FIGHT.HUD.TickActionSource", action.source) : "";
         const source = sourceLabel ? `<small class="sf-tick-action-source">${escapeHtml(sourceLabel)}</small>` : "";
         const searchValue = [actionName, categoryLabel, originalCategoryLabel, kindLabel, durationLabel, special, sourceLabel].join(" ");

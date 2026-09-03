@@ -1,4 +1,5 @@
 import { configureServices, services } from "./core/services.js";
+import { getApplicableCombat, installCombatantSortCompatibility } from "./core/combat-compatibility.js";
 import { registerHooks, registerSocket } from "./core/lifecycle.js";
 import { registerSettings } from "./core/settings.js";
 import * as activeDefenseApi from "./features/active-defense/api.js";
@@ -43,6 +44,7 @@ configureServices(
 );
 
 Hooks.once("init", () => {
+    installCombatantSortCompatibility();
     registerContinuousActionStatusEffect();
     registerSettings();
     registerSettingsMenu();
@@ -54,19 +56,21 @@ Hooks.once("init", () => {
 Hooks.once("ready", async () => {
     await migrateAudioFeedbackSettings();
     services.installGmCheatRollInterceptor();
+    services.installSystemActionBarActiveDefenseInterceptor();
     installHealthCostFeedbackInterceptor();
     installSystemRollModifierInterceptor();
     mountHud();
     seedHealthFeedbackState();
     registerHooks();
     registerSocket();
+    const combat = getApplicableCombat();
     void services.refreshAllCombatPositionOverlays();
-    void combatActionsApi.advanceContinuousActions(game.combat);
-    void combatActionsApi.advancePendingMovements(game.combat);
-    combatActionsApi.syncDefaultMovementRoutePreviews(game.combat);
+    void combatActionsApi.advanceContinuousActions(combat);
+    void combatActionsApi.advancePendingMovements(combat);
+    combatActionsApi.syncDefaultMovementRoutePreviews(combat);
     publishOwnTarget();
-    hudApi.syncActiveCombatantTokenSelection(game.combat);
-    setLastTurnCombatantId(game.combat?.combatant?.id ?? null);
+    hudApi.reconcileControlledCombatTokenSelection(combat);
+    setLastTurnCombatantId(combat?.combatant?.id ?? null);
     window.addEventListener("pointerdown", unlockFeedbackAudio, { once: true, capture: true });
     await renderHud();
 });

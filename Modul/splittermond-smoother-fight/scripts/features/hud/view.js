@@ -5,23 +5,19 @@ import {
     spellFocusCosts,
 } from "./action-tooltips.js";
 import {
-    findCombatantForToken,
     getPersonalHudCandidates,
     getPersonalHudContext,
-    isActorAtZeroHealth,
 } from "./context.js";
-
+import { buildDefeatedTargetStatus, buildTargetHeaderActions, isTargetDefeated } from "./target-status.js";
 import {
     buildQuickTargets,
 } from "./quick-targets.js";
-
 import {
     isSpellListFilterable,
     spellFilterDetails,
     spellFilterOptions,
     spellSearchValue,
 } from "./spell-filters.js";
-
 import {
     buildMovementTracker,
     buildSelectedMovementControl,
@@ -47,7 +43,6 @@ import {
     attackControlSelection,
     attackControlState,
     attackReadiness,
-    isTargetDependentDifficulty,
     isPlayersTurn,
     mayViewTargetDefenses,
     mayViewTargetResources,
@@ -161,6 +156,7 @@ export async function buildHud(context) {
                     action: "open-token-sheet",
                     highlighted: services.isCurrentUserTarget(target),
                     primary: true,
+                    defeated: isTargetDefeated(context),
                     showDefenses: canViewDefenseValues(target.actor),
                 })}</div></div>` : noTargetPanel()}
             </div>
@@ -231,7 +227,7 @@ function buildGmCheatToggle() {
     return `<button type="button" class="sf-hud-toggle sf-cheat-roll-toggle ${active ? "is-active" : ""}" data-sf-action="toggle-cheat-roll" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" aria-pressed="${active}"><i class="fa-solid fa-dice"></i></button>`;
 }
 
-function portraitPanel({ side, token, actor, eyebrow, headerActions = "", action = "", highlighted = false, primary = false, showDefenses = true }) {
+function portraitPanel({ side, token, actor, eyebrow, headerActions = "", action = "", highlighted = false, primary = false, defeated = false, showDefenses = true }) {
     const image = actor?.img || token?.texture?.src || "icons/svg/mystery-man.svg";
     const tokenReference = token?.uuid ? `data-sf-token-uuid="${escapeAttr(token.uuid)}"` : "";
     const name = token?.name ?? actor?.name ?? "–";
@@ -243,7 +239,7 @@ function portraitPanel({ side, token, actor, eyebrow, headerActions = "", action
     const body = getDerivedValue(actor, "bodyresist");
     const mind = getDerivedValue(actor, "mindresist");
     return `
-        <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""} ${primary ? "sf-is-primary-target" : ""}" ${tokenReference} aria-label="${escapeAttr(`${eyebrow}: ${name}`)}">
+        <aside class="sf-portrait sf-${side} ${highlighted ? "sf-is-user-target" : ""} ${primary ? "sf-is-primary-target" : ""} ${defeated ? "sf-is-defeated" : ""}" ${tokenReference} aria-label="${escapeAttr(`${eyebrow}: ${name}`)}">
             ${focusButton}
             <div class="sf-portrait-header">
                 <span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>
@@ -252,6 +248,7 @@ function portraitPanel({ side, token, actor, eyebrow, headerActions = "", action
             <div class="sf-portrait-image">
                 <img class="sf-portrait-art" src="${escapeAttr(image)}" alt="" aria-hidden="true">
                 ${highlighted ? `<span class="sf-target-alert"><i class="fa-solid fa-bullseye"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YouAreTarget"))}</span></span>` : ""}
+                ${defeated ? buildDefeatedTargetStatus(name) : ""}
                 ${services.feedbackMarkup(token, actor)}
             </div>
             <div class="sf-portrait-identity"><div class="sf-portrait-name">${escapeHtml(name)}</div>${sheetButton}</div>
@@ -278,28 +275,6 @@ function noTargetPanel() {
             <small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoTargetDetail"))}</small>
         </aside>
     `;
-}
-
-function buildTargetDefeatControl(context) {
-    const target = context.target;
-    if (!game.user?.isGM || !isActorAtZeroHealth(target?.actor)) return "";
-    const combatant = findCombatantForToken(context.combat, target);
-    const tokenReference = services.tokenUuid(target) ?? target?.id ?? null;
-    if (!combatant || combatant.isDefeated || !tokenReference) return "";
-    const targetName = target.name ?? target.actor?.name ?? "–";
-    const label = `${t("SMOOTHER_FIGHT.HUD.MarkDefeated")}: ${targetName}`;
-    return `<button type="button" class="sf-primary-target-defeat" data-sf-action="mark-target-defeated" data-token-uuid="${escapeAttr(tokenReference)}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid fa-skull"></i></button>`;
-}
-
-function buildTargetHeaderActions(context) {
-    const target = context.target;
-    if (!target) return "";
-    const defeatControl = buildTargetDefeatControl(context);
-    if (!services.canChooseTarget(context)) return defeatControl;
-    const targetName = target.name ?? target.actor?.name ?? "–";
-    const removeLabel = t("SMOOTHER_FIGHT.HUD.RemoveTarget", { target: targetName });
-    const removeControl = `<button type="button" class="sf-primary-target-remove" data-sf-action="remove-target" data-token-uuid="${escapeAttr(target.uuid)}" title="${escapeAttr(removeLabel)}" aria-label="${escapeAttr(removeLabel)}"><i class="fa-solid fa-xmark"></i></button>`;
-    return `${defeatControl}${removeControl}`;
 }
 
 function buildSecondaryTargets(context) {
@@ -384,25 +359,28 @@ function buildCombatControls(context) {
 }
 
 function buildAdvanceButtons(context, includeActorName = false) {
-    const tickButtons = [1, 2, 3, 4, 5, 6, 7, 8, 10].map((ticks) => buildAdvanceButton(ticks)).join("");
+    const blocker = game.user?.isGM ? null : services.getBlockingCombatWorkflow?.(context.combat);
+    const blocked = Boolean(blocker);
+    const tickButtons = [1, 2, 3, 4, 5, 6, 7, 8, 10].map((ticks) => buildAdvanceButton(ticks, blocked)).join("");
     const label = includeActorName
         ? `${t("SMOOTHER_FIGHT.HUD.Advance")} · ${context.actor.name}`
         : t("SMOOTHER_FIGHT.HUD.Advance");
-    return `<div class="sf-tick-buttons"><span class="sf-tick-label">${escapeHtml(label)}</span>${tickButtons}${buildAdvanceButton("custom")}${buildTickActionReference(context.actor)}</div>`;
+    const blockedLabel = blocked ? t("SMOOTHER_FIGHT.HUD.CombatFlow.TickBlocked") : "";
+    return `<div class="sf-tick-buttons ${blocked ? "is-flow-blocked" : ""}" ${blocked ? `title="${escapeAttr(blockedLabel)}"` : ""}><span class="sf-tick-label">${escapeHtml(label)}</span>${tickButtons}${buildAdvanceButton("custom", blocked)}${buildTickActionReference(context.actor, { blocked, blockedLabel })}</div>`;
 }
 
-function buildAdvanceButton(ticks) {
+function buildAdvanceButton(ticks, blocked = false) {
     const custom = ticks === "custom";
     const label = custom
         ? t("SMOOTHER_FIGHT.HUD.CustomTicks")
         : t("SMOOTHER_FIGHT.HUD.AddTicks", { ticks });
-    return `<button type="button" data-sf-action="add-ticks" data-ticks="${escapeAttr(ticks)}" aria-label="${escapeAttr(label)}">${custom ? "+X" : `+${escapeHtml(ticks)} T`}</button>`;
+    return `<button type="button" data-sf-action="add-ticks" data-ticks="${escapeAttr(ticks)}" aria-label="${escapeAttr(label)}" ${blocked ? "disabled" : ""}>${custom ? "+X" : `+${escapeHtml(ticks)} T`}</button>`;
 }
 async function buildPersonalControls(activeContext) {
     const candidates = getPersonalHudCandidates(activeContext);
     const context = getPersonalHudContext(activeContext);
     const picker = candidates.length > 1 ? buildPersonalCombatantPicker(candidates, context) : "";
-    const defenseRequest = services.getPendingActiveDefense(activeContext);
+    const defenseRequest = services.getPendingActiveDefense(context ?? activeContext);
     const defenseControl = defenseRequest ? activeDefenseResponseControl(defenseRequest) : "";
     if (!context) {
         const note = activeContext.runtimeController
@@ -500,12 +478,12 @@ async function buildActionBar(context, rangeMeasurement = null) {
     const preparedSpell = spells.find((spell) => spell.id === preparedSpellId) ?? null;
     const availableSpells = spells.filter((spell) => spell.enoughFocus !== false).length;
     const spellLabel = `${t("SMOOTHER_FIGHT.HUD.Spells")} (${availableSpells})`;
-    const preparedSpellRange = preparedSpell && isTargetDependentDifficulty(preparedSpell.difficulty ?? preparedSpell.system?.difficulty)
-        ? spellRangePresentation(preparedSpell, rangeMeasurement)
+    const preparedSpellRange = preparedSpell
+        ? spellRangePresentation(preparedSpell, rangeMeasurement, actor)
         : null;
     const spellControlMarkup = preparedSpell
         ? preparedSpellMenu(preparedSpell, availableSpells, preparedSpellRange)
-        : buildSpellMenu(spellLabel, spells, availableSpells, rangeMeasurement);
+        : buildSpellMenu(spellLabel, spells, availableSpells, rangeMeasurement, actor);
     const attackControlMarkup = await buildAttackControlMarkup(actor, { rangeMeasurement });
     return `<nav class="sf-actions" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.Title"))}">
         ${attackPreparationMarkup(actor)}
@@ -550,7 +528,7 @@ function attackPreparationMarkup(actor) {
     </div>`;
 }
 
-function buildSpellMenu(label, spells, availableSpells, rangeMeasurement = null) {
+function buildSpellMenu(label, spells, availableSpells, rangeMeasurement = null, actor = null) {
     const filterable = isSpellListFilterable(spells);
     const rows = spells.map((spell) => {
         const preparing = services.isPreparingSpell(spell.id);
@@ -561,9 +539,7 @@ function buildSpellMenu(label, spells, availableSpells, rangeMeasurement = null)
         const status = preparing
             ? t("SMOOTHER_FIGHT.HUD.Preparing")
             : displayValue(spell.castDuration, "–");
-        const range = isTargetDependentDifficulty(spell.difficulty ?? spell.system?.difficulty)
-            ? spellRangePresentation(spell, rangeMeasurement)
-            : null;
+        const range = spellRangePresentation(spell, rangeMeasurement, actor);
         const { schoolId, level } = spellFilterDetails(spell);
         const filterAttributes = filterable
             ? ` data-sf-spell-row data-sf-search="${escapeAttr(spellSearchValue(spell))}" data-sf-enough-focus="${spell.enoughFocus !== false}" data-sf-spell-school="${escapeAttr(schoolId)}" data-sf-spell-level="${escapeAttr(level)}"`

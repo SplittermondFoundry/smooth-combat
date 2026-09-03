@@ -64,6 +64,33 @@ export function getPendingContinuousActionInterruption(contextOrToken, combat = 
     )) ?? null;
 }
 
+export function getContinuousActionInterruptionCard(message) {
+    const card = readInterruptionCard(message);
+    if (!card) return null;
+    const token = resolveTokenDocument(card.tokenUuid);
+    const request = readInterruptionRequests(token).find((candidate) => candidate.id === card.requestId);
+    return {
+        ...card,
+        sourceMessageId: card.sourceMessageId ?? optionalString(request?.sourceMessageId),
+        combatId: card.combatId ?? optionalString(request?.combatId),
+        combatantId: card.combatantId ?? optionalString(request?.combatantId),
+        createdAt: card.createdAt ?? finiteNumber(request?.createdAt),
+    };
+}
+
+export function isContinuousActionInterruptionPending(message, combat = globalThis.game?.combat) {
+    const card = readInterruptionCard(message);
+    const token = resolveTokenDocument(card?.tokenUuid);
+    return Boolean(card && findLiveRequest(token, card.requestId, combat));
+}
+
+export function canCurrentUserRollContinuousActionInterruption(message, combat = globalThis.game?.combat) {
+    const card = readInterruptionCard(message);
+    const token = resolveTokenDocument(card?.tokenUuid);
+    const request = findLiveRequest(token, card?.requestId, combat);
+    return Boolean(request && mayCurrentUserRoll(token, request, combat));
+}
+
 export function getPendingContinuousActionInterruptionsForCurrentUser(combat = globalThis.game?.combat) {
     return combatantsOf(combat).flatMap((combatant) => {
         const token = resolveTokenDocument(combatant?.token);
@@ -339,21 +366,33 @@ export function bindContinuousActionInterruptionCard(message, html) {
     if (!html?.querySelectorAll) return;
     if (card) {
         for (const button of html.querySelectorAll('[data-sf-action="roll-continuous-action-interruption"]')) {
-            if (button.dataset.smootherFightCaptured) continue;
             const token = resolveTokenDocument(card.tokenUuid);
             const request = findLiveRequest(token, card.requestId, globalThis.game?.combat);
-            button.disabled = !request || !mayCurrentUserRoll(token, request, globalThis.game?.combat);
+            if (!request || !mayCurrentUserRoll(token, request, globalThis.game?.combat)) {
+                (button.closest?.(".sf-continuous-action-interruption-actions") ?? button).remove();
+                continue;
+            }
+            button.disabled = false;
+            if (button.dataset.smootherFightCaptured) continue;
             button.dataset.smootherFightCaptured = "true";
             button.addEventListener("click", (event) => {
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 button.disabled = true;
-                void rollContinuousActionInterruption(message, card.requestId).then((result) => {
-                    if (["cancelled", "unknown"].includes(result.status) && button.isConnected) button.disabled = false;
-                }).catch((error) => {
+                void rollContinuousActionInterruption(message, card.requestId).catch((error) => {
                     console.error(`${MODULE_ID} | Continuous-action interruption roll failed`, error);
                     globalThis.ui?.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
-                    if (button.isConnected) button.disabled = false;
+                }).finally(() => {
+                    const liveToken = resolveTokenDocument(card.tokenUuid);
+                    const liveRequest = findLiveRequest(liveToken, card.requestId, globalThis.game?.combat);
+                    if (button.isConnected) {
+                        if (!liveRequest || !mayCurrentUserRoll(liveToken, liveRequest, globalThis.game?.combat)) {
+                            (button.closest?.(".sf-continuous-action-interruption-actions") ?? button).remove();
+                        } else {
+                            button.disabled = false;
+                        }
+                    }
+                    services.scheduleRender?.(0);
                 });
             }, { capture: true });
         }
@@ -554,7 +593,7 @@ async function createInterruptionChatCard(token, request) {
             ${cardField(t("SMOOTHER_FIGHT.HUD.ContinuousActionInterruptionDifficulty"), request.difficulty)}
         </dl>
         <section><p>${escapeHtml(modifier)}</p></section>
-        <section class="sf-continuous-action-interruption-actions"><button type="button" class="splittermond-chat-action" data-sf-action="roll-continuous-action-interruption" data-request-id="${escapeAttr(request.id)}"><i class="fa-solid fa-dice-d20" aria-hidden="true"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.RollDetermination"))}</button></section>
+        <section class="sf-continuous-action-interruption-actions"><button type="button" class="splittermond-chat-action" data-sf-action="roll-continuous-action-interruption" data-request-id="${escapeAttr(request.id)}" data-sf-token-uuid="${escapeAttr(token.uuid)}"><i class="fa-solid fa-dice-d20" aria-hidden="true"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.RollDetermination"))}</button></section>
     </section>`;
     return globalThis.ChatMessage.create({
         speaker: globalThis.ChatMessage.getSpeaker({ actor: token.actor, token }),
@@ -564,6 +603,10 @@ async function createInterruptionChatCard(token, request) {
                 [INTERRUPTION_CARD_FLAG]: {
                     requestId: request.id,
                     tokenUuid: token.uuid,
+                    sourceMessageId: request.sourceMessageId,
+                    combatId: request.combatId,
+                    combatantId: request.combatantId,
+                    createdAt: request.createdAt,
                 },
             },
         },
@@ -609,7 +652,15 @@ function readInterruptionCard(message) {
         ?? message?.flags?.[MODULE_ID]?.[INTERRUPTION_CARD_FLAG];
     const requestId = optionalString(raw?.requestId);
     const tokenUuid = optionalString(raw?.tokenUuid);
-    return requestId && tokenUuid ? { requestId, tokenUuid } : null;
+    if (!requestId || !tokenUuid) return null;
+    return {
+        requestId,
+        tokenUuid,
+        sourceMessageId: optionalString(raw?.sourceMessageId),
+        combatId: optionalString(raw?.combatId),
+        combatantId: optionalString(raw?.combatantId),
+        createdAt: finiteNumber(raw?.createdAt),
+    };
 }
 
 function interruptionCardExists(request) {
@@ -727,6 +778,11 @@ function normalizeIdentity(value) {
 function optionalString(value) {
     const normalized = String(value ?? "").trim();
     return normalized || null;
+}
+
+function finiteNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
 }
 
 function randomId() {

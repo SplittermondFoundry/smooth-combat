@@ -1,5 +1,9 @@
 export const DEFAULT_MELEE_RANGE = 2;
 
+const TOUCH_RANGE_KEYS = new Set(["beruhrung", "beruehrung", "touch"]);
+const CASTER_RANGE_KEYS = new Set(["zauberer", "caster"]);
+const SORCERERS_HAND_KEYS = new Set(["handdeszauberers", "sorcerershand"]);
+
 export function assessAttackRange(distance, range, isRanged, { metric = true, meleeRange = DEFAULT_MELEE_RANGE } = {}) {
     const measuredDistance = nonNegativeNumber(distance);
     if (measuredDistance === null || !metric) return unknownAssessment();
@@ -12,7 +16,16 @@ export function assessAttackRange(distance, range, isRanged, { metric = true, me
     return distanceAssessment(measuredDistance, maximum, isRanged ? "listed" : "melee");
 }
 
-export function assessSpellRange(distance, range, { metric = true } = {}) {
+export function assessSpellRange(distance, range, {
+    metric = true,
+    adjacent = null,
+    casterHasSorcerersHand = false,
+} = {}) {
+    const kind = spellRangeKind(range);
+    if (kind === "touch" || (kind === "caster" && casterHasSorcerersHand)) {
+        return touchAssessment(distance, adjacent);
+    }
+
     const measuredDistance = nonNegativeNumber(distance);
     if (measuredDistance === null || !metric) return unknownAssessment();
 
@@ -20,6 +33,25 @@ export function assessSpellRange(distance, range, { metric = true } = {}) {
     return maximum === null
         ? unknownAssessment()
         : distanceAssessment(measuredDistance, maximum, "listed");
+}
+
+export function spellRangeKind(value) {
+    const candidate = value && typeof value === "object" ? value.value : value;
+    const key = ruleKey(candidate);
+    if (TOUCH_RANGE_KEYS.has(key)) return "touch";
+    if (CASTER_RANGE_KEYS.has(key)) return "caster";
+    return null;
+}
+
+export function hasSorcerersHandForSpell(actor, spell) {
+    const spellSchoolId = magicSchoolId(spell?.system?.skill) || magicSchoolId(spell?.skill);
+    if (!spellSchoolId) return false;
+
+    return Array.from(actor?.items ?? []).some((item) => {
+        if (item?.type !== "mastery") return false;
+        if (![item.system?.id, item.name].some((value) => SORCERERS_HAND_KEYS.has(ruleKey(value)))) return false;
+        return magicSchoolId(item.system?.skill) === spellSchoolId;
+    });
 }
 
 export function parseExactMeterRange(value) {
@@ -56,6 +88,31 @@ function distanceAssessment(distance, maximum, source) {
         maximum,
         source,
     };
+}
+
+function touchAssessment(distance, adjacent) {
+    if (typeof adjacent !== "boolean") return unknownAssessment();
+    return {
+        status: adjacent ? "within" : "outside",
+        distance: nonNegativeNumber(distance),
+        maximum: null,
+        source: "touch",
+    };
+}
+
+function magicSchoolId(value) {
+    const candidate = value && typeof value === "object" ? value.id : value;
+    return ruleKey(candidate);
+}
+
+function ruleKey(value) {
+    return String(value ?? "")
+        .normalize("NFKD")
+        .replace(/\p{Mark}/gu, "")
+        .replace(/\s*\([^)]*\)\s*$/u, "")
+        .toLocaleLowerCase("de-DE")
+        .replace(/ß/gu, "ss")
+        .replace(/[^\p{Letter}\p{Number}]+/gu, "");
 }
 
 function unknownAssessment() {

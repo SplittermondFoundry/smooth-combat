@@ -90,6 +90,51 @@ export function defenseAllowsModification(message) {
     return phase === DEFENSE_PHASE.OPEN || phase === DEFENSE_PHASE.RESOLVED;
 }
 
+export function hasActorDeclinedDefense(message, actorUuid) {
+    if (!message || !actorUuid) return false;
+    const context = services.getMessageContext(message) ?? {};
+    return Array.from(context.declinedDefenseActorUuids ?? []).includes(actorUuid);
+}
+
+export function hasTokenDeclinedDefense(message, tokenUuid) {
+    if (!message || !tokenUuid) return false;
+    const context = services.getMessageContext(message) ?? {};
+    return Array.from(context.declinedDefenseTokenUuids ?? []).includes(tokenUuid);
+}
+
+export function hasDefenseParticipantDecided(context, { actorUuid = null, tokenUuid = null } = {}) {
+    const attemptedActors = new Set(context?.attemptedDefenseActorUuids ?? []);
+    const attemptedTokens = new Set(context?.attemptedDefenseTokenUuids ?? []);
+    const declinedActors = new Set(context?.declinedDefenseActorUuids ?? []);
+    const declinedTokens = new Set(context?.declinedDefenseTokenUuids ?? []);
+    return Boolean(
+        (tokenUuid && (attemptedTokens.has(tokenUuid) || declinedTokens.has(tokenUuid)))
+        || (actorUuid && (attemptedActors.has(actorUuid) || declinedActors.has(actorUuid)))
+    );
+}
+
+export function defensePhaseAfterParticipantDecision(context, {
+    targetActorUuid = null,
+    targetTokenUuid = null,
+    eligibleDefenderRemains = false,
+} = {}) {
+    const targetDecisionPending = Boolean(
+        (targetActorUuid || targetTokenUuid)
+        && !hasDefenseParticipantDecided(context, {
+            actorUuid: targetActorUuid,
+            tokenUuid: targetTokenUuid,
+        })
+    );
+    if (targetDecisionPending || eligibleDefenderRemains) return DEFENSE_PHASE.OPEN;
+    const defenseAttempted = Boolean(
+        context?.defenseMessageId
+        || context?.defenseMessageIds?.length
+        || context?.attemptedDefenseActorUuids?.length
+        || context?.attemptedDefenseTokenUuids?.length
+    );
+    return defenseAttempted ? DEFENSE_PHASE.RESOLVED : DEFENSE_PHASE.DECLINED;
+}
+
 export function defenseAwaitsResponse(message) {
     return defensePhaseForOffense(message) === DEFENSE_PHASE.OPEN;
 }

@@ -19,9 +19,12 @@ import {
 } from "../../shared/values.js";
 
 import {
-    formatMovementDistance,
     readTokenMovementDistance,
 } from "../../shared/movement.js";
+
+import {
+    buildTickActionChatModel,
+} from "./tick-action-localization.js";
 
 const MOVEMENT_ACTIONS = new Set(["crawl", "walk", "sprint"]);
 
@@ -75,20 +78,13 @@ export async function createTickActionChatCard(context, actionId, selectedTicks 
 
     const token = context.token?.document ?? context.token;
     const tokenName = token?.name ?? context.combatant?.name ?? context.actor.name ?? "–";
-    const actionName = t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Name`);
-    const kind = t(`SMOOTHER_FIGHT.HUD.TickActionKinds.${action.kind}`);
-    const duration = tickActionCardDuration(action, selectedTicks);
-    const description = options.description ?? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Description`);
-    const baseSpecial = options.special ?? (action.special
-        ? t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.Special`)
-        : t("SMOOTHER_FIGHT.HUD.TickActionDash"));
-    const special = MOVEMENT_ACTIONS.has(action.id)
-        ? `${baseSpecial} (${t("SMOOTHER_FIGHT.HUD.MovementDistance", {
-            distance: formatMovementDistance(options.movementDistance ?? readTokenMovementDistance(token)),
-        })})`
-        : baseSpecial;
-    const source = action.source
-        ? `<footer class="sf-tick-action-chat-source"><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSource", action.source))}</small></footer>`
+    const movementDistance = MOVEMENT_ACTIONS.has(action.id)
+        ? options.movementDistance ?? readTokenMovementDistance(token)
+        : null;
+    const localization = tickActionLocalization(options, movementDistance);
+    const model = buildTickActionChatModel(action, selectedTicks, localization);
+    const source = model.source
+        ? `<footer class="sf-tick-action-chat-source"><small>${escapeHtml(model.source)}</small></footer>`
         : "";
     const bonus = Number(options.bonus);
     const preparationData = Number.isInteger(bonus) && bonus > 0
@@ -102,15 +98,15 @@ export async function createTickActionChatCard(context, actionId, selectedTicks 
     const content = `<section class="sf-tick-action-chat-card">
         <header>
             <i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>
-            <div><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionCardEyebrow"))}</small><h2>${escapeHtml(actionName)}</h2></div>
+            <div><small>${escapeHtml(model.eyebrow)}</small><h2>${escapeHtml(model.name)}</h2></div>
         </header>
         <dl>
-            ${tickActionCardField(t("SMOOTHER_FIGHT.HUD.TickActionToken"), tokenName)}
-            ${tickActionCardField(t("SMOOTHER_FIGHT.HUD.TickActionDurationHeading"), duration)}
-            ${tickActionCardField(t("SMOOTHER_FIGHT.HUD.TickActionType"), kind)}
+            ${tickActionCardField(model.tokenLabel, tokenName)}
+            ${tickActionCardField(model.durationLabel, model.duration)}
+            ${tickActionCardField(model.typeLabel, model.type)}
         </dl>
-        <section><h3>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionDescription"))}</h3><p>${escapeHtml(description)}</p></section>
-        <section><h3>${escapeHtml(t("SMOOTHER_FIGHT.HUD.TickActionSpecial"))}</h3><p>${escapeHtml(special)}</p></section>
+        <section><h3>${escapeHtml(model.descriptionLabel)}</h3><p>${escapeHtml(model.description)}</p></section>
+        <section><h3>${escapeHtml(model.specialLabel)}</h3><p>${escapeHtml(model.special)}</p></section>
         ${source}
     </section>`;
     const speaker = ChatMessage.getSpeaker({ actor: context.actor, token });
@@ -123,6 +119,7 @@ export async function createTickActionChatCard(context, actionId, selectedTicks 
                     id: action.id,
                     ticks: selectedTicks,
                     tokenUuid: token?.uuid ?? null,
+                    localization,
                     ...preparationData,
                 },
             },
@@ -134,22 +131,18 @@ function tickActionCardField(label, value) {
     return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
 }
 
-function tickActionCardDuration(action, selectedTicks) {
-    const selected = Number(selectedTicks);
-    if (selectedTicks !== "custom" && Number.isFinite(selected)) {
-        return t("SMOOTHER_FIGHT.HUD.TickActionDuration", { ticks: selected });
-    }
-    if (Array.isArray(action.ticks)) {
-        return t("SMOOTHER_FIGHT.HUD.TickActionDurationRange", {
-            first: action.ticks[0],
-            last: action.ticks.at(-1),
-        });
-    }
-    if (Number.isFinite(Number(action.ticks))) {
-        return t("SMOOTHER_FIGHT.HUD.TickActionDuration", { ticks: action.ticks });
-    }
-    const suffix = action.ticks === "wgs" ? "Wgs" : action.ticks === "spell" ? "Spell" : "Unavailable";
-    return t(`SMOOTHER_FIGHT.HUD.TickActionDuration${suffix}`);
+function tickActionLocalization(options, movementDistance) {
+    return {
+        description: options.description ?? null,
+        descriptionKey: options.descriptionKey ?? null,
+        descriptionData: options.descriptionData ?? null,
+        special: options.special ?? null,
+        specialKey: options.specialKey ?? null,
+        specialData: options.specialData ?? null,
+        movementDistance: movementDistance === null || movementDistance === undefined || movementDistance === ""
+            ? null
+            : Number.isFinite(Number(movementDistance)) ? Number(movementDistance) : null,
+    };
 }
 
 export function resolveSpeakerActor(message) {

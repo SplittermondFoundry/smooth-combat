@@ -42,7 +42,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "2d69cac3fa55c58aaae851adb08a39dbd29b5ec2502e7787832a50c7cfda6364",
+        "2b0c0c29caee3b6433ca582e47e7f9da04d22059385265b5f3f2c21571fb31a5",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -81,16 +81,19 @@ test("published DOM integration attributes remain available", () => {
     assert.match(assignmentTemplate, /data-owner-permission-warning/u);
     assert.match(assignmentTemplate, /\{\{#if showSetupHint\}\}/u);
 
-    const hudView = ["view.js", "combat-position-menu.js", "response-controls.js", "tick-action-reference.js"]
+    const hudView = ["view.js", "target-status.js", "combat-position-menu.js", "response-controls.js", "tick-action-reference.js"]
         .map((file) => fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", file), "utf8"))
         .join("\n");
     const hudController = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "controller.js"), "utf8");
     const combatEventView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "combat-events", "view.js"), "utf8");
-    const chatActions = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "chat", "actions.js"), "utf8");
+    const chatActions = ["actions.js", "action-dispatch.js", "rendered-controls.js"]
+        .map((file) => fs.readFileSync(path.join(moduleRoot, "scripts", "features", "chat", file), "utf8"))
+        .join("\n");
     assert.match(hudView, /data-sf-context-actor-id/u);
     assert.match(hudView, /sf-is-primary-target/u);
     assert.match(hudView, /data-sf-action="remove-target"/u);
     assert.match(hudView, /data-sf-action="mark-target-defeated"/u);
+    assert.match(hudView, /class="sf-primary-target-defeated-status"/u);
     assert.match(hudView, /SMOOTHER_FIGHT\.HUD\.PrimaryTarget/u);
     assert.match(hudView, /\$\{buildSecondaryTargets\(context\)\}<div class="sf-primary-target-panel">/u);
     assert.match(hudView, /<details class="sf-visibility-menu/u);
@@ -109,9 +112,16 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudView, /data-sf-spell-level/u);
     assert.match(hudView, /data-sf-action="toggle-favorite-tick-action"/u);
     assert.match(hudView, /data-sf-action="clear-attack-preparation"/u);
-    assert.match(hudView, /data-sf-action="respond-active-defense"/u);
+    assert.match(hudView, /respond-active-defense/u);
+    assert.match(hudView, /respond-defender-defense/u);
     assert.match(hudView, /data-sf-action="decline-active-defense"/u);
     assert.match(hudView, /data-sf-action="roll-continuous-action-interruption"/u);
+    assert.match(combatEventView, /kind: "interruption"/u);
+    assert.match(combatEventView, /CombatFlow\.\$\{suffix\}/u);
+    assert.match(combatEventView, /canCurrentUserRollContinuousActionInterruption/u);
+    assert.match(combatEventView, /classList\.add\("is-next-interruption-roll"\)/u);
+    assert.match(combatEventView, /closest\?\.\("\.sf-continuous-action-interruption-actions"\)/u);
+    assert.match(combatEventView, /button\.dataset\.sfTokenUuid = card\.tokenUuid/u);
     assert.match(hudView, /data-sf-tick-action-category="\$\{escapeAttr\(action\.displayCategory\)\}"/u);
     assert.match(hudController, /bindTickActionReferenceFilters/u);
     assert.match(hudController, /bindSpellListFilters/u);
@@ -123,7 +133,8 @@ test("published DOM integration attributes remain available", () => {
     assert.match(hudController, /services\.setCombatPosition\(context\.actor, target\.dataset\.combatPosition\)/u);
     assert.match(hudController, /action === "respond-active-defense"/u);
     assert.match(hudController, /action === "decline-active-defense"/u);
-    assert.match(hudController, /case "roll-continuous-action-interruption"/u);
+    assert.match(hudController, /action === "roll-continuous-action-interruption"/u);
+    assert.match(hudController, /message \?\? target\.dataset\.sfTokenUuid/u);
     assert.doesNotMatch(hudView, /sf-tick-action-tooltip/u);
     assert.doesNotMatch(hudView, /role="tooltip"[^`]*data-sf-action="share-tick-action"/u);
     assert.match(hudView, /data-sf-action="share-tick-action"/u);
@@ -148,6 +159,8 @@ test("published DOM integration attributes remain available", () => {
     assert.match(chatActions, /if \(!mayRollFumble\) removeCombatFumbleRollControls\(element\)/u);
     assert.match(chatActions, /isMessageSpeakerAssignedToCurrentUser\(message\)/u);
     assert.match(chatActions, /dataset\.sfAction = "use-defense-splinterpoint"/u);
+    assert.match(chatActions, /hasAssociatedDamageMessage\(button, message\)/u);
+    assert.match(chatActions, /removeDegreeOptionControls\(element\)/u);
     assert.match(chatActions, /sf-splinterpoint-resonance-action/u);
     assert.match(chatActions, /className = "sf-chat-defense-response"/u);
     assert.match(chatActions, /className = "sf-chat-decline-defense"/u);
@@ -167,6 +180,18 @@ test("the compact HUD retains mechanical status and summarizes secondary targets
     assert.doesNotMatch(responsive, /\.sf-actor \.sf-defense-row,\s*#splittermond-smoother-fight-hud \.sf-resources,\s*#splittermond-smoother-fight-hud \.sf-turn-target\s*\{\s*display:\s*none/u);
     assert.match(responsive, /\.sf-turn-target\s*\{[^}]*font-size:\s*var\(--sf-font-small\)/su);
     assert.match(responsive, /\.sf-resources\s*\{[^}]*grid-template-columns:\s*1fr/su);
+});
+
+test("periodically updated chat timestamps cannot change message height", () => {
+    const combatEvents = fs.readFileSync(path.join(stylesRoot, "combat-events.css"), "utf8");
+    assert.match(
+        combatEvents,
+        /\.chat-message \.message-header \.message-timestamp\s*\{[^}]*white-space:\s*nowrap;[^}]*font-variant-numeric:\s*tabular-nums;/su,
+    );
+    assert.match(
+        combatEvents,
+        /\.chat-message \.message-header \.message-sender\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/su,
+    );
 });
 
 test("the legacy stylesheet URL remains a compatible entry point", () => {
@@ -209,6 +234,8 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /--sf-portrait-height:\s*246px/u);
     assert.match(flattenedCss, /--sf-portrait-header-height:\s*34px/u);
     assert.match(flattenedCss, /\.sf-portrait-header\s*\{[^}]*height:\s*var\(--sf-portrait-header-height\)/su);
+    assert.match(flattenedCss, /\.sf-portrait-name\s*\{[^}]*color:\s*#fff2cb[^}]*font-weight:\s*800[^}]*font-size:\s*15px/su);
+    assert.match(flattenedCss, /\.sf-portrait-identity\s*\{[^}]*border-top:[^}]*background:\s*linear-gradient/su);
     assert.match(
         flattenedCss,
         /\.sf-movement-sections\s*\{[^}]*grid-template-columns:\s*max-content minmax\(max-content, 1fr\) minmax\(max-content, 3fr\)/su,
@@ -218,9 +245,11 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /@container sf-prepared-action \(max-width:\s*260px\)[^{]*\{[^}]*\.sf-prepared-spell-cast b span[^}]*display:\s*none/su);
     assert.doesNotMatch(flattenedCss, /font-size:\s*[78]px/u);
     assert.match(flattenedCss, /\.sf-splinterpoint-resonance-action/u);
+    assert.match(flattenedCss, /\.sf-action-tooltip\.is-visible\s*\{[^}]*pointer-events:\s*auto/su);
+    assert.match(flattenedCss, /\.sf-action-tooltip\.is-spell\s*\{[^}]*width:\s*min\(500px,/su);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "414eb602dcea67ab94ed73328309112e39eaabf93b9d726ac392d842d9944a4e",
+        "1db7d81e27943ed131a6484ab90e300138ff585c0c854fcf3ed820d2ffe3a2eb",
     );
 });
 
@@ -244,6 +273,13 @@ test("customizable media assets remain recognizable files", () => {
     }
     for (const name of expectedAssets.icons) {
         assert.match(fs.readFileSync(path.join(moduleRoot, "assets", "icons", name), "utf8"), /^<svg\b/u);
+    }
+});
+
+test("token status SVGs expose square intrinsic dimensions for browser canvas textures", () => {
+    for (const name of ["continuous-action.svg", "movement-action.svg"]) {
+        const svg = fs.readFileSync(path.join(moduleRoot, "assets", "icons", name), "utf8");
+        assert.match(svg, /^<svg\b[^>]*\bwidth="64"[^>]*\bheight="64"[^>]*\bviewBox="0 0 64 64"/u);
     }
 });
 

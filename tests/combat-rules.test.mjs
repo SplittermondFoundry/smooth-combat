@@ -63,10 +63,14 @@ import {
     withTemporarySetValues,
 } from "../Modul/splittermond-smoother-fight/scripts/combat-rules.js";
 
+import { vtdSplinterpointPreventsHit } from "../Modul/splittermond-smoother-fight/scripts/domain/combat/attack.js";
+
 import {
     assessAttackRange,
     assessSpellRange,
+    hasSorcerersHandForSpell,
     parseExactMeterRange,
+    spellRangeKind,
 } from "../Modul/splittermond-smoother-fight/scripts/domain/combat/range.js";
 
 function attackReport(overrides = {}) {
@@ -82,6 +86,16 @@ function attackReport(overrides = {}) {
         ...overrides,
     };
 }
+
+test("the +3 VTD splinterpoint is prominent only when it turns the hit into a miss", () => {
+    assert.equal(vtdSplinterpointPreventsHit(attackReport({ roll: { total: 18 }, difficulty: 18 })), true);
+    assert.equal(vtdSplinterpointPreventsHit(attackReport({ roll: { total: 19 }, difficulty: 18 })), true);
+    assert.equal(vtdSplinterpointPreventsHit(attackReport({ roll: { total: 20 }, difficulty: 18 })), true);
+    assert.equal(vtdSplinterpointPreventsHit(attackReport({ roll: { total: 21 }, difficulty: 18 })), false);
+    assert.equal(vtdSplinterpointPreventsHit(attackReport({ roll: { total: 30 }, difficulty: 18 })), false);
+    assert.equal(vtdSplinterpointPreventsHit(attackReport({ roll: { total: 17 }, difficulty: 18, succeeded: false })), false);
+    assert.equal(vtdSplinterpointPreventsHit(attackReport({ roll: { total: 18 }, difficulty: undefined })), false);
+});
 
 test("successful active defense increases the base defense by 1 + EG + Defensiv", () => {
     const value = calculateActiveDefenseValue({
@@ -374,7 +388,7 @@ test("attack range uses the Splittermond melee distance and exact listed ranged 
     assert.equal(assessAttackRange(1, 0, false, { meleeRange: 0 }).status, "unknown");
 });
 
-test("spell range accepts only exact metre values and leaves rule expressions undecided", () => {
+test("spell range supports exact metre values and grid-adjacent touch range", () => {
     assert.equal(parseExactMeterRange("7,5 m"), 7.5);
     assert.equal(parseExactMeterRange("12 Meter"), 12);
     assert.equal(parseExactMeterRange(4), 4);
@@ -385,9 +399,35 @@ test("spell range accepts only exact metre values and leaves rule expressions un
 
     assert.equal(assessSpellRange(7.5, "7,5 m").status, "within");
     assert.equal(assessSpellRange(7.6, "7,5 m").status, "outside");
+    assert.equal(spellRangeKind("Berührung"), "touch");
+    assert.equal(spellRangeKind("Zauberer"), "caster");
+    assert.equal(assessSpellRange(20, "Berührung", { metric: false, adjacent: true }).status, "within");
+    assert.equal(assessSpellRange(1, "Berührung", { adjacent: false }).status, "outside");
     assert.equal(assessSpellRange(1, "Berührung").status, "unknown");
+    assert.equal(assessSpellRange(20, "Zauberer", { adjacent: true }).status, "unknown");
+    assert.equal(assessSpellRange(20, "Zauberer", {
+        adjacent: true,
+        casterHasSorcerersHand: true,
+    }).status, "within");
     assert.equal(assessSpellRange(1, "5 m", { metric: false }).status, "unknown");
     assert.equal(assessSpellRange(-1, "5 m").status, "unknown");
+});
+
+test("Hand des Zauberers only extends caster-range spells in its own magic school", () => {
+    const actor = {
+        items: [{
+            type: "mastery",
+            name: "Hand des Zauberers (Schwelle 1)",
+            system: { id: "hand-des-zauberers", skill: { id: "firemagic" } },
+        }],
+    };
+    const fireSpell = { system: { skill: "firemagic" }, skill: { id: "firemagic" } };
+    const windSpell = { system: { skill: "windmagic" }, skill: { id: "windmagic" } };
+
+    assert.equal(hasSorcerersHandForSpell(actor, fireSpell), true);
+    assert.equal(hasSorcerersHandForSpell(actor, windSpell), false);
+    assert.equal(hasSorcerersHandForSpell({ items: [] }, fireSpell), false);
+    assert.equal(hasSorcerersHandForSpell(actor, {}), false);
 });
 
 test("token focus uses the center between the tick bar and HUD", () => {
@@ -808,6 +848,77 @@ test("a newly recognized out-of-turn attack opens independently of the active co
             }
         )],
         ["opportunity"]
+    );
+});
+
+test("a completed automatically focused out-of-turn attack closes after its ticks", () => {
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["opportunity"],
+            ["opportunity"],
+            ["opportunity"],
+            {
+                currentCombatantId: "active",
+                eventCombatantIds: new Map([["opportunity", "reacting"]]),
+                outOfTurnEventIds: new Set(["opportunity"]),
+                previousOutOfTurnEventIds: new Set(["opportunity"]),
+                flowManaged: true,
+                previousFocusedEventId: "opportunity",
+                focusedEventId: null,
+            }
+        )],
+        []
+    );
+});
+
+test("flow-managed cards open only for a pending step while manual history expansion survives", () => {
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["history"],
+            ["history"],
+            ["history"],
+            {
+                currentCombatantId: "active",
+                outOfTurnEventIds: new Set(["history"]),
+                previousOutOfTurnEventIds: new Set(["history"]),
+                flowManaged: true,
+                previousFocusedEventId: null,
+                focusedEventId: null,
+            }
+        )],
+        ["history"]
+    );
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["history"],
+            [],
+            ["history", "completed-new"],
+            {
+                currentCombatantId: "active",
+                eventCombatantIds: new Map([["completed-new", "reacting"]]),
+                outOfTurnEventIds: new Set(["completed-new"]),
+                previousOutOfTurnEventIds: new Set(),
+                flowManaged: true,
+                previousFocusedEventId: null,
+                focusedEventId: null,
+            }
+        )],
+        []
+    );
+    assert.deepEqual(
+        [...resolveCombatEventOpenIds(
+            ["history"],
+            [],
+            ["history", "pending-new"],
+            {
+                currentCombatantId: "active",
+                eventCombatantIds: new Map([["pending-new", "reacting"]]),
+                flowManaged: true,
+                previousFocusedEventId: null,
+                focusedEventId: "pending-new",
+            }
+        )],
+        ["pending-new"]
     );
 });
 

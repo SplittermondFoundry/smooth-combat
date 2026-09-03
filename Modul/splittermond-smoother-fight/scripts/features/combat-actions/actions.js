@@ -54,6 +54,10 @@ import {
 } from "./continuous-action.js";
 
 import {
+    requireOpenCombatFlowForTicks,
+} from "./flow-guard.js";
+
+import {
     prepareSpellTargetRollOptions,
 } from "./spell-target-modifier.js";
 
@@ -228,7 +232,7 @@ export async function performSpell(context, spellId) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
         return;
     }
-    if (prepared && targetDependent) warnIfSpellOutOfRange(context, spell);
+    if (prepared && context.target) warnIfSpellOutOfRange(context, spell);
     if (prepared) {
         const preparedRoll = prepareSpellTargetRollOptions(spell, context.target);
         const pendingNonce = setPendingOffenseKind(context.actor.id, "spell", context);
@@ -341,6 +345,7 @@ function liveRuntimeActionContext(context) {
 }
 
 export async function addCombatTicks(context, requestedTicks) {
+    if (!requireOpenCombatFlowForTicks(context)) return null;
     if (Number(context.combatant.initiative) >= COMBAT_PAUSE.wait) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.ResumeFirst"));
         return null;

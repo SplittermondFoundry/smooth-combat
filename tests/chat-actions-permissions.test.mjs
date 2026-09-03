@@ -7,18 +7,30 @@ import {
     hasUsableAssociatedDefenseTickAction,
     isMessageSpeakerAssignedToCurrentUser,
 } from "../Modul/splittermond-smoother-fight/scripts/features/chat/actions.js";
+import {
+    decorateCombatFumbleRollControl,
+    hasPendingCombatFumbleStep,
+} from "../Modul/splittermond-smoother-fight/scripts/features/chat/fumble-flow.js";
+import {
+    createPromotedDefenseResponse,
+    removeActiveDefenseResponse,
+} from "../Modul/splittermond-smoother-fight/scripts/features/chat/rendered-controls.js";
 
 const contexts = new WeakMap();
+let pendingFumbleActions = false;
 
 configureServices({
     canUserDeclineActiveDefense: () => true,
     defenseAllowsModification: () => true,
     defenseAwaitsResponse: () => true,
     getAssignedUser: (combatant) => combatant.assignedUser ?? null,
+    getFumbleData: (message) => message?.fumble ?? null,
     getMessageContext: (message) => contexts.get(message) ?? null,
     getRuntimeController: (combatant) => combatant.runtimeController ?? null,
+    hasPendingFumbleActions: () => pendingFumbleActions,
     isCurrentUserTarget: () => false,
     isDefenseMessage: () => false,
+    isFumbleTableMessage: (message) => Boolean(message?.fumble),
     resolveSpeakerActor: (message) => message.actor ?? null,
     resolveToken: () => null,
     speakerTokenUuid: () => null,
@@ -61,7 +73,7 @@ test("an open active-defense action gains a directly adjacent decline button", (
     enforceOffenseDefensePhaseControls(root, { id: "attack", type: "attackRollMessage" });
 
     assert.equal(root.wrapper.className, "sf-chat-defense-response");
-    assert.deepEqual(defenseButton.classList.values, ["sf-chat-defense-button"]);
+    assert.deepEqual(defenseButton.classList.values, ["sf-chat-defense-button", "is-next-active-defense"]);
     assert.equal(root.wrapper.children[0], defenseButton);
     assert.equal(root.wrapper.children[1].className, "sf-chat-decline-defense");
     assert.equal(root.wrapper.children[1].dataset.sfAction, "decline-active-defense");
@@ -120,8 +132,57 @@ test("an open defense phase restores a missing active-defense action", (t) => {
     assert.equal(actions.children.length, 1);
     assert.equal(actions.children[0].dataset.localaction, "activeDefense");
     assert.match(actions.children[0].className, /sf-synthetic-active-defense/u);
+    assert.deepEqual(actions.children[0].classList.values, ["sf-chat-defense-button", "is-next-active-defense"]);
     assert.equal(root.wrapper.children[0], actions.children[0]);
     assert.equal(root.wrapper.children[1].dataset.sfAction, "decline-active-defense");
+});
+
+test("a recalculated target defense keeps its decline button beside the replacement action", (t) => {
+    const previousDocument = globalThis.document;
+    const previousGame = globalThis.game;
+    globalThis.document = {
+        createElement: (tag) => ({
+            tag,
+            children: [],
+            dataset: {},
+            className: "",
+            setAttribute(name, value) { this[name] = value; },
+            append(...children) { this.children.push(...children); },
+        }),
+    };
+    globalThis.game = {
+        i18n: { localize: (key) => key },
+    };
+    t.after(() => {
+        if (previousDocument === undefined) delete globalThis.document;
+        else globalThis.document = previousDocument;
+        if (previousGame === undefined) delete globalThis.game;
+        else globalThis.game = previousGame;
+    });
+
+    const response = createPromotedDefenseResponse({
+        message: { id: "recalculated-attack" },
+        action: "defend-target",
+        icon: "fa-shield-halved",
+        label: "Eigene Aktive Abwehr",
+    });
+
+    assert.equal(response.className, "sf-chat-defense-response");
+    assert.equal(response.children.length, 2);
+    assert.equal(response.children[0].dataset.sfAction, "defend-target");
+    assert.equal(response.children[0].dataset.messageId, "recalculated-attack");
+    assert.equal(response.children[1].dataset.sfAction, "decline-active-defense");
+    assert.equal(response.children[1].dataset.messageId, "recalculated-attack");
+
+    const staleGroup = { removed: false, remove() { this.removed = true; } };
+    const staleButton = {
+        removed: false,
+        closest: (selector) => selector === ".sf-chat-defense-response" ? staleGroup : null,
+        remove() { this.removed = true; },
+    };
+    removeActiveDefenseResponse(staleButton);
+    assert.equal(staleGroup.removed, true);
+    assert.equal(staleButton.removed, false, "the old action and X are removed as one group");
 });
 
 test("fumble ownership follows the character assignment instead of broad actor ownership", () => {
@@ -150,6 +211,80 @@ test("fumble ownership follows the character assignment instead of broad actor o
 
     globalThis.game.combat.combatants = [];
     assert.equal(isMessageSpeakerAssignedToCurrentUser(message), false);
+});
+
+test("a pending combat fumble keeps tick highlighting behind the fumble step", () => {
+    const fumbleControl = {
+        dataset: { rollType: "attackFumble" },
+    };
+    const completedFumble = { id: "fumble-result" };
+    const fumbleElement = { dataset: { messageId: completedFumble.id } };
+    const group = {
+        querySelectorAll: () => [],
+    };
+    const card = {
+        closest: (selector) => selector === ".sf-event-group" ? group : null,
+    };
+    globalThis.game = {
+        messages: {
+            get: (id) => id === completedFumble.id ? completedFumble : null,
+        },
+    };
+
+    assert.equal(hasPendingCombatFumbleStep(card, [fumbleControl]), true);
+
+    group.querySelectorAll = () => [fumbleElement];
+    pendingFumbleActions = true;
+    assert.equal(hasPendingCombatFumbleStep(card, [fumbleControl]), true);
+    assert.equal(hasPendingCombatFumbleStep(card, []), true);
+
+    pendingFumbleActions = false;
+    assert.equal(hasPendingCombatFumbleStep(card, [fumbleControl]), false);
+});
+
+test("a completed persisted fumble suppresses the source-card prompt without relying on rendered grouping", () => {
+    const fumbleControl = { dataset: { rollType: "attackFumble" } };
+    const defense = { id: "defense-source" };
+    const completedFumble = {
+        id: "persisted-fumble",
+        fumble: { sourceMessageId: defense.id },
+    };
+    const group = { querySelectorAll: () => [] };
+    const card = {
+        dataset: { messageId: defense.id },
+        closest: (selector) => selector === ".sf-event-group" ? group : null,
+    };
+    contexts.set(defense, { attackMessageId: "attack" });
+    globalThis.game = {
+        messages: {
+            contents: [defense, completedFumble],
+            get: (id) => [defense, completedFumble].find((message) => message.id === id) ?? null,
+        },
+    };
+
+    pendingFumbleActions = false;
+    assert.equal(hasPendingCombatFumbleStep(card, [fumbleControl]), false);
+
+    pendingFumbleActions = true;
+    assert.equal(hasPendingCombatFumbleStep(card, [fumbleControl]), true);
+});
+
+test("a persisted fumble result marks its original table control as completed", () => {
+    const classes = [];
+    const attributes = {};
+    const control = {
+        dataset: { rollType: "attackFumble" },
+        classList: { add: (name) => classes.push(name) },
+        setAttribute: (name, value) => { attributes[name] = value; },
+        disabled: false,
+    };
+    globalThis.game = { i18n: { localize: (key) => key } };
+
+    decorateCombatFumbleRollControl(control, { hasResult: true, ownsSpeaker: true, pending: false });
+
+    assert.equal(control.disabled, true);
+    assert.equal(attributes["aria-disabled"], "true");
+    assert.deepEqual(classes, ["is-applied"]);
 });
 
 test("message action highlighting follows an active runtime substitute", () => {

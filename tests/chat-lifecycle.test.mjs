@@ -160,6 +160,7 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
         tokenId: attackerToken.id,
         actor,
         token: attackerToken,
+        initiative: 12,
     };
     const currentUser = { id: "current-user", targets: new Set([targetA]) };
     const message = {
@@ -311,6 +312,7 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
             outOfTurn: false,
             assignedUserId: fixture.assignedUser.id,
             runtimeControllerId: fixture.runtimeController.id,
+            attackerInitiativeAtCreation: 12,
             initialCheckSucceeded: false,
             defensePhase: "unavailable",
             createdAt: context.createdAt,

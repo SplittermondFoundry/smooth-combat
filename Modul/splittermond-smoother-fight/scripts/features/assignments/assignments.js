@@ -1,5 +1,7 @@
 import { services } from "../../core/services.js";
 
+import { getApplicableCombat } from "../../core/combat-compatibility.js";
+
 import {
     actorLinkUuid,
     linkMatchesCombatant,
@@ -29,7 +31,7 @@ export function getRuntimeController(actorOrCombatant, actorOverride = null) {
     return assignedUser?.active ? assignedUser : getActivePrimaryGm();
 }
 
-export function getCurrentTurnController(combat = game.combat) {
+export function getCurrentTurnController(combat = getApplicableCombat()) {
     const combatant = combat?.combatant ?? combat?.turns?.[0] ?? null;
     return combatant ? getRuntimeController(combatant) : null;
 }

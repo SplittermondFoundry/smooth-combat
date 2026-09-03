@@ -21,6 +21,25 @@ export function spellFocusCosts(spell) {
     return displayLabel(spell?.costs ?? spell?.system?.costs, "–");
 }
 
+export function buildSpellTooltipModel(spell) {
+    const school = displayLabel(spell?.skill?.label, spell?.system?.skill);
+    const level = displayValue(spell?.skillLevel ?? spell?.system?.skillLevel, "");
+    const spellTypes = displayFeatureValue(spell?.spellTypeList ?? spell?.spellType ?? spell?.system?.spellType);
+    const features = displayFeatureValue(spell?.features ?? spell?.system?.features);
+    return {
+        school: [school, level].filter((value) => value !== "").join(" "),
+        difficulty: displayLabel(spell?.difficulty ?? spell?.system?.difficulty, "–"),
+        focusCosts: spellFocusCosts(spell),
+        castDuration: displayLabel(spell?.castDuration ?? spell?.system?.castDuration, "–"),
+        range: displayLabel(spell?.range ?? spell?.system?.range, "–"),
+        effectDuration: displayLabel(spell?.effectDuration ?? spell?.system?.effectDuration, "–"),
+        effectArea: displayLabel(spell?.effectArea ?? spell?.system?.effectArea, "–"),
+        spellTypes: spellTypes || "–",
+        features: features || "–",
+        damage: displayLabel(spell?.damage ?? spell?.system?.damage, "–"),
+    };
+}
+
 export function resolveActionItem(actor, element) {
     const spellId = element?.dataset?.spellId;
     if (spellId) {
@@ -101,10 +120,14 @@ export function bindActionTooltips(root, context) {
 }
 
 function bindTooltipEvents(button, show) {
-    button.addEventListener("mouseenter", show);
-    button.addEventListener("mouseleave", () => clearActionTooltip(button));
-    button.addEventListener("focus", show);
-    button.addEventListener("blur", () => clearActionTooltip(button));
+    const retainAndShow = () => {
+        cancelActionTooltipClear(button);
+        show();
+    };
+    button.addEventListener("mouseenter", retainAndShow);
+    button.addEventListener("mouseleave", () => scheduleActionTooltipClear(button));
+    button.addEventListener("focus", retainAndShow);
+    button.addEventListener("blur", () => scheduleActionTooltipClear(button));
 }
 
 function showSpellTooltip(anchor, spell) {
@@ -114,11 +137,26 @@ function showSpellTooltip(anchor, spell) {
     const description = itemPlainText(spell.description ?? spell.system?.description);
     const enhancement = itemPlainText(spell.enhancementDescription ?? spell.system?.enhancementDescription);
     const enhancementCosts = displayLabel(spell.enhancementCosts ?? spell.system?.enhancementCosts, "–");
+    const model = buildSpellTooltipModel(spell);
+    const rows = [
+        [t("SMOOTHER_FIGHT.HUD.SpellDifficulty"), model.difficulty],
+        [t("SMOOTHER_FIGHT.HUD.SpellFocusCosts"), model.focusCosts],
+        [t("SMOOTHER_FIGHT.HUD.SpellCastDuration"), model.castDuration],
+        [t("SMOOTHER_FIGHT.HUD.SpellRange"), model.range],
+        [t("SMOOTHER_FIGHT.HUD.SpellEffectDuration"), model.effectDuration],
+        [t("SMOOTHER_FIGHT.HUD.SpellEffectArea"), model.effectArea],
+        [t("SMOOTHER_FIGHT.HUD.SpellTypes"), model.spellTypes],
+        [t("SMOOTHER_FIGHT.HUD.SpellFeatures"), model.features],
+        [t("SMOOTHER_FIGHT.HUD.SpellDamage"), model.damage],
+    ];
     showActionTooltip(anchor, "spell", `
         <header>
             <img src="${escapeAttr(spell.img ?? "icons/svg/book.svg")}" alt="">
-            <span><strong>${escapeHtml(spell.name)}</strong><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.FocusCosts", { costs: spellFocusCosts(spell) }))}</small></span>
+            <span><strong>${escapeHtml(spell.name)}</strong><small>${escapeHtml(model.school || t("SMOOTHER_FIGHT.HUD.FocusCosts", { costs: model.focusCosts }))}</small></span>
         </header>
+        <dl class="sf-attack-tooltip-stats sf-spell-tooltip-stats">
+            ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+        </dl>
         <section>
             <h4>${escapeHtml(t("SMOOTHER_FIGHT.HUD.SpellDescription"))}</h4>
             <p>${escapeHtml(description || t("SMOOTHER_FIGHT.HUD.NoSpellDescription"))}</p>
@@ -191,7 +229,9 @@ function showActionTooltip(anchor, kind, markup) {
     tooltip.innerHTML = markup;
     document.body.append(tooltip);
     anchor.setAttribute("aria-describedby", tooltip.id);
-    hudState.actionTooltip = { anchor, element: tooltip };
+    hudState.actionTooltip = { anchor, element: tooltip, closeTimer: null };
+    tooltip.addEventListener("mouseenter", () => cancelActionTooltipClear(anchor));
+    tooltip.addEventListener("mouseleave", () => scheduleActionTooltipClear(anchor));
     positionTooltip(anchor, tooltip);
 }
 
@@ -220,9 +260,42 @@ export function clearActionTooltip(anchor = null) {
 
     const state = hudState.actionTooltip;
     if (!state || (anchor && state.anchor !== anchor)) return;
+    if (state.closeTimer) clearTimeout(state.closeTimer);
     hudState.actionTooltip = null;
     state.anchor?.removeAttribute?.("aria-describedby");
     state.element?.remove?.();
+}
+
+export function scheduleActionTooltipClear(anchor, delay = 120) {
+    const state = hudState.actionTooltip;
+    if (!state || state.anchor !== anchor) return;
+    cancelActionTooltipClear(anchor);
+    state.closeTimer = setTimeout(() => {
+        if (hudState.actionTooltip !== state) return;
+        state.closeTimer = null;
+        if (tooltipInteractionActive(state)) return;
+        clearActionTooltip(anchor);
+    }, delay);
+}
+
+function cancelActionTooltipClear(anchor = null) {
+    const state = hudState.actionTooltip;
+    if (!state || (anchor && state.anchor !== anchor) || !state.closeTimer) return;
+    clearTimeout(state.closeTimer);
+    state.closeTimer = null;
+}
+
+function tooltipInteractionActive(state) {
+    return elementMatches(state?.anchor, ":hover, :focus")
+        || elementMatches(state?.element, ":hover");
+}
+
+function elementMatches(element, selector) {
+    try {
+        return Boolean(element?.matches?.(selector));
+    } catch {
+        return false;
+    }
 }
 
 function tooltipFooter() {

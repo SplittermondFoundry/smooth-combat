@@ -15,7 +15,12 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     };
     globalThis.game = {
         settings: {
-            get: () => ({}),
+            get: (moduleId, key) => {
+                if (moduleId === "core" && key === "keybindings") {
+                    throw new Error("core.keybindings is not registered during module init");
+                }
+                return {};
+            },
             set: async () => true,
             register: (moduleId, key, options) => settings.push({ moduleId, key, options }),
             registerMenu: (moduleId, key, options) => menus.push({ moduleId, key, options }),
@@ -82,6 +87,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
         "showCards",
         "movementTracking",
         "showMovementRoutesByDefault",
+        "privateMovementRoutes",
         "meleeRange",
         "minimized",
         "maxCards",
@@ -135,6 +141,10 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     assert.deepEqual(
         [settingByKey.showMovementRoutesByDefault.scope, settingByKey.showMovementRoutesByDefault.config, settingByKey.showMovementRoutesByDefault.type, settingByKey.showMovementRoutesByDefault.default],
         ["client", true, Boolean, true],
+    );
+    assert.deepEqual(
+        [settingByKey.privateMovementRoutes.scope, settingByKey.privateMovementRoutes.config, settingByKey.privateMovementRoutes.restricted, settingByKey.privateMovementRoutes.type, settingByKey.privateMovementRoutes.default],
+        ["world", true, true, Boolean, false],
     );
     assert.deepEqual(
         [settingByKey.meleeRange.scope, settingByKey.meleeRange.config, settingByKey.meleeRange.restricted, settingByKey.meleeRange.type, settingByKey.meleeRange.default],

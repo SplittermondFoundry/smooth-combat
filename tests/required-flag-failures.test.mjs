@@ -2,14 +2,25 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { configureServices } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
+import { combatWorkflowAllowsTick } from "../Modul/splittermond-smoother-fight/scripts/domain/combat-flow.js";
 import {
     handleChatCardAction,
 } from "../Modul/splittermond-smoother-fight/scripts/features/chat/actions.js";
 import {
+    applyRemoteDefenseNumbingDamage,
     applyRemoteDamageApplication,
+    finalizeRemoteDamageApplication,
+    finishRemoteDefenseNumbingDamage,
+    finishRemoteDamageApplication,
     getDamageApplicationState,
     getNumbingDamageApplicationState,
 } from "../Modul/splittermond-smoother-fight/scripts/features/chat/damage-application.js";
+import {
+    advanceLegacyChatTicks,
+    applyRemoteLegacyTickAdvance,
+    finishRemoteLegacyTickAdvance,
+    requestLegacyChatTickAdvance,
+} from "../Modul/splittermond-smoother-fight/scripts/features/chat/legacy-ticks.js";
 import {
     safeSetFlag,
     setOptionalFlag,
@@ -17,6 +28,9 @@ import {
 } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 import { installHealthCostFeedbackInterceptor } from "../Modul/splittermond-smoother-fight/scripts/features/feedback/feedback.js";
 import {
+    applyRemoteFumbleAction,
+    enforceFumbleActionState,
+    finishRemoteFumbleAction,
     getFumbleActionApplicationState,
     handleFumbleAction,
     recoverFumbleAction,
@@ -24,7 +38,9 @@ import {
 
 const MODULE_ID = "splittermond-smoother-fight";
 const harness = {
+    canAdvanceCombatWorkflowTicks: () => true,
     requestOffenseFollowUp: async (message) => message,
+    requestContinuousActionInterruptionForDamage: async (request) => harness.interruptionRequests.push(request),
     completedDamageApplications: new Set(),
     errors: [],
     infos: [],
@@ -47,6 +63,7 @@ class TestMessage {
         content = "",
         context = null,
         fumble = null,
+        enforcePermissions = false,
         noResultCalls = [],
         rejectCalls = [],
         skipPersistenceCalls = [],
@@ -57,6 +74,8 @@ class TestMessage {
         this.type = type;
         this.actor = actor;
         this.author = { id: "gm" };
+        this.enforcePermissions = enforcePermissions;
+        this.isOwner = true;
         this.user = "gm";
         this.speaker = { actor: actor?.id ?? null };
         this.flags = { [MODULE_ID]: {} };
@@ -78,6 +97,9 @@ class TestMessage {
     async setFlag(scope, key, value) {
         this.setFlagCalls += 1;
         await Promise.resolve();
+        if (this.enforcePermissions && !game.user?.isGM && this.author.id !== game.user?.id) {
+            throw new Error(`User ${game.user?.id} lacks permission to update ChatMessage [${this.id}]`);
+        }
         if (this.rejectCalls.has(this.setFlagCalls)) {
             throw new Error(`Injected setFlag rejection ${this.id}#${this.setFlagCalls}`);
         }
@@ -113,9 +135,10 @@ class TestActor {
         return true;
     }
 
-    async addTicks(ticks) {
+    async addTicks(ticks, _message, askPlayer) {
         if (this.tickError) throw this.tickError;
         this.tickApplications += 1;
+        this.tickAskPlayer = askPlayer;
         const combatant = Array.from(game.combat?.combatants ?? []).find((candidate) => candidate.actorId === this.id);
         if (combatant) combatant.initiative += ticks;
         if (this.tickErrorAfterMutation) throw this.tickErrorAfterMutation;
@@ -153,6 +176,7 @@ class TestActor {
 configureServices({
     addPendingDamageApplication: (application) => harness.pendingDamageApplications.push(application),
     addPendingLegacyTickMessage: (messageId) => harness.legacyLocks.add(messageId),
+    canAdvanceCombatWorkflowTicks: (...args) => harness.canAdvanceCombatWorkflowTicks(...args),
     requestOffenseFollowUp: (...args) => harness.requestOffenseFollowUp(...args),
     collectCombatEventGroups: () => [],
     deletePendingLegacyTickMessage: (messageId) => harness.legacyLocks.delete(messageId),
@@ -172,7 +196,7 @@ configureServices({
     isDefenseMessage: () => false,
     isOwnMessage: (message) => (message.author?.id ?? message.user) === game.user.id,
     recordCompletedDamageApplication: (messageId) => harness.completedDamageApplications.add(messageId),
-    requestContinuousActionInterruptionForDamage: async (request) => harness.interruptionRequests.push(request),
+    requestContinuousActionInterruptionForDamage: (...args) => harness.requestContinuousActionInterruptionForDamage(...args),
     removePendingDamageApplication: (application) => {
         const index = harness.pendingDamageApplications.lastIndexOf(application);
         if (index >= 0) harness.pendingDamageApplications.splice(index, 1);
@@ -187,7 +211,9 @@ configureServices({
 });
 
 function resetHarness() {
+    harness.canAdvanceCombatWorkflowTicks = () => true;
     harness.requestOffenseFollowUp = async (message) => message;
+    harness.requestContinuousActionInterruptionForDamage = async (request) => harness.interruptionRequests.push(request);
     harness.completedDamageApplications.clear();
     harness.errors.length = 0;
     harness.infos.length = 0;
@@ -217,7 +243,16 @@ function resetHarness() {
             warn: (message) => harness.warnings.push(message),
         },
     };
-    globalThis.foundry = { utils: { randomID: () => "feedback" } };
+    globalThis.foundry = {
+        applications: {
+            api: {
+                DialogV2: {
+                    wait: async ({ content }) => Number(String(content).match(/value="(\d+)"/u)?.[1]),
+                },
+            },
+        },
+        utils: { randomID: () => "feedback" },
+    };
 }
 
 test("a stale damage control cannot run against a defense successor that no longer offers it", async () => {
@@ -289,6 +324,76 @@ function fumbleData() {
     };
 }
 
+function fumbleActionUi(message, { focused = true } = {}) {
+    const classes = new Set();
+    const button = {
+        classList: {
+            contains: (name) => classes.has(name),
+            toggle(name, force) {
+                if (force) classes.add(name);
+                else classes.delete(name);
+            },
+        },
+        dataset: { sfFumbleAction: "ticks" },
+        disabled: false,
+        title: "",
+    };
+    const panel = {
+        removed: false,
+        remove() {
+            this.removed = true;
+        },
+    };
+    const element = {
+        dataset: { messageId: message.id },
+        closest: (selector) => focused && selector === '.sf-event-card[data-sf-flow-focus="true"]' ? {} : null,
+        querySelector: (selector) => selector === ".sf-fumble-actions" ? panel : null,
+        querySelectorAll(selector) {
+            if (selector === ".sf-fumble-recovery-actions") return [];
+            if (selector === ".sf-fumble-actions") return [panel];
+            if (selector === "[data-sf-fumble-action]") return [button];
+            return [];
+        },
+    };
+    return {
+        button,
+        panel,
+        root: {
+            querySelectorAll: (selector) => selector === ".sf-chat-message" ? [element] : [],
+        },
+    };
+}
+
+test("the affected token owner sees the focused fumble consequence as the next action", () => {
+    resetHarness();
+    const actor = new TestActor("owned-fumble");
+    const message = new TestMessage("owned-fumble-message", { actor, fumble: fumbleData() });
+    const ui = fumbleActionUi(message);
+    game.user = { id: "owner", isGM: false, targets: new Set() };
+    harness.messages.set(message.id, message);
+
+    enforceFumbleActionState(ui.root);
+
+    assert.equal(ui.panel.removed, false);
+    assert.equal(ui.button.disabled, false);
+    assert.equal(ui.button.classList.contains("is-next-fumble-action"), true);
+});
+
+test("an unrelated player does not see controls for another token's fumble consequence", () => {
+    resetHarness();
+    const actor = new TestActor("foreign-fumble");
+    actor.isOwner = false;
+    const message = new TestMessage("foreign-fumble-message", { actor, fumble: fumbleData() });
+    const ui = fumbleActionUi(message);
+    game.user = { id: "unrelated", isGM: false, targets: new Set() };
+    harness.messages.set(message.id, message);
+
+    enforceFumbleActionState(ui.root);
+
+    assert.equal(ui.panel.removed, true);
+    assert.equal(ui.button.classList.contains("is-next-fumble-action"), false);
+});
+
 test("optional flag writes absorb setFlag rejection while required writes notify and reject", async (t) => {
     resetHarness();
     t.mock.method(console, "debug", () => {});
@@ -330,6 +435,156 @@ test("player splinterpoint actions dispatch directly through the Splittermond so
             userId: player.id,
         },
     ]]);
+});
+
+test("a legacy splinterpoint button also dispatches through the Splittermond socket for a foreign message", async () => {
+    resetHarness();
+    const emitted = [];
+    const player = { id: "player", isGM: false, targets: new Set() };
+    const actor = new TestActor("legacy-splinterpoint-actor");
+    const message = new TestMessage("legacy-splinterpoint", { actor, enforcePermissions: true });
+    harness.messages.set(message.id, message);
+    game.user = player;
+    game.users = [player, { id: "gm", isGM: true, active: true }];
+    game.socket.emit = (...args) => emitted.push(args);
+
+    await handleChatCardAction(
+        clickEvent(),
+        actionButton(message, {}, { legacySplinterpoint: true })
+    );
+
+    assert.deepEqual(emitted, [[
+        "system.splittermond",
+        {
+            type: "chatAction",
+            action: "useSplinterpoint",
+            messageId: message.id,
+            userId: player.id,
+        },
+    ]]);
+    assert.equal(actor.splinterpointApplications.length, 0);
+    assert.equal(message.setFlagCalls, 0);
+});
+
+test("a player routes legacy tick advancement to the active GM instead of updating a foreign chat message", async () => {
+    resetHarness();
+    const player = { id: "player", isGM: false, targets: new Set() };
+    const gm = { id: "gm", isGM: true, active: true };
+    const actor = new TestActor("remote-defender");
+    const message = new TestMessage("remote-defense", {
+        actor,
+        content: '<button class="add-tick" data-ticks="3" data-message="Aktive Abwehr">3 Ticks</button>',
+    });
+    let emitted = null;
+    game.user = player;
+    game.users = [player, gm];
+    game.socket.emit = (...args) => { emitted = args; };
+    foundry.applications.api.DialogV2.wait = async () => 5;
+
+    const operation = requestLegacyChatTickAdvance(message, { dataset: { ticks: "3" } });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(message.setFlagCalls, 0);
+    assert.equal(actor.tickApplications, 0);
+    assert.equal(emitted[0], "module.splittermond-smoother-fight");
+    assert.deepEqual(emitted[1], {
+        type: "legacy-tick-advance-request",
+        senderId: player.id,
+        recipientId: gm.id,
+        requestId: "feedback",
+        messageId: message.id,
+        offeredTicks: 3,
+        ticks: 5,
+    });
+    assert.equal(finishRemoteLegacyTickAdvance({
+        type: "legacy-tick-advance-result",
+        requestId: "feedback",
+        messageId: message.id,
+        applied: true,
+        error: null,
+    }, gm), true);
+    assert.equal(await operation, true);
+});
+
+test("closing the player's legacy tick dialog leaves the action open and does not contact the GM", async () => {
+    resetHarness();
+    const player = { id: "player", isGM: false, targets: new Set() };
+    const actor = new TestActor("cancelled-remote-defender");
+    const message = new TestMessage("cancelled-remote-defense", {
+        actor,
+        content: '<button class="add-tick" data-ticks="3">3 Ticks</button>',
+    });
+    const emitted = [];
+    game.user = player;
+    game.users = [player, { id: "gm", isGM: true, active: true }];
+    game.socket.emit = (...args) => emitted.push(args);
+    foundry.applications.api.DialogV2.wait = async () => null;
+
+    assert.equal(
+        await requestLegacyChatTickAdvance(message, { dataset: { ticks: "3" } }),
+        false,
+    );
+    assert.equal(message.setFlagCalls, 0);
+    assert.equal(actor.tickApplications, 0);
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvance, undefined);
+    assert.deepEqual(emitted, []);
+    assert.equal(harness.legacyLocks.has(message.id), false);
+});
+
+test("the GM accepts only an offered legacy tick control from an authorized player", async () => {
+    resetHarness();
+    const player = { id: "player", isGM: false };
+    const actor = new TestActor("remote-defender");
+    const message = new TestMessage("remote-defense", {
+        actor,
+        content: '<button data-message="Aktive Abwehr" data-ticks="3" class="add-tick">3 Ticks</button>',
+    });
+    game.combat.combatants = [{ id: "defender", actorId: actor.id, actor, initiative: 9 }];
+
+    assert.deepEqual(
+        await applyRemoteLegacyTickAdvance(message, { ticks: 8 }, player),
+        { applied: false, error: "not-allowed" },
+    );
+    assert.equal(actor.tickApplications, 0);
+
+    assert.deepEqual(
+        await applyRemoteLegacyTickAdvance(message, { ticks: 3 }, player),
+        { applied: true, error: null },
+    );
+    assert.equal(actor.tickApplications, 1);
+    assert.equal(actor.tickAskPlayer, false);
+    assert.equal(game.combat.combatants[0].initiative, 12);
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvance.state, "completed");
+});
+
+test("the GM accepts the synthetic release ticks of a prepared spell", async () => {
+    resetHarness();
+    const player = { id: "player", isGM: false };
+    const actor = new TestActor("remote-caster");
+    const message = new TestMessage("remote-spell", {
+        actor,
+        context: {
+            actionKind: "spell",
+            combatId: "combat",
+            combatantId: "caster",
+        },
+        type: "spellRollMessage",
+    });
+    message.system.tickCostHandler = {
+        baseTickCost: 3,
+        isOption: false,
+        used: false,
+    };
+    game.combat.id = "combat";
+    game.combat.combatants = [{ id: "caster", actorId: actor.id, actor, initiative: 11 }];
+
+    assert.deepEqual(
+        await applyRemoteLegacyTickAdvance(message, { offeredTicks: 3, ticks: 3 }, player),
+        { applied: true, error: null },
+    );
+    assert.equal(actor.tickApplications, 1);
+    assert.equal(game.combat.combatants[0].initiative, 14);
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvance.state, "completed");
 });
 
 test("legacy active-defense splinterpoints use the speaker actor from the HUD", async () => {
@@ -386,6 +641,95 @@ test("a rejected fumble write before the effect prevents the mechanical applicat
     assert.equal(actor.tickApplications, 0);
     assert.equal(message.flags[MODULE_ID].fumble.ticksApplicationStarted, false);
     assert.equal(harness.errors.length, 1);
+});
+
+test("a token owner routes a foreign fumble card through the active GM", async () => {
+    resetHarness();
+    const player = { id: "fumble-owner", isGM: false, targets: new Set() };
+    const gm = { id: "gm", isGM: true, active: true };
+    const actor = new TestActor("remote-fumble-owner");
+    const message = new TestMessage("foreign-fumble-card", { actor, fumble: fumbleData() });
+    message.isOwner = false;
+    game.user = player;
+    game.users = [player, gm];
+    const emitted = [];
+    game.socket.emit = (...args) => emitted.push(args);
+
+    const operation = handleFumbleAction(message, "ticks");
+    await Promise.resolve();
+
+    assert.equal(message.setFlagCalls, 0);
+    assert.equal(actor.tickApplications, 0);
+    assert.deepEqual(emitted, [["module.splittermond-smoother-fight", {
+        type: "fumble-action-request",
+        senderId: player.id,
+        recipientId: gm.id,
+        requestId: "feedback",
+        messageId: message.id,
+        action: "ticks",
+    }]]);
+    assert.equal(finishRemoteFumbleAction({
+        type: "fumble-action-result",
+        requestId: "feedback",
+        messageId: message.id,
+        action: "ticks",
+        applied: true,
+        error: null,
+    }, gm), true);
+    assert.equal(await operation, true);
+});
+
+test("the active GM validates and applies a remote fumble consequence exactly once", async () => {
+    resetHarness();
+    const player = { id: "fumble-owner", isGM: false };
+    const intruder = { id: "intruder", isGM: false };
+    const actor = new TestActor("remote-fumble-target");
+    actor.testUserPermission = (user) => user?.id === player.id;
+    const combatant = { id: "remote-fumble-combatant", actorId: actor.id, initiative: 8 };
+    const message = new TestMessage("remote-fumble-card", { actor, fumble: fumbleData() });
+    game.combat.combatants = [combatant];
+
+    assert.deepEqual(
+        await applyRemoteFumbleAction(message, "ticks", intruder),
+        { applied: false, error: "not-allowed" },
+    );
+    assert.equal(combatant.initiative, 8);
+    assert.equal(actor.tickApplications, 0);
+
+    assert.deepEqual(
+        await applyRemoteFumbleAction(message, "ticks", player),
+        { applied: true, error: null },
+    );
+    assert.equal(combatant.initiative, 11);
+    assert.equal(actor.tickApplications, 1);
+    assert.equal(getFumbleActionApplicationState(message, "ticks"), "completed");
+
+    assert.deepEqual(
+        await applyRemoteFumbleAction(message, "ticks", player),
+        { applied: false, error: "not-applied" },
+    );
+    assert.equal(combatant.initiative, 11);
+    assert.equal(actor.tickApplications, 1);
+});
+
+test("the focused fumble tick consequence passes the workflow blocker and advances its combatant", async () => {
+    resetHarness();
+    const actor = new TestActor("focused-fumble");
+    const combatant = { id: "fumble-combatant", actorId: actor.id, initiative: 10 };
+    game.combat.combatants = [combatant];
+    game.user = { id: "player", isGM: false };
+    const message = new TestMessage("fumble-message", { actor, fumble: fumbleData() });
+    const blocker = { step: "fumble", messageId: message.id };
+    harness.canAdvanceCombatWorkflowTicks = (candidate) => combatWorkflowAllowsTick({
+        blocker,
+        messageId: candidate.id,
+    });
+
+    await handleFumbleAction(message, "ticks");
+
+    assert.equal(combatant.initiative, 13);
+    assert.equal(getFumbleActionApplicationState(message, "ticks"), "completed");
+    assert.deepEqual(harness.warnings, []);
 });
 
 test("a rejected fumble effect without a mutation returns to idle and can be retried", async (t) => {
@@ -601,6 +945,40 @@ test("a rejected legacy tick after initiative changed becomes uncertain", async 
     assert.equal(combatant.initiative, 7);
 });
 
+test("legacy tick confirmation prefers the exact token over another combatant with the same actor id", async () => {
+    resetHarness();
+    const actor = new TestActor("shared-skeleton");
+    const other = {
+        id: "other-skeleton",
+        actorId: actor.id,
+        tokenId: "other-token",
+        initiative: 4,
+    };
+    const defender = {
+        id: "defending-skeleton",
+        actorId: actor.id,
+        tokenId: "defender-token",
+        initiative: 10,
+    };
+    game.combat.combatants = [other, defender];
+    actor.addTicks = async (ticks) => {
+        actor.tickApplications += 1;
+        defender.initiative += ticks;
+    };
+    harness.tokens.set("Scene.scene.Token.defender-token", { id: defender.tokenId });
+    const message = new TestMessage("shared-skeleton-defense", {
+        actor,
+        context: { attackerTokenUuid: "Scene.scene.Token.defender-token" },
+    });
+    harness.messages.set(message.id, message);
+
+    await advanceLegacyChatTicks(message, actionButton(message, { ticks: "3" }, { legacy: true }));
+
+    assert.equal(other.initiative, 4);
+    assert.equal(defender.initiative, 13);
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvance.state, "completed");
+});
+
 test("rejected stun-damage completion becomes uncertain and cannot apply defense damage twice", async (t) => {
     resetHarness();
     t.mock.method(console, "error", () => {});
@@ -687,6 +1065,102 @@ test("missing target permission aborts before starting damage and remains retrya
     assert.equal(harness.warnings.length, 1);
 });
 
+test("a token owner routes linked-target damage from a foreign chat card through the active GM", async () => {
+    resetHarness();
+    const emitted = [];
+    const player = { id: "target-owner", isGM: false, targets: new Set() };
+    const gm = { id: "gm", isGM: true, active: true };
+    const targetActor = new TestActor("foreign-linked-target");
+    const target = {
+        id: "foreign-linked-target-token",
+        uuid: "Scene.scene.Token.foreign-linked-target-token",
+        actor: targetActor,
+        object: {},
+    };
+    const message = new TestMessage("foreign-linked-damage", {
+        context: { primaryTargetTokenUuid: target.uuid },
+        enforcePermissions: true,
+    });
+    harness.tokens.set(target.uuid, target);
+    harness.messages.set(message.id, message);
+    game.user = player;
+    game.users = [player, gm];
+    game.socket.emit = (...args) => emitted.push(args);
+
+    await handleChatCardAction(
+        clickEvent(),
+        actionButton(message, { localaction: "applyDamageToUserTargets" })
+    );
+
+    assert.equal(emitted.length, 1);
+    assert.equal(emitted[0][0], `module.${MODULE_ID}`);
+    assert.equal(emitted[0][1].type, "damage-application-request");
+    assert.equal(emitted[0][1].messageId, message.id);
+    assert.equal(emitted[0][1].recipientId, gm.id);
+    assert.equal(message.setFlagCalls, 0);
+    assert.equal(targetActor.damageApplications, 0);
+    finishRemoteDamageApplication(message.id, { state: "idle" });
+});
+
+test("a token owner routes defense stun damage from a foreign chat card through the active GM", async () => {
+    resetHarness();
+    const emitted = [];
+    const player = { id: "defender-owner", isGM: false, targets: new Set() };
+    const gm = { id: "gm", isGM: true, active: true };
+    const actor = new TestActor("foreign-defense-damage");
+    const message = new TestMessage("foreign-defense-damage", {
+        actor,
+        context: { numbingDamage: 3 },
+        enforcePermissions: true,
+    });
+    harness.messages.set(message.id, message);
+    game.user = player;
+    game.users = [player, gm];
+    game.socket.emit = (...args) => emitted.push(args);
+
+    const operation = handleChatCardAction(
+        clickEvent(),
+        actionButton(message, { sfDefenseNumbingDamage: "3" })
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(emitted.length, 1);
+    assert.equal(emitted[0][0], `module.${MODULE_ID}`);
+    assert.equal(emitted[0][1].type, "defense-numbing-damage-request");
+    assert.equal(emitted[0][1].messageId, message.id);
+    assert.equal(emitted[0][1].recipientId, gm.id);
+    assert.equal(message.setFlagCalls, 0);
+    assert.equal(actor.damageApplications, 0);
+
+    finishRemoteDefenseNumbingDamage({
+        type: "defense-numbing-damage-result",
+        requestId: emitted[0][1].requestId,
+        messageId: message.id,
+        state: "completed",
+        error: null,
+    }, gm);
+    assert.equal(await operation, undefined);
+});
+
+test("the active GM applies requested defense stun damage after validating actor ownership", async () => {
+    resetHarness();
+    const player = { id: "defender-owner", isGM: false, targets: new Set() };
+    const gm = { id: "gm", isGM: true, active: true };
+    const actor = new TestActor("remote-defense-damage");
+    const message = new TestMessage("remote-defense-damage", {
+        actor,
+        context: { numbingDamage: 3 },
+        enforcePermissions: true,
+    });
+    game.user = gm;
+
+    const result = await applyRemoteDefenseNumbingDamage(message, 3, player);
+
+    assert.deepEqual(result, { state: "completed", error: null });
+    assert.equal(actor.damageApplications, 1);
+    assert.equal(message.flags[MODULE_ID].context.numbingDamageApplication.state, "completed");
+});
+
 test("a rejected health cost without a health mutation returns generic damage to idle", async (t) => {
     resetHarness();
     t.mock.method(console, "error", () => {});
@@ -707,6 +1181,167 @@ test("a rejected health cost without a health mutation returns generic damage to
     await handleChatCardAction(clickEvent(), button);
     assert.equal(getDamageApplicationState(message), "completed");
     assert.equal(actor.damageApplications, 1);
+});
+
+test("self damage completion tracks the speaker even while another target is linked", async () => {
+    resetHarness();
+    globalThis.CONFIG = { Actor: { documentClass: TestActor } };
+    installHealthCostFeedbackInterceptor();
+    const speaker = new TestActor("self-damage-speaker");
+    const foreignTargetActor = new TestActor("foreign-linked-target");
+    const foreignTarget = {
+        id: "foreign-linked-target",
+        uuid: "Scene.scene.Token.foreign-linked-target",
+        actor: foreignTargetActor,
+        object: {},
+    };
+    harness.tokens.set(foreignTarget.uuid, foreignTarget);
+    const message = new TestMessage("self-damage-with-target", {
+        actor: speaker,
+        context: { primaryTargetTokenUuid: foreignTarget.uuid },
+    });
+    message.system.handleGenericAction = () => speaker.consumeCost("health", "1V1");
+    harness.messages.set(message.id, message);
+
+    await handleChatCardAction(
+        clickEvent(),
+        actionButton(message, { localaction: "applyDamageToSelf" })
+    );
+
+    assert.equal(speaker.damageApplications, 1);
+    assert.equal(foreignTargetActor.damageApplications, 0);
+    assert.equal(getDamageApplicationState(message), "completed");
+});
+
+test("a target player applies self damage locally while the GM finalizes the foreign chat card", async () => {
+    resetHarness();
+    globalThis.CONFIG = { Actor: { documentClass: TestActor } };
+    installHealthCostFeedbackInterceptor();
+    const player = { id: "target-player", isGM: false, targets: new Set() };
+    const gm = { id: "gm", isGM: true, active: true };
+    const targetActor = new TestActor("target-player-actor");
+    const target = {
+        id: "target-player-token",
+        uuid: "Scene.scene.Token.target-player-token",
+        actor: targetActor,
+        object: {},
+    };
+    const message = new TestMessage("foreign-self-damage", {
+        context: { primaryTargetTokenUuid: target.uuid },
+    });
+    message.system.handleGenericAction = () => targetActor.consumeCost("health", "1V1");
+    harness.tokens.set(target.uuid, target);
+    harness.messages.set(message.id, message);
+    game.user = player;
+    game.users = [player, gm];
+    const socketPayloads = [];
+    game.socket.emit = (_channel, payload) => {
+        socketPayloads.push(payload);
+        if (payload.type === "damage-application-completed") {
+            finishRemoteDamageApplication(message.id, { ...payload, state: "completed", error: null });
+        }
+    };
+
+    await handleChatCardAction(clickEvent(), actionButton(message, { localaction: "applyDamageToSelf" }));
+
+    assert.equal(targetActor.damageApplications, 1);
+    assert.equal(message.setFlagCalls, 0);
+    assert.equal(socketPayloads.length, 1);
+    assert.equal(socketPayloads[0].recipientId, gm.id);
+    assert.equal(socketPayloads[0].actorUuid, targetActor.uuid);
+    assert.equal(socketPayloads[0].tokenUuid, target.uuid);
+});
+
+test("closing a target player's self-damage dialog leaves the damage action open", async () => {
+    resetHarness();
+    const player = { id: "target-player", isGM: false, targets: new Set() };
+    const gm = { id: "gm", isGM: true, active: true };
+    const targetActor = new TestActor("cancelled-target");
+    const target = {
+        id: "cancelled-target-token",
+        uuid: "Scene.scene.Token.cancelled-target-token",
+        actor: targetActor,
+        object: {},
+    };
+    const message = new TestMessage("cancelled-self-damage", {
+        context: { primaryTargetTokenUuid: target.uuid },
+    });
+    harness.tokens.set(target.uuid, target);
+    harness.messages.set(message.id, message);
+    game.user = player;
+    game.users = [player, gm];
+    const socketPayloads = [];
+    game.socket.emit = (_channel, payload) => socketPayloads.push(payload);
+
+    await handleChatCardAction(clickEvent(), actionButton(message, { localaction: "applyDamageToSelf" }));
+
+    assert.equal(targetActor.damageApplications, 0);
+    assert.equal(getDamageApplicationState(message), "idle");
+    assert.deepEqual(socketPayloads, []);
+});
+
+test("the GM finalizes client-owned damage only for the exact linked target", async () => {
+    resetHarness();
+    const player = { id: "target-player", isGM: false };
+    const targetActor = new TestActor("finalized-target");
+    const target = {
+        id: "finalized-target-token",
+        uuid: "Scene.scene.Token.finalized-target-token",
+        actor: targetActor,
+        object: {},
+    };
+    const message = new TestMessage("finalized-self-damage", {
+        context: { primaryTargetTokenUuid: target.uuid },
+    });
+    harness.tokens.set(target.uuid, target);
+
+    const denied = await finalizeRemoteDamageApplication(message, {
+        state: "completed",
+        actorUuid: targetActor.uuid,
+        tokenUuid: "Scene.scene.Token.someone-else",
+    }, player);
+    assert.deepEqual(denied, { state: "idle", error: "not-allowed" });
+    assert.equal(message.setFlagCalls, 0);
+
+    const completed = await finalizeRemoteDamageApplication(message, {
+        state: "completed",
+        actorUuid: targetActor.uuid,
+        tokenUuid: target.uuid,
+    }, player);
+    assert.deepEqual(completed, { state: "completed", error: null });
+    assert.equal(message.flags[MODULE_ID].damageApplication.state, "completed");
+    assert.equal(message.flags[MODULE_ID].damageApplication.initiatedBy, player.id);
+});
+
+test("remote self damage is converted into exact linked-target damage", async () => {
+    resetHarness();
+    globalThis.CONFIG = { Actor: { documentClass: TestActor } };
+    installHealthCostFeedbackInterceptor();
+    const player = { id: "target-player", isGM: false };
+    const attacker = new TestActor("remote-self-attacker");
+    attacker.testUserPermission = () => false;
+    const targetActor = new TestActor("remote-self-target");
+    const target = {
+        id: "remote-self-target-token",
+        uuid: "Scene.scene.Token.remote-self-target-token",
+        actor: targetActor,
+        object: {},
+    };
+    const message = new TestMessage("remote-self-damage", {
+        actor: attacker,
+        context: { primaryTargetTokenUuid: target.uuid },
+    });
+    message.system.handleGenericAction = (actionData) => {
+        assert.equal(actionData.action, "applyDamageToTargets");
+        return targetActor.consumeCost("health", "1V1");
+    };
+    harness.tokens.set(target.uuid, target);
+
+    const result = await applyRemoteDamageApplication(message, { action: "applyDamageToSelf" }, player);
+
+    assert.deepEqual(result, { state: "completed", error: null });
+    assert.equal(attacker.damageApplications, 0);
+    assert.equal(targetActor.damageApplications, 1);
 });
 
 test("a rejected health cost after a mutation becomes uncertain", async (t) => {
@@ -755,6 +1390,35 @@ test("parallel generic-damage clicks produce one completed application", async (
         damage: 1,
         sourceMessageId: message.id,
     }]);
+});
+
+test("completed damage is persisted before a delayed interruption follow-up resolves", async () => {
+    resetHarness();
+    const actor = new TestActor("damage-before-interruption");
+    let releaseInterruption;
+    const interruptionGate = new Promise((resolve) => {
+        releaseInterruption = resolve;
+    });
+    let interruptionStarted = false;
+    harness.requestContinuousActionInterruptionForDamage = async (request) => {
+        harness.interruptionRequests.push(request);
+        interruptionStarted = true;
+        await interruptionGate;
+    };
+    const message = new TestMessage("damage-before-interruption", { actor });
+    message.system.handleGenericAction = () => actor.consumeCost("health", "1V1");
+    harness.messages.set(message.id, message);
+    const button = actionButton(message, { localaction: "applyDamageToSelf" });
+
+    const operation = handleChatCardAction(clickEvent(), button);
+    while (!interruptionStarted) await Promise.resolve();
+
+    assert.equal(actor.damageApplications, 1);
+    assert.equal(getDamageApplicationState(message), "completed");
+    assert.equal(message.flags[MODULE_ID].damageApplication.state, "completed");
+
+    releaseInterruption();
+    await operation;
 });
 
 test("remote multi-target damage is completed only after every observed health cost", async () => {

@@ -25,6 +25,7 @@ import {
 import {
     beginContinuousAction,
     completeContinuousAction,
+    requiredStandUpStartingPosition,
 } from "./continuous-action.js";
 
 import {
@@ -35,6 +36,14 @@ import {
     readTokenMovementDistance,
 } from "../../shared/movement.js";
 
+import {
+    resolveCombatPosition,
+} from "../../shared/combat-position-state.js";
+
+import {
+    requireOpenCombatFlowForTicks,
+} from "./flow-guard.js";
+
 const SELECTABLE_DURATION_ACTIONS = new Set(["aim", "searchOpening"]);
 const SHIELD_BASH_MANEUVERS = Object.freeze([]);
 const WRONG_HAND_TICK_PENALTY = 2;
@@ -44,8 +53,12 @@ const TWO_WEAPON_FIGHTING_KEYS = new Set(["kampfmitzweiwaffen", "twoweaponfighti
 export async function performTickAction(context, actionId, requestedTicks = "custom") {
     const action = COMBAT_TICK_ACTIONS.find((candidate) => candidate.id === actionId);
     if (!action || action.actionable === false) return false;
+    if (!requireOpenCombatFlowForTicks(context)) return false;
     context = liveTickActionContext(context);
     if (!context) return false;
+
+    const positionCheck = await checkStandUpStartingPosition(context, action);
+    if (!positionCheck.confirmed) return false;
 
     const startTick = liveCombatantInitiative(context);
     let completed;
@@ -93,6 +106,7 @@ export async function performTickAction(context, actionId, requestedTicks = "cus
     if (completed && action.kind === "continuous" && !continuousActionManaged) {
         const continuousAction = await beginContinuousAction(context, {
             actionId: action.id,
+            startingCombatPosition: positionCheck.startingCombatPosition,
             startTick,
             endTick: liveCombatantInitiative(context),
         });
@@ -104,6 +118,34 @@ export async function performTickAction(context, actionId, requestedTicks = "cus
         }
     }
     return completed;
+}
+
+async function checkStandUpStartingPosition(context, action) {
+    const requiredPosition = requiredStandUpStartingPosition(action.id);
+    if (!requiredPosition) return { confirmed: true, startingCombatPosition: null };
+
+    const currentPosition = resolveCombatPosition(context.actor);
+    if (!currentPosition.ambiguous && currentPosition.id === requiredPosition) {
+        return { confirmed: true, startingCombatPosition: requiredPosition };
+    }
+
+    const currentLabel = currentPosition.ambiguous
+        ? t("SMOOTHER_FIGHT.HUD.CombatPositionConflict")
+        : t(`SMOOTHER_FIGHT.HUD.CombatPositions.${currentPosition.id}`);
+    const requiredLabel = t(`SMOOTHER_FIGHT.HUD.CombatPositions.${requiredPosition}`);
+    const title = t("SMOOTHER_FIGHT.HUD.StandUpPositionMismatchTitle");
+    const content = t("SMOOTHER_FIGHT.HUD.StandUpPositionMismatchConfirm", {
+        action: actionName(action),
+        current: currentLabel,
+        required: requiredLabel,
+    });
+    const DialogV2 = globalThis.foundry?.applications?.api?.DialogV2;
+    const confirmed = DialogV2?.confirm
+        ? await DialogV2.confirm({ window: { title }, content: `<p>${escapeHtml(content)}</p>` })
+        : globalThis.Dialog?.confirm
+            ? await globalThis.Dialog.confirm({ title, content: `<p>${escapeHtml(content)}</p>` })
+            : false;
+    return { confirmed: Boolean(confirmed), startingCombatPosition: null };
 }
 
 function liveTickActionContext(context) {
@@ -147,7 +189,14 @@ async function performTimedPreparation(context, action) {
             ticks: actualTicks,
             target: targetName(context),
         }),
+        descriptionKey: `SMOOTHER_FIGHT.HUD.TickActions.${action.id}.ChatDescription`,
+        descriptionData: {
+            ticks: actualTicks,
+            target: targetName(context),
+        },
         special: t(`SMOOTHER_FIGHT.HUD.TickActions.${action.id}.ChatSpecial`, { bonus }),
+        specialKey: `SMOOTHER_FIGHT.HUD.TickActions.${action.id}.ChatSpecial`,
+        specialData: { bonus },
         targetActorUuid: action.id === "aim" ? context.target?.actor?.uuid ?? null : null,
         targetName: action.id === "aim" ? targetName(context) : null,
         targetTokenUuid: action.id === "aim" ? context.target?.uuid ?? null : null,
@@ -186,6 +235,11 @@ async function performDisengage(context, action) {
             skill: choice.label,
             target: targetName(context),
         }),
+        specialKey: "SMOOTHER_FIGHT.HUD.TickActionDisengageChat",
+        specialData: {
+            skill: choice.label,
+            target: targetName(context),
+        },
     });
 }
 
@@ -333,10 +387,15 @@ async function performEvasiveLeap(context, action) {
     });
     if (!rollMessage) return false;
     const outcome = skillCheckOutcome(rollMessage);
-    const special = outcome.succeeded
-        ? t("SMOOTHER_FIGHT.HUD.TickActionEvasiveLeapSuccess", { reduction: outcome.reduction })
-        : t("SMOOTHER_FIGHT.HUD.TickActionEvasiveLeapFailure");
-    return createCardThenAdvance(context, action.id, action.ticks, { special });
+    return createCardThenAdvance(context, action.id, action.ticks, {
+        special: outcome.succeeded
+            ? t("SMOOTHER_FIGHT.HUD.TickActionEvasiveLeapSuccess", { reduction: outcome.reduction })
+            : t("SMOOTHER_FIGHT.HUD.TickActionEvasiveLeapFailure"),
+        specialKey: outcome.succeeded
+            ? "SMOOTHER_FIGHT.HUD.TickActionEvasiveLeapSuccess"
+            : "SMOOTHER_FIGHT.HUD.TickActionEvasiveLeapFailure",
+        specialData: outcome.succeeded ? { reduction: outcome.reduction } : null,
+    });
 }
 
 async function performEscapeGrapple(context, action) {
@@ -365,6 +424,11 @@ async function performEscapeGrapple(context, action) {
             difficulty: choice.difficulty,
             skill: choice.label,
         }),
+        specialKey: "SMOOTHER_FIGHT.HUD.TickActionEscapeGrappleChat",
+        specialData: {
+            difficulty: choice.difficulty,
+            skill: choice.label,
+        },
     });
 }
 

@@ -17,7 +17,9 @@ import {
 
 const damageApplicationLocks = new Set();
 const defenseNumbingDamageLocks = new Set();
+const remoteDefenseNumbingDamageRequests = new Map();
 const remoteDamageApplicationTimers = new Map();
+const remoteDamageFinalizationRequests = new Map();
 const staleDamageApplicationTimers = new Map();
 const DAMAGE_APPLICATION_STATES = new Set(["idle", "applying", "completed", "uncertain"]);
 const DAMAGE_APPLICATION_STALE_AFTER_MS = 30_000;
@@ -49,9 +51,13 @@ export async function withTrackedDamageApplication(message, callback, action = "
         }
 
         const outcomes = await Promise.all(application.completionPromises);
-        await requestContinuousActionInterruptions(message, outcomes);
         if (callbackError) {
-            await setDamageApplicationState(message, damageFailureState(outcomes));
+            const failureState = damageFailureState(outcomes);
+            try {
+                await setDamageApplicationState(message, failureState);
+            } finally {
+                await requestContinuousActionInterruptions(message, outcomes);
+            }
             throw callbackError;
         }
         if (!outcomes.length) {
@@ -63,13 +69,19 @@ export async function withTrackedDamageApplication(message, callback, action = "
                 await setDamageApplicationState(message, "completed");
             } catch (error) {
                 await persistUncertainDamageState(message, error);
+                await requestContinuousActionInterruptions(message, outcomes);
                 throw error;
             }
+            await requestContinuousActionInterruptions(message, outcomes);
             return callbackResult;
         }
 
         const failureState = damageFailureState(outcomes);
-        await setDamageApplicationState(message, failureState);
+        try {
+            await setDamageApplicationState(message, failureState);
+        } finally {
+            await requestContinuousActionInterruptions(message, outcomes);
+        }
         throw outcomes.find((outcome) => outcome.error)?.error ?? new Error("Damage cost application failed");
     } finally {
         if (application) services.removePendingDamageApplication(application);
@@ -123,6 +135,11 @@ async function persistUncertainDamageState(message, originalError) {
 function damageApplicationActorUuids(message, action) {
     const actorUuids = new Set();
     const normalized = String(action ?? "").trim().toLocaleLowerCase();
+    if (normalized === "applydamagetoself") {
+        const speakerActorUuid = services.resolveSpeakerActor(message)?.uuid;
+        if (speakerActorUuid) actorUuids.add(speakerActorUuid);
+        return actorUuids;
+    }
     if (normalized === "applydamagetotargets") {
         for (const target of game.user?.targets ?? []) {
             const actorUuid = target?.document?.actor?.uuid ?? target?.actor?.uuid;
@@ -186,6 +203,7 @@ export async function setDamageApplicationState(message, state, metadata = {}) {
 }
 
 export function getNumbingDamageApplicationState(message, now = Date.now()) {
+    if (defenseNumbingDamageLocks.has(message?.id)) return "applying";
     const context = services.getMessageContext(message) ?? {};
     const record = context.numbingDamageApplication;
     if (DAMAGE_APPLICATION_STATES.has(record?.state)) {
@@ -247,16 +265,94 @@ function clearStaleDamageRender(key) {
 }
 
 export async function applyDefenseNumbingDamage(message, fallbackDamage) {
+    if (!game.user?.isGM) return requestRemoteDefenseNumbingDamage(message, fallbackDamage);
+    return applyDefenseNumbingDamageForUser(message, fallbackDamage, game.user);
+}
+
+function requestRemoteDefenseNumbingDamage(message, fallbackDamage) {
+    const actor = services.resolveSpeakerActor(message);
+    const context = services.getMessageContext(message) ?? {};
+    const damage = Math.max(0, Number.parseInt(context.numbingDamage ?? fallbackDamage, 10) || 0);
+    if (!message?.id || !actor || !damage || !services.mayUserApplyDamageToActor(game.user, actor)) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseDamageNotAllowed"));
+        return false;
+    }
+    if (defenseNumbingDamageLocks.has(message.id) || getNumbingDamageApplicationState(message) !== "idle") return false;
+    const gm = services.getActivePrimaryGm();
+    if (!gm) {
+        ui.notifications.warn(localizeSystem("splittermond.chatCard.noGMConnected", "Kein GM verbunden."));
+        return false;
+    }
+
+    const requestId = createDamageAttemptId();
+    defenseNumbingDamageLocks.add(message.id);
+    services.scheduleRender(0);
+    return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+            remoteDefenseNumbingDamageRequests.delete(requestId);
+            defenseNumbingDamageLocks.delete(message.id);
+            ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+            services.scheduleRender(0);
+            resolve(false);
+        }, REMOTE_DAMAGE_APPLICATION_TIMEOUT_MS);
+        timeoutId?.unref?.();
+        remoteDefenseNumbingDamageRequests.set(requestId, {
+            gmId: gm.id,
+            messageId: message.id,
+            resolve,
+            timeoutId,
+        });
+        game.socket.emit(SOCKET, {
+            type: "defense-numbing-damage-request",
+            senderId: game.user.id,
+            recipientId: gm.id,
+            requestId,
+            messageId: message.id,
+            damage,
+        });
+    });
+}
+
+export async function applyRemoteDefenseNumbingDamage(message, fallbackDamage, user) {
+    if (!game.user?.isGM || !message || !user) return { state: "idle", error: "invalid" };
+    const actor = services.resolveSpeakerActor(message);
+    if (!actor || !services.mayUserApplyDamageToActor(user, actor)) {
+        return { state: getNumbingDamageApplicationState(message), error: "not-allowed" };
+    }
+    try {
+        await applyDefenseNumbingDamageForUser(message, fallbackDamage, user);
+        return { state: getNumbingDamageApplicationState(message), error: null };
+    } catch (error) {
+        console.error(`${MODULE_ID} | Remote defense stun damage failed`, error);
+        return { state: getNumbingDamageApplicationState(message), error: "failed" };
+    }
+}
+
+export function finishRemoteDefenseNumbingDamage(payload, sender) {
+    const request = remoteDefenseNumbingDamageRequests.get(payload?.requestId);
+    if (!request
+        || sender?.id !== request.gmId
+        || payload?.messageId !== request.messageId) return false;
+    clearTimeout(request.timeoutId);
+    remoteDefenseNumbingDamageRequests.delete(payload.requestId);
+    defenseNumbingDamageLocks.delete(request.messageId);
+    if (payload.error) ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+    services.scheduleRender(0);
+    request.resolve(!payload.error && payload.state === "completed");
+    return true;
+}
+
+async function applyDefenseNumbingDamageForUser(message, fallbackDamage, user) {
     if (defenseNumbingDamageLocks.has(message.id)) return;
     const actor = services.resolveSpeakerActor(message);
-    if (!actor || !(game.user.isGM || actor.isOwner)) {
+    if (!actor || !services.mayUserApplyDamageToActor(user, actor)) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseDamageNotAllowed"));
-        return;
+        return false;
     }
     const context = services.getMessageContext(message) ?? {};
-    if (getNumbingDamageApplicationState(message) !== "idle") return;
+    if (getNumbingDamageApplicationState(message) !== "idle") return false;
     const damage = Math.max(0, Number.parseInt(context.numbingDamage ?? fallbackDamage, 10) || 0);
-    if (!damage) return;
+    if (!damage) return false;
 
     defenseNumbingDamageLocks.add(message.id);
     const previousHealthCost = healthCostTotal(actor.system?.health);
@@ -281,6 +377,7 @@ export async function applyDefenseNumbingDamage(message, fallbackDamage) {
         }
         ui.notifications.info(t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageApplied", { damage, name: actor.name }));
         services.scheduleRender(0);
+        return true;
     } finally {
         defenseNumbingDamageLocks.delete(message.id);
     }
@@ -292,6 +389,101 @@ export async function applyDamageToLinkedTarget(message, actionData, target = re
     await services.withTemporarySystemTargets([target], () =>
         message.system.handleGenericAction({ ...actionData, action: "applyDamageToTargets" })
     );
+}
+
+export async function applyOwnedSelfDamage(message, actionData, target) {
+    if (!message?.id || !target?.actor || damageApplicationLocks.has(message.id) || isDamageApplicationBlocked(message)) return;
+    const gm = services.getActivePrimaryGm();
+    if (!gm) {
+        ui.notifications.warn(localizeSystem("splittermond.chatCard.noGMConnected", "Kein GM verbunden."));
+        return;
+    }
+
+    damageApplicationLocks.add(message.id);
+    const application = {
+        messageId: message.id,
+        actorUuids: new Set([target.actor.uuid].filter(Boolean)),
+        completionPromises: [],
+    };
+    services.addPendingDamageApplication(application);
+    let callbackResult;
+    let callbackError = null;
+    try {
+        try {
+            callbackResult = await services.withTemporarySystemTargets([target], () =>
+                message.system.handleGenericAction({ ...actionData, action: "applyDamageToTargets" })
+            );
+        } catch (error) {
+            callbackError = error;
+        }
+        const outcomes = await Promise.all(application.completionPromises);
+        if (!outcomes.length) {
+            if (callbackError) throw callbackError;
+            return callbackResult;
+        }
+        const state = callbackError
+            ? damageFailureState(outcomes)
+            : outcomes.every((outcome) => outcome.status === "completed") ? "completed" : damageFailureState(outcomes);
+        let finalizationError = null;
+        if (state !== "idle") {
+            const result = await requestRemoteDamageFinalization(message, target, state, gm);
+            if (result?.error || result?.state !== state) {
+                finalizationError = callbackError ?? new Error("Damage application finalization failed");
+            }
+        }
+        await requestContinuousActionInterruptions(message, outcomes);
+        if (finalizationError) throw finalizationError;
+        if (callbackError) throw callbackError;
+        if (state === "idle") throw outcomes.find((outcome) => outcome.error)?.error ?? new Error("Damage cost application failed");
+        return callbackResult;
+    } finally {
+        services.removePendingDamageApplication(application);
+        damageApplicationLocks.delete(message.id);
+    }
+}
+
+function requestRemoteDamageFinalization(message, target, state, gm) {
+    const requestId = createDamageAttemptId();
+    return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+            remoteDamageFinalizationRequests.delete(requestId);
+            resolve({ state: "uncertain", error: "timeout" });
+        }, REMOTE_DAMAGE_APPLICATION_TIMEOUT_MS);
+        timeoutId?.unref?.();
+        remoteDamageFinalizationRequests.set(requestId, { gmId: gm.id, messageId: message.id, resolve, timeoutId });
+        game.socket.emit(SOCKET, {
+            type: "damage-application-completed",
+            senderId: game.user.id,
+            recipientId: gm.id,
+            requestId,
+            messageId: message.id,
+            actorUuid: target.actor.uuid ?? null,
+            tokenUuid: target.uuid ?? null,
+            state,
+        });
+    });
+}
+
+export async function finalizeRemoteDamageApplication(message, payload, user) {
+    const state = payload?.state === "uncertain" ? "uncertain" : payload?.state === "completed" ? "completed" : null;
+    const target = resolveDamageApplicationTarget(message);
+    const submittedTarget = services.resolveToken(payload?.tokenUuid);
+    const actor = submittedTarget?.actor ?? null;
+    const exactTarget = Boolean(target?.actor && actor
+        && target.uuid === submittedTarget.uuid
+        && target.actor.uuid === actor.uuid
+        && (!payload?.actorUuid || actor.uuid === payload.actorUuid));
+    if (!state || !exactTarget || !services.mayUserApplyDamageToActor(user, actor)) {
+        return { state: getDamageApplicationState(message), error: "not-allowed" };
+    }
+    try {
+        await setDamageApplicationState(message, state, { initiatedBy: user.id });
+        services.scheduleRender(0);
+        return { state, error: null };
+    } catch (error) {
+        console.error(`${MODULE_ID} | Could not finalize client-owned damage application`, error);
+        return { state: getDamageApplicationState(message), error: "failed" };
+    }
 }
 
 export function validateLinkedDamageTarget(message, user, notify = false) {
@@ -341,14 +533,12 @@ export async function applyRemoteDamageApplication(message, actionData, user) {
     const normalized = String(action).trim().toLocaleLowerCase();
     const appliesToSelf = normalized === "applydamagetoself";
     const targets = appliesToSelf
-        ? []
+        ? [resolveDamageApplicationTarget(message)].filter(Boolean)
         : normalized === "applydamagetotargets"
             ? services.getTargetSelectionForUser(user).targets
             : [resolveDamageApplicationTarget(message)].filter(Boolean);
-    const targetActors = appliesToSelf
-        ? [services.resolveSpeakerActor(message)].filter(Boolean)
-        : targets.map((target) => target?.actor).filter(Boolean);
-    if (!targetActors.length || (!appliesToSelf && targetActors.length !== targets.length)) {
+    const targetActors = targets.map((target) => target?.actor).filter(Boolean);
+    if (!targetActors.length || targetActors.length !== targets.length) {
         return { state: "idle", error: "missing-target" };
     }
     if (!targetActors.every((actor) => services.mayUserApplyDamageToActor(user, actor))) {
@@ -356,13 +546,12 @@ export async function applyRemoteDamageApplication(message, actionData, user) {
     }
 
     try {
-        if (appliesToSelf) {
-            await withTrackedDamageApplication(message, () => message.system.handleGenericAction(actionData), action);
-        } else {
-            await services.withTemporarySystemTargets(targets, () =>
-                withTrackedDamageApplication(message, () => message.system.handleGenericAction(actionData), action)
-            );
-        }
+        const appliedAction = normalized === "applydamagetotargets"
+            ? actionData
+            : { ...actionData, action: "applyDamageToTargets" };
+        await services.withTemporarySystemTargets(targets, () =>
+            withTrackedDamageApplication(message, () => message.system.handleGenericAction(appliedAction), appliedAction.action)
+        );
         if (getDamageApplicationState(message) === "completed") await refreshDamageMessageContent(message);
         return { state: getDamageApplicationState(message), error: null };
     } catch (error) {
@@ -382,6 +571,14 @@ async function refreshDamageMessageContent(message) {
 }
 
 export function finishRemoteDamageApplication(messageId, result = {}) {
+    const finalization = remoteDamageFinalizationRequests.get(result.requestId);
+    if (finalization && finalization.messageId === messageId) {
+        clearTimeout(finalization.timeoutId);
+        remoteDamageFinalizationRequests.delete(result.requestId);
+        finalization.resolve(result);
+        services.scheduleRender(0);
+        return;
+    }
     clearRemoteDamageApplicationTimer(messageId);
     damageApplicationLocks.delete(messageId);
     if (result.error === "missing-target") ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageTargetMissing"));

@@ -8,11 +8,14 @@ import {
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/continuous-action.js";
 import {
     bindContinuousActionInterruptionCard,
+    canCurrentUserRollContinuousActionInterruption,
     clearContinuousActionInterruptionForDeletedCard,
     confirmContinuousActionInterruptionForActiveDefense,
+    getContinuousActionInterruptionCard,
     getPendingContinuousActionInterruption,
     getPendingContinuousActionInterruptionsForCurrentUser,
     interruptContinuousActionForActiveDefense,
+    isContinuousActionInterruptionPending,
     reconcileContinuousActionInterruptionRoll,
     requestContinuousActionInterruptionForDamage,
     restoreContinuousActionFromInterruptionCard,
@@ -64,6 +67,33 @@ test("damage creates a pending chat and HUD request without rolling Determinatio
     assert.equal(fixture.cards.length, 1);
     assert.match(fixture.cards[0].content, /data-sf-action="roll-continuous-action-interruption"/u);
     assert.match(fixture.cards[0].content, />23</u);
+    assert.deepEqual(getContinuousActionInterruptionCard(fixture.cards[0]), {
+        requestId: request.id,
+        tokenUuid: fixture.token.uuid,
+        sourceMessageId: "damage",
+        combatId: fixture.combat.id,
+        combatantId: fixture.combatant.id,
+        createdAt: request.createdAt,
+    });
+    assert.equal(isContinuousActionInterruptionPending(fixture.cards[0], fixture.combat), true);
+    services.getRuntimeController = () => ({ id: "player" });
+    assert.equal(
+        canCurrentUserRollContinuousActionInterruption(fixture.cards[0], fixture.combat),
+        true,
+        "the responsible runtime controller may roll from the HUD card",
+    );
+    fixture.user.id = "other-player";
+    assert.equal(
+        canCurrentUserRollContinuousActionInterruption(fixture.cards[0], fixture.combat),
+        false,
+        "an unrelated player sees the pending step but may not roll it",
+    );
+    fixture.user.isGM = true;
+    assert.equal(
+        canCurrentUserRollContinuousActionInterruption(fixture.cards[0], fixture.combat),
+        true,
+        "a GM may resolve another player's pending interruption",
+    );
 });
 
 test("deleting an interruption chat card removes only its pending HUD request", async () => {
@@ -164,6 +194,71 @@ test("closing a cancelled Determination dialog releases the request for another 
     assert.equal(rollCalls, 2, "closing the first dialog must release the in-flight roll lock");
     assert.equal(getContinuousAction(fixture.token, fixture.combat), null);
     assert.equal(getPendingContinuousActionInterruption(fixture), null);
+});
+
+test("the rendered chat control is enabled again after cancelling Determination", async () => {
+    const fixture = installFixture();
+    fixture.actor.rollSkill = () => false;
+    const request = await requestContinuousActionInterruptionForDamage({
+        actorUuid: fixture.actor.uuid,
+        tokenUuid: fixture.token.uuid,
+        damage: 4,
+    });
+    const message = fixture.cards.at(-1);
+    let clickListener = null;
+    const button = {
+        dataset: {},
+        disabled: false,
+        isConnected: true,
+        addEventListener(type, listener) {
+            if (type === "click") clickListener = listener;
+        },
+    };
+    const html = {
+        querySelectorAll: (selector) => selector.includes("roll-continuous-action-interruption") ? [button] : [],
+    };
+    bindContinuousActionInterruptionCard(message, html);
+
+    clickListener({ preventDefault() {}, stopImmediatePropagation() {} });
+    assert.equal(button.disabled, true, "the control stays locked while the dialog is open");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(button.disabled, false);
+    assert.equal(getPendingContinuousActionInterruption(fixture)?.id, request.id);
+});
+
+test("an unrelated player does not see the rendered Determination control", async () => {
+    const fixture = installFixture();
+    await requestContinuousActionInterruptionForDamage({
+        actorUuid: fixture.actor.uuid,
+        tokenUuid: fixture.token.uuid,
+        damage: 4,
+    });
+    const message = fixture.cards.at(-1);
+    services.getRuntimeController = () => ({ id: "another-player" });
+    let clickListener = null;
+    const panel = {
+        removed: false,
+        remove() {
+            this.removed = true;
+        },
+    };
+    const button = {
+        dataset: {},
+        disabled: false,
+        closest: (selector) => selector === ".sf-continuous-action-interruption-actions" ? panel : null,
+        addEventListener(type, listener) {
+            if (type === "click") clickListener = listener;
+        },
+    };
+    const html = {
+        querySelectorAll: (selector) => selector.includes("roll-continuous-action-interruption") ? [button] : [],
+    };
+
+    bindContinuousActionInterruptionCard(message, html);
+
+    assert.equal(panel.removed, true);
+    assert.equal(clickListener, null);
 });
 
 test("a Determination result arriving after the closed-dialog grace period stays linked", async (t) => {
@@ -347,7 +442,7 @@ test("a Splinterpoint success restores Aim and Search for an Opening bonuses", a
     }
 });
 
-test("a Splinterpoint success resumes an interrupted movement from its reached milestone", async () => {
+test("a Splinterpoint success resumes an interrupted movement from its actual route position", async () => {
     const fixture = installFixture({ actionId: "walk", completionTrigger: "movement" });
     const plan = {
         version: 1,
@@ -368,6 +463,9 @@ test("a Splinterpoint success resumes an interrupted movement from its reached m
         tokenUuid: fixture.token.uuid,
     };
     fixture.token.flags[MODULE_ID].movementPlan = plan;
+    fixture.token.x = 15;
+    fixture.token.y = 0;
+    fixture.token.elevation = 0;
     const request = await requestContinuousActionInterruptionForDamage({
         actorUuid: fixture.actor.uuid,
         damage: 4,
@@ -378,7 +476,7 @@ test("a Splinterpoint success resumes an interrupted movement from its reached m
     assert.equal(fixture.token.flags[MODULE_ID].movementPlan, null);
     result.message.system.checkReport.succeeded = true;
     assert.equal(await reconcileContinuousActionInterruptionRoll(result.message), true);
-    assert.equal(fixture.token.flags[MODULE_ID].movementPlan.completedFraction, 0.5);
+    assert.equal(fixture.token.flags[MODULE_ID].movementPlan.completedFraction, 0.25);
     assert.ok(getContinuousAction(fixture.token, fixture.combat));
 });
 
@@ -442,6 +540,31 @@ test("standalone active defense interrupts only when the warned player actually 
     assert.equal(defenseRolls, 1);
     assert.equal(getContinuousAction(fixture.token, fixture.combat), null);
     assert.equal(fixture.combatant.initiative, 16);
+});
+
+test("standalone resistance defense also waits for the actual roll before interrupting", async () => {
+    const fixture = installFixture();
+    let defenseRolls = 0;
+    fixture.actor.rollActiveDefense = async () => {
+        defenseRolls += 1;
+        return true;
+    };
+    fixture.actor.activeDefenseDialog = async function () {
+        return {
+            close() {},
+            roll: () => this.rollActiveDefense("bodyresist", { id: "endurance", skill: { id: "endurance" } }),
+        };
+    };
+    services.confirmContinuousActionInterruptionForActiveDefense = confirmContinuousActionInterruptionForActiveDefense;
+    services.interruptContinuousActionForActiveDefense = interruptContinuousActionForActiveDefense;
+
+    const dialog = await beginStandaloneActiveDefense(fixture, "kw");
+
+    assert.equal(fixture.confirmations.length, 1);
+    assert.ok(getContinuousAction(fixture.token, fixture.combat));
+    await dialog.roll();
+    assert.equal(defenseRolls, 1);
+    assert.equal(getContinuousAction(fixture.token, fixture.combat), null);
 });
 
 function installFixture({ actionId = "coordinate", completionTrigger = "tick" } = {}) {

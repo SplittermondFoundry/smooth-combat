@@ -135,7 +135,10 @@ export function syncMinimizedHudPosition(hud, minimized) {
 }
 
 export function isUnmodifiedKeyAvailable(key) {
-    const customBindings = game.settings.get("core", "keybindings") ?? {};
+    const coreKeybindingsRegistered = game.settings?.settings?.has?.("core.keybindings") === true;
+    const customBindings = coreKeybindingsRegistered
+        ? game.settings.get("core", "keybindings") ?? {}
+        : {};
     for (const [actionId, config] of game.keybindings.actions ?? []) {
         const editable = Object.hasOwn(customBindings, actionId) ? customBindings[actionId] : config.editable;
         const bindings = [...(config.uneditable ?? []), ...(editable ?? [])];

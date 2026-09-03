@@ -1,12 +1,28 @@
 import { services } from "../../core/services.js";
 
+import { getApplicableCombat } from "../../core/combat-compatibility.js";
+
 import {
     enforceOffenseDefensePhaseControls,
     handleRenderedOffenseFollowUp,
     isOffenseFollowUpControl,
     mayControlSpeakerActor,
-    removeOutgoingDamageControls,
 } from "./actions.js";
+
+import {
+    removeOutgoingDamageControls,
+    suppressCompletedOffenseControls,
+} from "./completed-offense-controls.js";
+
+import {
+    ensureSpellReleaseTickControl,
+    isTickAdvanceControl,
+    synchronizeCombatWorkflowTickActionState,
+} from "./tick-flow.js";
+
+import {
+    synchronizeLegacyTickActionState,
+} from "./legacy-ticks.js";
 
 import {
     hasSplittermondCheckUpdate,
@@ -20,6 +36,10 @@ import {
 import {
     t,
 } from "../../shared/values.js";
+
+import {
+    localizeTickActionChatCard,
+} from "./tick-action-localization.js";
 
 export async function onCreateChatMessage(message) {
     try {
@@ -145,7 +165,7 @@ export function isDiceAnimationPending(message) {
 async function attachCombatContext(message) {
     if (services.getMessageContext(message) || !services.isOwnMessage(message)) return;
     const createdAt = Date.now();
-    const combat = game.combat;
+    const combat = getApplicableCombat();
     const combatants = Array.from(combat?.combatants ?? []);
     const speakerCombatant = (message.speaker?.token
         ? combatants.find((combatant) => combatant.tokenId === message.speaker.token)
@@ -176,6 +196,9 @@ async function attachCombatContext(message) {
         outOfTurn: Boolean(activeCombatant && speakerCombatant && activeCombatant.id !== speakerCombatant.id),
         assignedUserId: assignedUser?.id ?? null,
         runtimeControllerId: runtimeController?.id ?? game.user.id,
+        attackerInitiativeAtCreation: Number.isFinite(Number(speakerCombatant?.initiative))
+            ? Number(speakerCombatant.initiative)
+            : null,
         initialCheckSucceeded: message.system?.checkReport?.succeeded === true,
         defensePhase: services.initialDefensePhaseForOffense(message),
         createdAt,
@@ -239,7 +262,7 @@ function captureSystemActiveDefense(message, html) {
             event.preventDefault();
             event.stopImmediatePropagation();
             button.disabled = true;
-            void services.requestActiveDefenseDecline(message).then((requested) => {
+            void services.requestActiveDefenseDecline(message, button.dataset.defenderTokenUuid ?? null).then((requested) => {
                 if (!requested && button.isConnected) button.disabled = false;
             }).catch((error) => {
                 console.error(`${MODULE_ID} | Declining active defense failed`, error);
@@ -253,7 +276,10 @@ function captureSystemActiveDefense(message, html) {
 function captureSystemOffenseFollowUps(message, html) {
     if (!html || !isOffensiveCombatMessage(message)) return;
     for (const button of html.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks]")) {
-        if (!isOffenseFollowUpControl(button) || button.disabled || button.dataset.smootherFightFollowUpCaptured) continue;
+        if (!isOffenseFollowUpControl(button)
+            || button.disabled
+            || button.dataset.smootherFightTickFlowCaptured
+            || button.dataset.smootherFightFollowUpCaptured) continue;
         button.dataset.smootherFightFollowUpCaptured = "true";
         button.addEventListener("click", (event) => {
             event.preventDefault();
@@ -270,15 +296,61 @@ function captureSystemOffenseFollowUps(message, html) {
     }
 }
 
+function captureSystemTickFlowControls(message, html) {
+    if (!html) return;
+    for (const button of html.querySelectorAll(".splittermond-chat-action, .add-tick[data-ticks]")) {
+        if (!isTickAdvanceControl(button) || button.disabled || button.dataset.smootherFightTickFlowCaptured) continue;
+        button.dataset.smootherFightTickFlowCaptured = "true";
+        button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            const operation = handleRenderedOffenseFollowUp(event, button, message);
+            button.disabled = true;
+            void operation.catch((error) => {
+                console.error(`${MODULE_ID} | Tick action failed`, error);
+                ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+            }).finally(() => {
+                resynchronizeCapturedTickControl(button, message);
+            });
+        }, { capture: true });
+    }
+}
+
+export function resynchronizeCapturedTickControl(button, message) {
+    if (!button?.isConnected) return false;
+    button.disabled = false;
+    const elements = new Set();
+    const localElement = button.closest?.("[data-message-id], .message-content, .sf-chat-message, .chat-message")
+        ?? button.parentElement;
+    if (localElement) elements.add(localElement);
+    const messageId = String(message?.id ?? "");
+    if (messageId) {
+        for (const element of globalThis.document?.querySelectorAll?.("[data-message-id]") ?? []) {
+            if (element.dataset?.messageId === messageId) elements.add(element);
+        }
+    }
+    for (const element of elements) {
+        synchronizeLegacyTickActionState(element, message);
+        synchronizeCombatWorkflowTickActionState(element, message);
+    }
+    return true;
+}
+
 export function prepareRenderedChatMessage(message, html) {
     if (!html) return;
+    localizeTickActionChatCard(message, html);
+    ensureSpellReleaseTickControl(html, message);
     if (services.isFumbleTableMessage(message) && !services.getFumbleData(message)) void services.attachFumbleActions(message, html);
     if (!mayControlSpeakerActor(message)) {
         removeOutgoingDamageControls(html);
         html.querySelectorAll(".splittermond-chat-action-container:not(:has(.splittermond-chat-action))").forEach((container) => container.remove());
     }
+    suppressCompletedOffenseControls(html, message);
     enforceOffenseDefensePhaseControls(html, message);
+    synchronizeLegacyTickActionState(html, message);
+    synchronizeCombatWorkflowTickActionState(html, message);
     captureSystemActiveDefense(message, html);
+    captureSystemTickFlowControls(message, html);
     captureSystemOffenseFollowUps(message, html);
     services.bindContinuousActionInterruptionCard?.(message, html);
     services.bindFumbleActions(message, html);

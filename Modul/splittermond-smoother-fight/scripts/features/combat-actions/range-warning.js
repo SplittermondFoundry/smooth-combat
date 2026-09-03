@@ -1,6 +1,7 @@
 import {
     assessAttackRange,
     assessSpellRange,
+    hasSorcerersHandForSpell,
 } from "../../domain/combat/range.js";
 
 import {
@@ -34,7 +35,11 @@ export function warnIfSpellOutOfRange(context, spell) {
     const assessment = assessSpellRange(
         measurement.distance,
         spell?.range ?? spell?.system?.range,
-        { metric: measurement.metric }
+        {
+            metric: measurement.metric,
+            adjacent: measurement.adjacent,
+            casterHasSorcerersHand: hasSorcerersHandForSpell(context.actor, spell),
+        }
     );
     return warnIfOutside(assessment, measurement, spell, "SpellRangeWarning");
 }
@@ -46,14 +51,17 @@ function actionMeasurement(context) {
 
 function warnIfOutside(assessment, measurement, action, translationKey) {
     if (assessment.status !== "outside") return assessment;
+    const listedRange = action?.range ?? action?.system?.range;
     globalThis.ui?.notifications?.warn?.(t(`SMOOTHER_FIGHT.HUD.${translationKey}`, {
         action: action?.name ?? "–",
         distance: formatTokenDistance(measurement),
-        range: formatTokenDistance({
-            available: true,
-            distance: assessment.maximum,
-            unit: measurement.unit,
-        }),
+        range: assessment.maximum === null
+            ? String(listedRange ?? "–")
+            : formatTokenDistance({
+                available: true,
+                distance: assessment.maximum,
+                unit: measurement.unit,
+            }),
     }));
     return assessment;
 }

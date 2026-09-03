@@ -4,6 +4,7 @@ export const activeDefenseState = {
     pendingDefenseTimers: new Map(),
     pendingDefenseCleanups: new Map(),
     rollingDefenses: new Map(),
+    publishedPendingDefenses: new Map(),
     claimedDefenses: new Map(),
     processingDefenseMessages: new Map(),
     attackProcessingQueues: new Map(),

@@ -5,6 +5,7 @@ import { configureServices } from "../Modul/splittermond-smoother-fight/scripts/
 import {
     movementActionMilestones,
     movementDueMilestones,
+    movementFractionAtPosition,
     movementInterruptionMilestone,
     movementPathThroughFractions,
     movementTrackerState,
@@ -13,6 +14,7 @@ import { revertTokenMovement } from "../Modul/splittermond-smoother-fight/script
 import {
     abortMovementPlan,
     advancePendingMovements,
+    applyRemoteMovementPlanAbort,
     cancelMovementPlanAfterManualMove,
     clearMovementRoutePreview,
     clearTemporaryMovementRoutePreview,
@@ -25,6 +27,9 @@ import {
     togglePersistentMovementRoutePreview,
     toggleMovementRoutePreview,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement.js";
+import {
+    finishRemoteMovementPlanAbort,
+} from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement-abort-requests.js";
 import {
     movementRoutePreviewModel,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement-preview.js";
@@ -42,6 +47,8 @@ configureServices({
     getActivePrimaryGm: () => movementHarness.primaryGm,
     getControlledTokenDocument: () => movementHarness.controlledToken,
     getRuntimeController: () => movementHarness.runtimeController,
+    isTokenPerceivableByUser: (...args) => movementHarness.isTokenPerceivableByUser?.(...args) ?? true,
+    resolveToken: (...args) => movementHarness.resolveToken?.(...args) ?? null,
     highlightToken: (...args) => movementHarness.highlightToken?.(...args),
     clearHoveredToken: (...args) => movementHarness.clearHoveredToken?.(...args),
 });
@@ -122,6 +129,9 @@ test("movement milestones and route slices follow the GRW timing and measured pa
     assert.equal(movementInterruptionMilestone(interruptionPlan, 17).fraction, 0.75);
     assert.equal(movementInterruptionMilestone(interruptionPlan, 19).fraction, 0.75);
     assert.equal(movementInterruptionMilestone(interruptionPlan, 20).fraction, 1);
+
+    assert.equal(movementFractionAtPosition(route, [10, 30], { x: 100, y: 60 }), 0.7);
+    assert.equal(movementFractionAtPosition(route, [10, 30], { x: 140, y: 60 }), null);
 });
 
 test("movement tracker renders three sections, action buttons, excess, and undo", () => {
@@ -315,9 +325,8 @@ test("the selected token HUD aborts movement at the nearest segment and resolves
     const fixture = scheduledMovementFixture("sprint");
     await performTrackedMovementAction(fixture.context, { id: "sprint", ticks: 10 });
     fixture.combat.currentTick = 5;
-    const player = { id: "player", isGM: false };
     fixture.token.actor = { isOwner: true };
-    movementHarness.runtimeController = player;
+    movementHarness.runtimeController = fixture.primaryGm;
 
     const originalHTMLElement = globalThis.HTMLElement;
     const originalDocument = globalThis.document;
@@ -362,7 +371,7 @@ test("the selected token HUD aborts movement at the nearest segment and resolves
     }
 
     try {
-        globalThis.game.user = player;
+        globalThis.game.user = fixture.primaryGm;
         globalThis.HTMLElement = FakeElement;
         globalThis.document = { createElement: () => new FakeElement() };
         const root = new FakeElement();
@@ -500,6 +509,69 @@ test("route labels round floating-point ticks to whole numbers", async () => {
     assert.equal(model.milestones[0].tickOffset, 3);
 });
 
+test("planned routes are public by default and the world option restricts them to the responsible player and GM", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+
+    const originalCanvas = globalThis.canvas;
+    const originalPixi = globalThis.PIXI;
+    const originalSettings = globalThis.game.settings;
+    const originalUser = globalThis.game.user;
+    const canvasInterface = new FakePixiContainer();
+    const player = { id: "player", isGM: false };
+    let privateMovementRoutes = false;
+    globalThis.canvas = { grid: { size: 100 }, interface: canvasInterface, stage: { scale: { x: 1 } } };
+    globalThis.PIXI = {
+        Container: FakePixiContainer,
+        Graphics: FakePixiGraphics,
+        Text: FakePixiText,
+    };
+    globalThis.game.settings = {
+        get: (_moduleId, key) => {
+            if (key === "showMovementRoutesByDefault") return true;
+            if (key === "privateMovementRoutes") return privateMovementRoutes;
+            return false;
+        },
+    };
+    globalThis.game.user = player;
+    fixture.token.actor = { isOwner: false };
+    movementHarness.runtimeController = { id: "another-player", isGM: false };
+    movementHarness.isTokenPerceivableByUser = () => true;
+    t.after(() => {
+        clearMovementRoutePreview();
+        globalThis.canvas = originalCanvas;
+        globalThis.PIXI = originalPixi;
+        globalThis.game.settings = originalSettings;
+        globalThis.game.user = originalUser;
+        movementHarness.runtimeController = null;
+        movementHarness.isTokenPerceivableByUser = null;
+    });
+
+    assert.equal(syncDefaultMovementRoutePreviews(fixture.combat, { reconsider: true }), true);
+    assert.equal(isMovementRoutePreviewVisible(fixture.token), true, "an unrelated player sees the route by default");
+
+    movementHarness.isTokenPerceivableByUser = () => false;
+    assert.equal(syncDefaultMovementRoutePreviews(fixture.combat, { reconsider: true }), true);
+    assert.equal(isMovementRoutePreviewVisible(fixture.token), false, "a route does not reveal an imperceptible token");
+    movementHarness.isTokenPerceivableByUser = () => true;
+    assert.equal(syncDefaultMovementRoutePreviews(fixture.combat, { reconsider: true }), true);
+
+    privateMovementRoutes = true;
+    assert.equal(syncDefaultMovementRoutePreviews(fixture.combat, { reconsider: true }), true);
+    assert.equal(isMovementRoutePreviewVisible(fixture.token), false, "the private world option removes a foreign route");
+
+    fixture.token.actor.isOwner = true;
+    movementHarness.runtimeController = player;
+    assert.equal(syncDefaultMovementRoutePreviews(fixture.combat, { reconsider: true }), true);
+    assert.equal(isMovementRoutePreviewVisible(fixture.token), true, "the responsible player retains the private route");
+
+    clearMovementRoutePreview(fixture.token);
+    fixture.token.actor.isOwner = false;
+    globalThis.game.user = fixture.primaryGm;
+    assert.equal(syncDefaultMovementRoutePreviews(fixture.combat, { reconsider: true }), true);
+    assert.equal(isMovementRoutePreviewVisible(fixture.token), true, "the GM retains the private route");
+});
+
 test("multiple default route previews coexist, identify their tokens, and highlight on hover", async (t) => {
     const first = scheduledMovementFixture("walk", {
         combatId: "combat-multi",
@@ -633,6 +705,221 @@ test("movement progression rechecks ticks crossed during an active animation", a
     ]);
 });
 
+test("unmarked internal updates from a multi-waypoint Foundry move do not cancel its movement plan", async () => {
+    let fixture;
+    let internalCancellation;
+    fixture = scheduledMovementFixture("sprint", {
+        beforeMove: async (waypoints) => {
+            assert.deepEqual(waypoints.map(({ x }) => x), [25, 50, 75]);
+            internalCancellation = cancelMovementPlanAfterManualMove(
+                fixture.token,
+                {},
+                fixture.primaryGm.id,
+            );
+            assert.equal(await internalCancellation, false);
+        },
+    });
+    await performTrackedMovementAction(fixture.context, { id: "sprint", ticks: 10 });
+
+    fixture.combat.currentTick = 8;
+    assert.equal(await advancePendingMovements(fixture.combat), true);
+    assert.equal(await internalCancellation, false);
+    assert.equal(fixture.token.x, 75);
+    assert.equal(fixture.plan().completedFraction, 0.75);
+    assert.equal(
+        fixture.token.getFlag("splittermond-smoother-fight", "continuousAction").actionId,
+        "sprint",
+    );
+});
+
+test("a stopped final movement remains pending until the token actually reaches its destination", async () => {
+    const fixture = scheduledMovementFixture("walk", {
+        moveResults: [true, false, true],
+    });
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+
+    fixture.combat.currentTick = 4;
+    assert.equal(await advancePendingMovements(fixture.combat), true);
+    assert.equal(fixture.token.x, 50);
+    assert.equal(fixture.plan().completedFraction, 0.5);
+
+    fixture.combat.currentTick = 6;
+    assert.equal(await advancePendingMovements(fixture.combat), false);
+    assert.equal(fixture.token.x, 50);
+    assert.equal(fixture.plan().completedFraction, 0.5);
+    assert.equal(
+        fixture.token.getFlag("splittermond-smoother-fight", "continuousAction").actionId,
+        "walk",
+        "the action must not complete before the destination is reached"
+    );
+
+    assert.equal(await advancePendingMovements(fixture.combat), true);
+    assert.equal(fixture.token.x, 100);
+    assert.equal(fixture.plan(), null);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+});
+
+test("the destination position completes movement even when Foundry reports a stopped move", async () => {
+    const fixture = scheduledMovementFixture("walk", {
+        moveResults: [true, { completed: false, reachesDestination: true }],
+    });
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+
+    fixture.combat.currentTick = 4;
+    assert.equal(await advancePendingMovements(fixture.combat), true);
+    assert.equal(fixture.token.x, 50);
+
+    fixture.combat.currentTick = 6;
+    assert.equal(await advancePendingMovements(fixture.combat), true);
+    assert.equal(fixture.token.x, 100);
+    assert.equal(fixture.plan(), null);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+});
+
+test("Foundry-confirmed movement accepts a grid-adjusted milestone outside the route projection tolerance", async () => {
+    const fixture = scheduledMovementFixture("walk", {
+        moveResults: [{ completed: true, position: { x: 50, y: 2, elevation: 0 } }],
+    });
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+
+    fixture.combat.currentTick = 4;
+    assert.equal(await advancePendingMovements(fixture.combat), true);
+    assert.equal(fixture.token.x, 50);
+    assert.equal(fixture.token.y, 2);
+    assert.equal(fixture.plan().completedFraction, 0.5);
+    assert.equal(
+        fixture.token.getFlag("splittermond-smoother-fight", "continuousAction").actionId,
+        "walk",
+    );
+});
+
+test("a partially stopped movement resumes from its actual route position without backtracking", async () => {
+    const fixture = scheduledMovementFixture("sprint", {
+        moveResults: [{ completed: false, position: { x: 50, y: 0, elevation: 0 } }, true],
+    });
+    await performTrackedMovementAction(fixture.context, { id: "sprint", ticks: 10 });
+
+    fixture.combat.currentTick = 8;
+    assert.equal(await advancePendingMovements(fixture.combat), true);
+    assert.equal(fixture.token.x, 50);
+    assert.equal(fixture.plan().completedFraction, 0.5);
+
+    assert.equal(await advancePendingMovements(fixture.combat), true);
+    assert.equal(fixture.token.x, 75);
+    assert.equal(fixture.plan().completedFraction, 0.75);
+    assert.deepEqual(fixture.moveCalls.map(({ waypoints }) => waypoints.map(({ x }) => x)), [
+        [25, 50, 75],
+        [75],
+    ]);
+});
+
+test("aborting uses the reached route position even when Foundry reports a stopped move", async () => {
+    const fixture = scheduledMovementFixture("walk", {
+        moveResults: [{ completed: false, reachesDestination: true }],
+    });
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    fixture.combat.currentTick = 4;
+
+    assert.equal(await abortMovementPlan(fixture.token, fixture.combat), true);
+    assert.equal(fixture.token.x, 50);
+    assert.equal(fixture.plan(), null);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+});
+
+test("a player-owned abort is serialized through the primary GM", async () => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    fixture.combat.currentTick = 4;
+    const player = { id: "player", isGM: false };
+    fixture.token.actor.isOwner = true;
+    fixture.token.actor.testUserPermission = (user, permission) => (
+        user.id === player.id && permission === "OWNER"
+    );
+    movementHarness.runtimeController = player;
+    movementHarness.resolveToken = (reference) => reference === fixture.token.uuid ? fixture.token : null;
+    let requestPayload;
+    fixture.combat.currentTick = 4;
+    globalThis.game.socket = { emit: (_channel, payload) => requestPayload = payload };
+
+    try {
+        globalThis.game.user = player;
+        const requested = abortMovementPlan(fixture.token, fixture.combat);
+        assert.equal(requestPayload.type, "movement-plan-abort-request");
+        assert.notEqual(fixture.plan(), null, "the player does not mutate the plan directly");
+
+        globalThis.game.user = fixture.primaryGm;
+        const result = await applyRemoteMovementPlanAbort(requestPayload, player);
+        assert.equal(result.applied, true);
+        assert.equal(fixture.plan(), null);
+
+        globalThis.game.user = player;
+        assert.equal(finishRemoteMovementPlanAbort({
+            ...requestPayload,
+            type: "movement-plan-abort-result",
+            ...result,
+        }, fixture.primaryGm), true);
+        assert.equal(await requested, true);
+    } finally {
+        globalThis.game.user = fixture.primaryGm;
+        delete globalThis.game.socket;
+        movementHarness.runtimeController = null;
+        movementHarness.resolveToken = null;
+    }
+});
+
+test("a rejected continuous-action clear retains the plan for a safe completion retry", async () => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    fixture.combat.currentTick = 4;
+    await advancePendingMovements(fixture.combat);
+
+    fixture.token.rejectContinuousActionClear = true;
+    fixture.combat.currentTick = 6;
+    await assert.rejects(advancePendingMovements(fixture.combat), /Could not persist required continuousAction/u);
+    assert.equal(fixture.token.x, 100);
+    assert.notEqual(fixture.plan(), null, "the plan remains as the durable retry marker");
+    assert.notEqual(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+
+    fixture.token.rejectContinuousActionClear = false;
+    assert.equal(await advancePendingMovements(fixture.combat), true);
+    assert.equal(fixture.plan(), null);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+    assert.equal(fixture.moveCalls.length, 2, "retrying at the destination does not move the token again");
+});
+
+test("a missing movement chat card does not report the already committed action as failed", async () => {
+    const fixture = scheduledMovementFixture("walk", { chatCardResult: false });
+
+    assert.equal(await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 }), true);
+    assert.equal(fixture.combatant.initiative, 6);
+    assert.notEqual(fixture.plan(), null);
+});
+
+test("manual movement cancellation waits for an authoritative milestone update", async () => {
+    let releaseMove;
+    let markMoveStarted;
+    const moveStarted = new Promise((resolve) => markMoveStarted = resolve);
+    const moveGate = new Promise((resolve) => releaseMove = resolve);
+    const fixture = scheduledMovementFixture("walk", {
+        beforeMove: async () => {
+            markMoveStarted();
+            await moveGate;
+        },
+    });
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    fixture.combat.currentTick = 4;
+
+    const progress = advancePendingMovements(fixture.combat);
+    await moveStarted;
+    const cancellation = cancelMovementPlanAfterManualMove(fixture.token, {}, "player");
+    releaseMove();
+
+    assert.equal(await progress, true);
+    assert.equal(await cancellation, true);
+    assert.equal(fixture.plan(), null);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+});
+
 class FakePixiContainer {
     constructor() {
         this.children = [];
@@ -698,10 +985,12 @@ class FakePixiText extends FakePixiContainer {
 
 function scheduledMovementFixture(actionId, {
     beforeMove = null,
+    chatCardResult = true,
     combatId = "combat-1",
     combatantId = "combatant-1",
     tokenId = "token-1",
     tokenName = "Arrou",
+    moveResults = null,
 } = {}) {
     const moduleId = "splittermond-smoother-fight";
     const primaryGm = { id: "gm", isGM: true, active: true };
@@ -725,6 +1014,9 @@ function scheduledMovementFixture(actionId, {
             return this.flags[scope]?.[key] ?? null;
         },
         async setFlag(scope, key, value) {
+            if (key === "continuousAction" && value === null && this.rejectContinuousActionClear) {
+                throw new Error("continuous action clear rejected");
+            }
             this.flags[scope] ??= {};
             this.flags[scope][key] = structuredClone(value);
             return this;
@@ -746,14 +1038,24 @@ function scheduledMovementFixture(actionId, {
         async move(waypoints, options) {
             moveCalls.push({ waypoints: structuredClone(waypoints), options });
             await beforeMove?.(waypoints, options);
-            const destination = waypoints.at(-1);
-            this.x = destination.x;
-            this.y = destination.y;
-            this.elevation = destination.elevation ?? this.elevation;
-            return true;
+            const outcome = moveResults?.length ? moveResults.shift() : true;
+            const completed = typeof outcome === "object" ? outcome.completed : outcome;
+            const reachesDestination = typeof outcome === "object"
+                ? outcome.reachesDestination !== false
+                : Boolean(completed);
+            const destination = typeof outcome === "object" && outcome.position
+                ? outcome.position
+                : waypoints.at(-1);
+            if (reachesDestination || (typeof outcome === "object" && outcome.position)) {
+                this.x = destination.x;
+                this.y = destination.y;
+                this.elevation = destination.elevation ?? this.elevation;
+            }
+            return completed;
         },
     };
     const actor = { id: `actor-${tokenId}`, name: tokenName };
+    token.actor = actor;
     const combatant = { id: combatantId, initiative: 1, token };
     const combat = {
         id: combatId,
@@ -775,7 +1077,7 @@ function scheduledMovementFixture(actionId, {
     };
     movementHarness.createTickActionChatCard = async (_context, id, ticks, options) => {
         chatCards.push({ id, ticks, options });
-        return { id: `card-${chatCards.length}` };
+        return chatCardResult ? { id: `card-${chatCards.length}` } : null;
     };
     return {
         chatCards,

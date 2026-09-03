@@ -15,7 +15,9 @@ import {
 
 import {
     DEFENSE_PHASE,
+    defensePhaseAfterParticipantDecision,
     defensePhaseForOffense,
+    hasDefenseParticipantDecided,
 } from "./phase.js";
 
 import {
@@ -37,25 +39,75 @@ function userOwnsActor(user, actor) {
     return Boolean(user?.isGM || actor?.testUserPermission?.(user, "OWNER") || (user === game.user && actor?.isOwner));
 }
 
-export function canUserDeclineActiveDefense(user, message) {
+function declinableDefenseParticipant(user, message, defenderTokenUuid = null) {
     const latest = resolveLatestOffenseMessage(message);
-    if (!user || !latest || !isOffensiveCombatMessage(latest)) return false;
-    const target = services.resolveToken(primaryTargetTokenUuid(services.getMessageContext(latest)));
-    return Boolean(target?.actor && userOwnsActor(user, target.actor));
+    if (!user || !latest || !isOffensiveCombatMessage(latest)) return null;
+    if (defensePhaseForOffense(latest) !== DEFENSE_PHASE.OPEN) return null;
+    const context = services.getMessageContext(latest) ?? {};
+    const target = services.resolveToken(primaryTargetTokenUuid(context));
+    if (!target?.actor) return null;
+
+    if (defenderTokenUuid) {
+        const choice = services.getEligibleDefenderChoices?.(latest, user)
+            ?.find?.((candidate) => candidate.token?.uuid === defenderTokenUuid);
+        return choice ? { role: "defender", token: choice.token, actor: choice.actor, target } : null;
+    }
+
+    if (hasDefenseParticipantDecided(context, {
+        actorUuid: target.actor.uuid,
+        tokenUuid: target.uuid,
+    })) return null;
+    return userOwnsActor(user, target.actor)
+        ? { role: "target", token: target, actor: target.actor, target }
+        : null;
 }
 
-export async function declineActiveDefenseForUser(message, user) {
-    if (!game.user?.isGM || !canUserDeclineActiveDefense(user, message)) return null;
+export function canUserDeclineActiveDefense(user, message, defenderTokenUuid = null) {
+    return Boolean(declinableDefenseParticipant(user, message, defenderTokenUuid));
+}
+
+export async function declineActiveDefenseForUser(message, user, defenderTokenUuid = null) {
+    if (!game.user?.isGM || !canUserDeclineActiveDefense(user, message, defenderTokenUuid)) return null;
     const result = await queueAttackOperation(message.id, async (_root, latest) => {
-        if (!latest || !canUserDeclineActiveDefense(user, latest)) return null;
+        const participant = declinableDefenseParticipant(user, latest, defenderTokenUuid);
+        if (!latest || !participant) return null;
         const phase = defensePhaseForOffense(latest);
-        if (phase === DEFENSE_PHASE.DECLINED) return latest;
         if (phase !== DEFENSE_PHASE.OPEN) return null;
+        const context = services.getMessageContext(latest) ?? {};
+        const declinedDefenseActorUuids = Array.from(new Set([
+            ...(context.declinedDefenseActorUuids ?? []),
+            participant.actor.uuid,
+        ]));
+        const declinedDefenseTokenUuids = Array.from(new Set([
+            ...(context.declinedDefenseTokenUuids ?? []),
+            participant.token.uuid,
+        ]));
+        const now = Date.now();
+        const nextContext = {
+            ...context,
+            declinedDefenseActorUuids,
+            declinedDefenseTokenUuids,
+            ...(participant.role === "target" ? {
+                targetDefenseDeclinedAt: now,
+                targetDefenseDeclinedBy: user.id,
+            } : {
+                defenderDefenseDeclinedAt: now,
+                defenderDefenseDeclinedBy: user.id,
+            }),
+        };
+        nextContext.defensePhase = defensePhaseAfterParticipantDecision(nextContext, {
+            targetActorUuid: participant.target.actor.uuid,
+            targetTokenUuid: participant.target.uuid,
+            eligibleDefenderRemains: Boolean(
+                services.getEligibleDefenderChoices?.(latest, game.user, nextContext)?.length
+            ),
+        });
         await services.setRequiredFlag(latest, "context", {
-            ...(services.getMessageContext(latest) ?? {}),
-            defensePhase: DEFENSE_PHASE.DECLINED,
-            defenseDeclinedAt: Date.now(),
-            defenseDeclinedBy: user.id,
+            ...nextContext,
+            ...(nextContext.defensePhase === DEFENSE_PHASE.DECLINED ? {
+                defenseDeclinedAt: now,
+                defenseDeclinedBy: user.id,
+            } : {}),
         });
         return latest;
     });
@@ -63,13 +115,13 @@ export async function declineActiveDefenseForUser(message, user) {
     return result;
 }
 
-export async function requestActiveDefenseDecline(message) {
+export async function requestActiveDefenseDecline(message, defenderTokenUuid = null) {
     message = resolveLatestOffenseMessage(message);
-    if (!message || !canUserDeclineActiveDefense(game.user, message)) {
+    if (!message || !canUserDeclineActiveDefense(game.user, message, defenderTokenUuid)) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNotAllowed"));
         return false;
     }
-    if (game.user.isGM) return Boolean(await declineActiveDefenseForUser(message, game.user));
+    if (game.user.isGM) return Boolean(await declineActiveDefenseForUser(message, game.user, defenderTokenUuid));
 
     const gm = services.getActivePrimaryGm();
     if (!gm) {
@@ -81,6 +133,7 @@ export async function requestActiveDefenseDecline(message) {
         senderId: game.user.id,
         recipientId: gm.id,
         messageId: message.id,
+        defenderTokenUuid,
     });
     ui.notifications.info(t("SMOOTHER_FIGHT.HUD.DefenseDeclinePending"));
     return true;

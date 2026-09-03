@@ -78,6 +78,66 @@ export function movementPathThroughFractions(route, segmentLengths, fromFraction
     return result;
 }
 
+export function movementFractionAtPosition(route, segmentLengths, position, {
+    elevationTolerance = 0.001,
+    maximumFraction = 1,
+    minimumFraction = 0,
+    positionTolerance = 1,
+} = {}) {
+    const points = normalizeRoute(route);
+    const x = Number(position?.x);
+    const y = Number(position?.y);
+    if (points.length < 2 || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const lengths = normalizeSegmentLengths(points, segmentLengths);
+    const total = lengths.reduce((sum, length) => sum + length, 0);
+    if (total <= 0) return null;
+
+    const minimum = clampFraction(minimumFraction);
+    const maximum = Math.max(minimum, clampFraction(maximumFraction));
+    const elevation = Number(position?.elevation);
+    const candidates = [];
+    let elapsed = 0;
+    for (let index = 0; index < lengths.length; index += 1) {
+        const from = points[index];
+        const to = points[index + 1];
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const planarLengthSquared = (dx * dx) + (dy * dy);
+        const fromElevation = Number(from.elevation);
+        const toElevation = Number(to.elevation);
+        const hasElevation = Number.isFinite(fromElevation) && Number.isFinite(toElevation);
+        const elevationDelta = hasElevation ? toElevation - fromElevation : 0;
+        let ratio;
+        if (planarLengthSquared > 0) {
+            ratio = (((x - from.x) * dx) + ((y - from.y) * dy)) / planarLengthSquared;
+        } else if (hasElevation && elevationDelta && Number.isFinite(elevation)) {
+            ratio = (elevation - fromElevation) / elevationDelta;
+        } else {
+            ratio = 0;
+        }
+        ratio = Math.min(1, Math.max(0, ratio));
+
+        const projectedX = from.x + (dx * ratio);
+        const projectedY = from.y + (dy * ratio);
+        const planarDistance = Math.hypot(x - projectedX, y - projectedY);
+        const elevationDistance = hasElevation && Number.isFinite(elevation)
+            ? Math.abs(elevation - (fromElevation + (elevationDelta * ratio)))
+            : 0;
+        const fraction = (elapsed + (lengths[index] * ratio)) / total;
+        elapsed += lengths[index];
+        if (fraction + Number.EPSILON < minimum || fraction - Number.EPSILON > maximum) continue;
+        if (planarDistance > positionTolerance || elevationDistance > elevationTolerance) continue;
+        candidates.push({ elevationDistance, fraction, planarDistance });
+    }
+
+    candidates.sort((left, right) => (
+        left.planarDistance - right.planarDistance
+        || left.elevationDistance - right.elevationDistance
+        || right.fraction - left.fraction
+    ));
+    return candidates[0]?.fraction ?? null;
+}
+
 export function movementTrackerState(distance, speed) {
     const moved = nonNegativeNumber(distance);
     const movementSpeed = nonNegativeNumber(speed);

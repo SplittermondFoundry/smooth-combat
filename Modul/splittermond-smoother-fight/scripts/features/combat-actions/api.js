@@ -46,11 +46,14 @@ export {
 
 export {
     bindContinuousActionInterruptionCard,
+    canCurrentUserRollContinuousActionInterruption,
     clearContinuousActionInterruptionForDeletedCard,
     confirmContinuousActionInterruptionForActiveDefense,
+    getContinuousActionInterruptionCard,
     getPendingContinuousActionInterruption,
     getPendingContinuousActionInterruptionsForCurrentUser,
     interruptContinuousActionForActiveDefense,
+    isContinuousActionInterruptionPending,
     reconcileContinuousActionInterruptionRoll,
     requestContinuousActionInterruptionForDamage,
     rollContinuousActionInterruption,
@@ -59,6 +62,7 @@ export {
 export {
     abortMovementPlan,
     advancePendingMovements,
+    applyRemoteMovementPlanAbort,
     cancelMovementPlanAfterManualMove,
     clearMovementPlanForCombatant,
     clearMovementPlansForCombat,
@@ -73,6 +77,10 @@ export {
     togglePersistentMovementRoutePreview,
     toggleMovementRoutePreview,
 } from "./movement.js";
+
+export {
+    finishRemoteMovementPlanAbort,
+} from "./movement-abort-requests.js";
 
 export {
     clearAttackPreparationForCombatant,

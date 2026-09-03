@@ -4,6 +4,7 @@ import test from "node:test";
 import {
     advanceContinuousActions,
     beginContinuousAction,
+    clearContinuousAction,
     completeContinuousAction,
     CONTINUOUS_ACTION_FLAG,
     CONTINUOUS_ACTION_STATUS_ID,
@@ -338,6 +339,7 @@ test("explicitly cancelling attack or spell preparation removes its marker", asy
 
 test("an actionable continuous reference action enters the tagged state after advancing ticks", async () => {
     const fixture = continuousActionFixture();
+    fixture.actor.items = [combatPositionMarker("prone")];
     installGlobals(fixture.user);
     services.getRuntimeController = () => fixture.user;
     services.getTargetSelectionForUser = () => ({ target: null, targets: [] });
@@ -350,6 +352,7 @@ test("an actionable continuous reference action enters the tagged state after ad
     assert.equal(await performTickAction(fixture, "standUpProne", "6"), true);
     const started = fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG);
     assert.equal(started.actionId, "standUpProne");
+    assert.equal(started.startingCombatPosition, "prone");
     assert.equal(started.startTick, 10);
     assert.equal(started.endTick, 16);
 
@@ -359,6 +362,87 @@ test("an actionable continuous reference action enters the tagged state after ad
         started.id,
         "a reaction must not start a new continuous action"
     );
+});
+
+test("stand-up actions require confirmation when the current combat position does not match", async () => {
+    const fixture = continuousActionFixture();
+    installGlobals(fixture.user);
+    services.getRuntimeController = () => fixture.user;
+    services.getTargetSelectionForUser = () => ({ target: null, targets: [] });
+    let addedTicks = 0;
+    let createdCards = 0;
+    services.addCombatTicks = async (context, ticks) => {
+        addedTicks += Number(ticks);
+        context.combatant.initiative += Number(ticks);
+        return Number(ticks);
+    };
+    services.createTickActionChatCard = async () => {
+        createdCards += 1;
+        return { id: "card" };
+    };
+    let confirm = false;
+    foundry.applications = { api: { DialogV2: { confirm: async () => confirm } } };
+
+    assert.equal(await performTickAction(fixture, "standUpKneeling", "3"), false);
+    assert.equal(addedTicks, 0);
+    assert.equal(createdCards, 0);
+    assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+
+    confirm = true;
+    assert.equal(await performTickAction(fixture, "standUpKneeling", "3"), true);
+    assert.equal(addedTicks, 3);
+    assert.equal(createdCards, 1);
+    assert.equal(
+        fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG).startingCombatPosition,
+        undefined,
+        "a deliberately mismatched action must not force the actor to standing on completion"
+    );
+    let positionChanges = 0;
+    services.getActivePrimaryGm = () => fixture.user;
+    services.setCombatPosition = async () => {
+        positionChanges += 1;
+    };
+    fixture.combat.currentTick = fixture.combatant.initiative;
+    fixture.combat.combatant = fixture.combatant;
+    assert.equal(await advanceContinuousActions(fixture.combat), true);
+    assert.equal(positionChanges, 0);
+});
+
+test("successfully completed prone and kneeling stand-up actions change the position to standing", async () => {
+    for (const [actionId, startingCombatPosition] of [
+        ["standUpProne", "prone"],
+        ["standUpKneeling", "kneeling"],
+    ]) {
+        const record = continuousActionRecord({ actionId, startingCombatPosition });
+        const fixture = continuousActionFixture(record);
+        installGlobals(fixture.user);
+        services.getActivePrimaryGm = () => fixture.user;
+        services.scheduleRender = () => {};
+        const changes = [];
+        services.setCombatPosition = async (actor, position) => {
+            changes.push({ actor, position });
+            return { id: position };
+        };
+        fixture.combat.currentTick = record.endTick;
+        fixture.combat.combatant = fixture.combatant;
+
+        assert.equal(await advanceContinuousActions(fixture.combat), true);
+        assert.deepEqual(changes, [{ actor: fixture.actor, position: "standing" }]);
+        assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+    }
+});
+
+test("clearing an interrupted stand-up action does not change the combat position", async () => {
+    const record = continuousActionRecord({ startingCombatPosition: "prone" });
+    const fixture = continuousActionFixture(record);
+    installGlobals(fixture.user);
+    let positionChanges = 0;
+    services.setCombatPosition = async () => {
+        positionChanges += 1;
+    };
+
+    assert.equal(await clearContinuousAction(fixture.token, { expectedId: record.id }), true);
+    assert.equal(positionChanges, 0);
 });
 
 test("route-less movement remains continuous until the token actually moves", async () => {
@@ -494,6 +578,16 @@ function continuousActionFixture(record = null) {
     const combat = { id: "combat-1", currentTick: record?.startTick ?? 10, combatants };
     const user = { id: "gm", isGM: true, active: true };
     return { actor, combat, combatant, token, user };
+}
+
+function combatPositionMarker(position) {
+    return {
+        id: `position-${position}`,
+        name: position,
+        type: "statuseffect",
+        system: { level: 1 },
+        flags: { [MODULE_ID]: { combatPosition: position } },
+    };
 }
 
 function testEffect(source) {

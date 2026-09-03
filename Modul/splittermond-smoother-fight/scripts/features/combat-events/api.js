@@ -3,10 +3,12 @@ export {
     addPendingLegacyTickMessage,
     clearCombatEventDeletionPending,
     clearCombatEventExpansionRequest,
+    canAdvanceCombatWorkflowTicks,
     collectCombatEventGroups,
     deletePendingDamageRollTimer,
     deletePendingLegacyTickMessage,
     findPendingDamageApplicationForActor,
+    getBlockingCombatWorkflow,
     getCombatEventExpansionRequest,
     getPendingDamageRollTimer,
     hasCompletedDamageApplication,
@@ -21,6 +23,10 @@ export {
     setPendingDamageRollTimer,
     toggleCombatEventCardsCollapsed,
 } from "./service.js";
+
+export {
+    messageHasPendingTicks,
+} from "./workflow.js";
 
 export {
     buildCombatEvents,

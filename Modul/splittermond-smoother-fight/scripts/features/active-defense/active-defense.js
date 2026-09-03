@@ -9,6 +9,7 @@ import {
 import {
     clearPendingDefense,
     normalizePendingDefense,
+    publishPendingDefense,
     registerPendingDefenseCleanup,
 } from "./pending.js";
 
@@ -19,12 +20,17 @@ import {
 } from "./recalculation.js";
 
 import {
+    DEFENSE_PHASE,
     defenseAllowsModification,
+    defensePhaseForOffense,
+    hasActorDeclinedDefense,
 } from "./phase.js";
 
 export { normalizePendingDefense };
 
 import { services } from "../../core/services.js";
+
+import { getApplicableCombat } from "../../core/combat-compatibility.js";
 import {
     isDefenderMasteryName,
     isOffensiveCombatMessage,
@@ -101,7 +107,22 @@ function rememberPendingDefense(message, targetOverride = null, options = {}) {
     };
     activeDefenseState.pendingDefense = pending;
     schedulePendingDefenseCleanup(pending);
+    publishPendingDefense(pending);
+    services.scheduleRender?.(0);
     return { pending, target };
+}
+
+export function getRunningActiveDefense() {
+    const now = Date.now();
+    for (const [pendingDefenseId, pending] of activeDefenseState.publishedPendingDefenses) {
+        if (pending.expiresAt < now) activeDefenseState.publishedPendingDefenses.delete(pendingDefenseId);
+    }
+    const candidates = [
+        activeDefenseState.pendingDefense,
+        ...activeDefenseState.rollingDefenses.values(),
+        ...activeDefenseState.publishedPendingDefenses.values(),
+    ].map(normalizePendingDefense).filter((pending) => pending && pending.expiresAt >= now);
+    return candidates.sort((left, right) => left.startedAt - right.startedAt).at(-1) ?? null;
 }
 
 export function getControlledTokenDocument() {
@@ -170,6 +191,8 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
     if (!defenseAllowsModification(offense)) return;
 
     if (!pendingMatchesDefenseMessage(pending, message)) return;
+    const target = services.resolveToken(pending.targetTokenUuid);
+    if (!pending.assisted && hasActorDeclinedDefense(offense, target?.actor?.uuid)) return;
     if (pending.assisted && !isValidDefenderAttempt(pending, message)) return;
     const processedOffense = resolveProcessedDefenseOffense(pending.attackMessageId, message.id);
     requestLatestEventForDefense(pending);
@@ -230,7 +253,7 @@ async function processDefenseMessageOnce(message, pendingOverride = null, { allo
 
 function requestLatestEventForDefense(pending) {
     const offense = game.messages.get(pending?.attackMessageId);
-    const combatant = game.combat?.combatant;
+    const combatant = getApplicableCombat()?.combatant;
     if (!offense || !combatant || !services.messageBelongsToCombatant(offense, combatant)) return;
     services.setCombatEventExpansionRequest("latest");
     services.scheduleRender(0);
@@ -357,7 +380,9 @@ export async function beginActiveDefense(message) {
     const target = services.resolveToken(primaryTargetTokenUuid(services.getMessageContext(message)))
         ?? getControlledTokenDocument()
         ?? services.getHudContext()?.target;
-    if (!target?.actor || !(game.user.isGM || target.actor.isOwner)) {
+    if (!target?.actor
+        || hasActorDeclinedDefense(message, target.actor.uuid)
+        || !(game.user.isGM || target.actor.isOwner)) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNotAllowed"));
         return;
     }
@@ -378,7 +403,10 @@ export async function beginAdditionalTargetDefense(message) {
     const context = services.getMessageContext(message);
     const target = services.resolveToken(primaryTargetTokenUuid(context));
     const attempted = new Set(context?.attemptedDefenseActorUuids ?? []);
-    if (!target?.actor || attempted.has(target.actor.uuid) || !(game.user.isGM || target.actor.isOwner)) {
+    if (!target?.actor
+        || attempted.has(target.actor.uuid)
+        || hasActorDeclinedDefense(message, target.actor.uuid)
+        || !(game.user.isGM || target.actor.isOwner)) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNotAllowed"));
         return;
     }
@@ -389,14 +417,15 @@ export async function beginAdditionalTargetDefense(message) {
     await launchActorActiveDefense(target.actor, type, pending);
 }
 
-export async function beginDefenderDefense(message) {
+export async function beginDefenderDefense(message, defenderTokenUuid = null) {
     if (!message) return;
     message = resolveLatestOffenseMessage(message);
     if (!defenseAllowsModification(message)) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenseNoLongerAvailable"));
         return;
     }
-    const choices = getEligibleDefenderChoices(message, game.user);
+    const choices = getEligibleDefenderChoices(message, game.user)
+        .filter((choice) => !defenderTokenUuid || choice.token.uuid === defenderTokenUuid);
     if (!choices.length) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DefenderUnavailable"));
         return;
@@ -439,7 +468,8 @@ export async function beginDefenderDefense(message) {
     });
     if (!Number.isInteger(selectedIndex)) return;
 
-    const currentChoices = getEligibleDefenderChoices(message, game.user);
+    const currentChoices = getEligibleDefenderChoices(message, game.user)
+        .filter((choice) => !defenderTokenUuid || choice.token.uuid === defenderTokenUuid);
     const selected = choices[selectedIndex];
     const current = currentChoices.find((choice) =>
         choice.token.uuid === selected?.token.uuid && choice.defense.id === selected?.defense.id
@@ -492,14 +522,6 @@ export async function beginStandaloneActiveDefense(context, type) {
     const token = context?.token?.document ?? context?.token;
     if (!actor || !token) return null;
     if (!await confirmContinuousActionInterruption(token, directDefenseSkillId(type))) return null;
-
-    const normalizedType = String(type ?? "defense").toLocaleLowerCase();
-    if (!["defense", "vtd"].includes(normalizedType)) {
-        await services.interruptContinuousActionForActiveDefense?.(token, {
-            skillId: directDefenseSkillId(type),
-        });
-        return actor.activeDefenseDialog(type || undefined);
-    }
 
     const interceptor = interceptStandaloneActiveDefenseRoll(actor, token);
     if (!interceptor) {
@@ -617,27 +639,48 @@ export function prepareDefenderRollOptions(choice, pending) {
     };
 }
 
-export function getEligibleDefenderChoices(message, user) {
+export function getEligibleDefenderChoices(message, user, contextOverride = null) {
     if (!message || !user || !isOffensiveCombatMessage(message)) return [];
-    if (!defenseAllowsModification(message)) return [];
-    const context = services.getMessageContext(message);
+    if (defensePhaseForOffense(message) !== DEFENSE_PHASE.OPEN) return [];
+    const context = contextOverride ?? services.getMessageContext(message);
     if (context?.supersededBy || (!message.system?.checkReport?.succeeded && !context?.recalculatedFrom)) return [];
     if (!services.messageOffersActiveDefense(message) && !context?.recalculatedFrom && !context?.defensePhase) return [];
     const defenseType = String(message.system?.checkReport?.defenseType ?? context?.defenseType ?? "defense").toLocaleLowerCase();
     if (defenseType !== "defense" && defenseType !== "vtd") return [];
     const target = services.resolveToken(primaryTargetTokenUuid(context));
     if (!target?.actor) return [];
-    const attempted = new Set(context?.attemptedDefenseActorUuids ?? []);
+    const attemptedActors = new Set(context?.attemptedDefenseActorUuids ?? []);
+    const attemptedTokens = new Set(context?.attemptedDefenseTokenUuids ?? []);
+    const declinedActors = new Set(context?.declinedDefenseActorUuids ?? []);
+    const declinedTokens = new Set(context?.declinedDefenseTokenUuids ?? []);
     const choices = [];
-    for (const combatant of Array.from(game.combat?.combatants ?? [])) {
+    for (const combatant of Array.from(getApplicableCombat()?.combatants ?? [])) {
+        if (combatant?.isDefeated) continue;
         const token = combatant.token?.document ?? combatant.token ?? services.resolveCombatantToken(combatant);
         const actor = token?.actor ?? combatant.actor;
-        if (!token?.uuid || !actor || actor.id === target.actor.id || attempted.has(actor.uuid)) continue;
+        if (isOffenseSourceCombatant(message, context, combatant, token, actor)) continue;
+        if (!token?.uuid || !actor || actor.id === target.actor.id) continue;
+        if (attemptedActors.has(actor.uuid) || attemptedTokens.has(token.uuid)) continue;
+        if (declinedActors.has(actor.uuid) || declinedTokens.has(token.uuid)) continue;
         if (!(user.isGM || actor.testUserPermission?.(user, "OWNER"))) continue;
         if (!hasDefenderMastery(actor) || measureTokenDistance(token, target) > 2) continue;
         for (const defense of getCombatDefenseOptions(actor, { requireDefenderMastery: true })) choices.push({ token, actor, defense });
     }
     return choices;
+}
+
+function isOffenseSourceCombatant(message, context, combatant, token, actor) {
+    if (context?.combatantId && combatant?.id === context.combatantId) return true;
+    const exactTokenReferences = [
+        context?.attackerTokenUuid,
+        message?.speaker?.token,
+    ].filter(Boolean);
+    if (exactTokenReferences.some((reference) => reference === token?.uuid || reference === token?.id)) {
+        return true;
+    }
+    if (context?.combatantId || exactTokenReferences.length) return false;
+    const actorReferences = [context?.attackerActorUuid, message?.speaker?.actor].filter(Boolean);
+    return actorReferences.some((reference) => reference === actor?.uuid || reference === actor?.id);
 }
 
 function getCombatDefenseOptions(actor, { requireDefenderMastery = false } = {}) {
@@ -664,7 +707,12 @@ export function canUserSubmitDefense(user, pending, message) {
     if (!defenseAllowsModification(offense)) return false;
     const target = services.resolveToken(pending?.targetTokenUuid);
     if (!target?.actor) return false;
-    if (!pending.assisted) return Boolean(target.actor.testUserPermission?.(user, "OWNER"));
+    if (!pending.assisted) {
+        return Boolean(
+            !hasActorDeclinedDefense(offense, target.actor.uuid)
+            && target.actor.testUserPermission?.(user, "OWNER")
+        );
+    }
     const defender = services.resolveToken(pending.defenderTokenUuid);
     return Boolean(defender?.actor?.testUserPermission?.(user, "OWNER") && isValidDefenderAttempt(pending, message));
 }
@@ -675,22 +723,38 @@ function isValidDefenderAttempt(pending, message) {
     const check = services.getDefenseCheck(message);
     const offense = resolveLatestOffenseMessage(game.messages.get(pending?.attackMessageId));
     const offenseContext = services.getMessageContext(offense);
-    const attempted = new Set(offenseContext?.attemptedDefenseActorUuids ?? []);
+    const attemptedActors = new Set(offenseContext?.attemptedDefenseActorUuids ?? []);
+    const attemptedTokens = new Set(offenseContext?.attemptedDefenseTokenUuids ?? []);
+    const declinedActors = new Set(offenseContext?.declinedDefenseActorUuids ?? []);
+    const declinedTokens = new Set(offenseContext?.declinedDefenseTokenUuids ?? []);
     if (!target?.actor || !defender?.actor || !check || target.actor.id === defender.actor.id) return false;
     if (pending.defenderActorUuid && pending.defenderActorUuid !== defender.actor.uuid) return false;
     if (message.speaker?.actor && message.speaker.actor !== defender.actor.id) return false;
-    if (attempted.has(defender.actor.uuid) || !hasDefenderMastery(defender.actor)) return false;
+    if (attemptedActors.has(defender.actor.uuid) || attemptedTokens.has(defender.uuid)) return false;
+    if (declinedActors.has(defender.actor.uuid) || declinedTokens.has(defender.uuid)) return false;
+    if (!hasDefenderMastery(defender.actor)) return false;
     if (String(check.defenseType).toLocaleLowerCase() !== "defense") return false;
     if (check.itemData?.id === "acrobatics" || check.itemData?.skill?.id === "acrobatics") return false;
+    const submittedCheckSkillId = typeof check.skill === "string"
+        ? check.skill
+        : check.skill?.id ?? check.skill?._id ?? null;
     const validOption = getCombatDefenseOptions(defender.actor, { requireDefenderMastery: true })
-        .some((defense) => defenseMatchesPendingCheck(defense, pending, check.itemData));
+        .some((defense) => defenseMatchesPendingCheck(
+            defense,
+            pending,
+            check.itemData,
+            submittedCheckSkillId
+        ));
     return validOption && measureTokenDistance(defender, target) <= 2;
 }
 
-function defenseMatchesPendingCheck(defense, pending, itemData) {
+function defenseMatchesPendingCheck(defense, pending, itemData, submittedCheckSkillId = null) {
     if (!defense) return false;
     if (pending.defenseId && defense.id !== pending.defenseId) return false;
     if (pending.defenseSkillId && defense.skill?.id !== pending.defenseSkillId) return false;
+    if (pending.defenseSkillId && submittedCheckSkillId && submittedCheckSkillId !== pending.defenseSkillId) {
+        return false;
+    }
 
     const submittedIds = new Set([
         itemData?.id,
@@ -703,5 +767,12 @@ function defenseMatchesPendingCheck(defense, pending, itemData) {
     const submittedSkillId = itemData?.skill?.id ?? itemData?.skill?._id;
     const sameSkill = Boolean(submittedSkillId && submittedSkillId === defense.skill?.id);
     const submittedName = String(itemData?.name ?? itemData?.item?.name ?? "").trim();
+    if (submittedIds.size === 0 && !submittedSkillId && !submittedName) {
+        return Boolean(
+            pending.defenseId
+            && pending.defenseSkillId
+            && submittedCheckSkillId === pending.defenseSkillId
+        );
+    }
     return sameSkill && Boolean(submittedName && submittedName === String(defense.name ?? "").trim());
 }

@@ -1,3 +1,12 @@
+import {
+    MODULE_ID,
+    SOCKET,
+} from "../../core/constants.js";
+
+import { services } from "../../core/services.js";
+
+import { activeDefenseState } from "./state.js";
+
 function primaryTargetTokenUuid(context) {
     return context?.primaryTargetTokenUuid ?? context?.targetTokenUuid ?? null;
 }
@@ -33,6 +42,10 @@ export function normalizePendingDefense(value) {
 
 export function clearPendingDefense(pendingDefenseId) {
     if (!pendingDefenseId) return;
+    const pending = activeDefenseState.rollingDefenses.get(pendingDefenseId)
+        ?? (activeDefenseState.pendingDefense?.pendingDefenseId === pendingDefenseId
+            ? activeDefenseState.pendingDefense
+            : null);
     const cleanups = activeDefenseState.pendingDefenseCleanups.get(pendingDefenseId);
     activeDefenseState.pendingDefenseCleanups.delete(pendingDefenseId);
     for (const cleanup of cleanups ?? []) {
@@ -49,6 +62,37 @@ export function clearPendingDefense(pendingDefenseId) {
     if (activeDefenseState.pendingDefense?.pendingDefenseId === pendingDefenseId) {
         activeDefenseState.pendingDefense = null;
     }
+    if (pending) publishPendingDefense(pending, false);
+    services.scheduleRender?.(0);
+}
+
+export function publishPendingDefense(pending, active = true) {
+    const normalized = normalizePendingDefense(pending);
+    if (!normalized?.pendingDefenseId || !globalThis.game?.socket?.emit) return false;
+    game.socket.emit(SOCKET, {
+        type: "active-defense-pending",
+        senderId: game.user?.id,
+        active: Boolean(active),
+        pending: normalized,
+    });
+    return true;
+}
+
+export function receivePublishedPendingDefense(value, senderId, active = true) {
+    const pending = normalizePendingDefense(value);
+    if (!pending?.pendingDefenseId || typeof senderId !== "string") return false;
+    if (!active) {
+        const existing = activeDefenseState.publishedPendingDefenses.get(pending.pendingDefenseId);
+        if (existing?.senderId !== senderId) return false;
+        activeDefenseState.publishedPendingDefenses.delete(pending.pendingDefenseId);
+    } else {
+        activeDefenseState.publishedPendingDefenses.set(pending.pendingDefenseId, {
+            ...pending,
+            senderId,
+        });
+    }
+    services.scheduleRender?.(0);
+    return true;
 }
 
 export function registerPendingDefenseCleanup(pendingDefenseId, cleanup) {
@@ -60,6 +104,3 @@ export function registerPendingDefenseCleanup(pendingDefenseId, cleanup) {
         if (cleanups.size === 0) activeDefenseState.pendingDefenseCleanups.delete(pendingDefenseId);
     };
 }
-import { MODULE_ID } from "../../core/constants.js";
-
-import { activeDefenseState } from "./state.js";

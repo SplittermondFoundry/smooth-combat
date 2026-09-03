@@ -1,5 +1,7 @@
 import { services } from "./services.js";
 
+import { getApplicableCombat } from "./combat-compatibility.js";
+
 import {
     AUDIO_FEEDBACK_EVENTS,
     AUDIO_SOUND_PROFILES,
@@ -57,7 +59,20 @@ export function registerSettings() {
         type: Boolean,
         default: true,
         onChange: (enabled) => {
-            if (enabled) services.syncDefaultMovementRoutePreviews(game.combat, { reconsider: true });
+            if (enabled) services.syncDefaultMovementRoutePreviews(getApplicableCombat(), { reconsider: true });
+            rerender();
+        },
+    });
+    game.settings.register(MODULE_ID, "privateMovementRoutes", {
+        name: "SMOOTHER_FIGHT.Settings.PrivateMovementRoutesName",
+        hint: "SMOOTHER_FIGHT.Settings.PrivateMovementRoutesHint",
+        scope: "world",
+        config: true,
+        restricted: true,
+        type: Boolean,
+        default: false,
+        onChange: () => {
+            services.syncDefaultMovementRoutePreviews(getApplicableCombat(), { reconsider: true });
             rerender();
         },
     });

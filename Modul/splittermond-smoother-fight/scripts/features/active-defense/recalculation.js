@@ -4,6 +4,7 @@ import { persistMissingDefensiveFeature } from "./system-compatibility.js";
 import {
     DEFENSE_PHASE,
     defenseAllowsModification,
+    defensePhaseAfterParticipantDecision,
     defensePhaseForOffense,
 } from "./phase.js";
 
@@ -75,6 +76,16 @@ export function resolveProcessedDefenseOffense(offenseMessageId, defenseMessageI
     return defenseMessageIds?.includes?.(defenseMessageId) ? latest : null;
 }
 
+export function hasResolvedAssistedDefense(message, ignoredDefenseMessageId = null) {
+    const context = services.getMessageContext(message) ?? {};
+    if (Array.from(context.assistedDefenseMessageIds ?? [])
+        .some((messageId) => messageId !== ignoredDefenseMessageId)) return true;
+    const storedMessageId = context.assistedDefenseMessageId;
+    if (storedMessageId && storedMessageId !== ignoredDefenseMessageId) return true;
+    if (!storedMessageId && context.assistedDefenseUsed) return true;
+    return Boolean(resolveLinkedAssistedDefenseMessageId(context, ignoredDefenseMessageId));
+}
+
 export async function queueAttackOperation(offenseMessageId, callback) {
     const root = resolveRootOffenseMessage(offenseMessageId);
     if (!root) return null;
@@ -121,6 +132,13 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
     const alreadyProcessed = originalContext.defenseMessageIds?.includes?.(defenseMessage.id);
     if (alreadyProcessed && (previousCandidate === null || candidateDefense <= previousCandidate)) return original;
 
+    const actorUuid = pending?.defenderActorUuid ?? services.resolveSpeakerActor(defenseMessage)?.uuid ?? null;
+    const defenderTokenUuid = pending?.defenderTokenUuid ?? null;
+    if (!alreadyProcessed && (
+        (actorUuid && originalContext.attemptedDefenseActorUuids?.includes?.(actorUuid))
+        || (defenderTokenUuid && originalContext.attemptedDefenseTokenUuids?.includes?.(defenderTokenUuid))
+    )) return original;
+
     const splinterpointBonus = Math.max(0, finiteNumber(originalContext.vtdSplinterpointBonus) ?? 0);
     const previousActiveDefense = finiteNumber(originalContext.activeDefenseValue)
         ?? (finiteNumber(originalContext.defenseValue) === null
@@ -128,15 +146,32 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
             : Number(originalContext.defenseValue) - splinterpointBonus);
     const newActiveDefense = bestActiveDefenseValue(previousActiveDefense, candidateDefense);
     const newDefense = newActiveDefense + splinterpointBonus;
-    const actorUuid = pending?.defenderActorUuid ?? services.resolveSpeakerActor(defenseMessage)?.uuid ?? null;
     const attemptedDefenseActorUuids = Array.from(new Set([
         ...(originalContext.attemptedDefenseActorUuids ?? []),
         actorUuid,
+    ].filter(Boolean)));
+    const attemptedDefenseTokenUuids = Array.from(new Set([
+        ...(originalContext.attemptedDefenseTokenUuids ?? []),
+        defenderTokenUuid,
     ].filter(Boolean)));
     const defenseMessageIds = Array.from(new Set([
         ...(originalContext.defenseMessageIds ?? []),
         originalContext.defenseMessageId,
         defenseMessage.id,
+    ].filter(Boolean)));
+    const assistedDefenseMessageIds = Array.from(new Set([
+        ...(originalContext.assistedDefenseMessageIds ?? []),
+        originalContext.assistedDefenseMessageId,
+        pending?.assisted ? defenseMessage.id : null,
+    ].filter(Boolean)));
+    const assistedDefenseActorUuids = Array.from(new Set([
+        ...(originalContext.assistedDefenseActorUuids ?? []),
+        originalContext.assistedDefenseActorUuid,
+        pending?.assisted ? actorUuid : null,
+    ].filter(Boolean)));
+    const assistedDefenseTokenUuids = Array.from(new Set([
+        ...(originalContext.assistedDefenseTokenUuids ?? []),
+        pending?.assisted ? defenderTokenUuid : null,
     ].filter(Boolean)));
     await services.setRequiredFlag(defenseMessage, "context", {
         ...existingDefenseContext,
@@ -147,17 +182,34 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
 
     const historyContext = {
         ...originalContext,
-        defensePhase: defensePhaseForOffense(original) === DEFENSE_PHASE.UNAVAILABLE
-            ? DEFENSE_PHASE.UNAVAILABLE
-            : DEFENSE_PHASE.RESOLVED,
         rootAttackMessageId: root.id,
         baseDefenseValue: finiteNumber(originalContext.baseDefenseValue)
             ?? finiteNumber(defenseCheck.baseDefense)
             ?? finiteNumber(calculatedBase),
         activeDefenseValue: newActiveDefense,
         attemptedDefenseActorUuids,
+        attemptedDefenseTokenUuids,
         defenseMessageIds,
+        assistedDefenseUsed: Boolean(
+            originalContext.assistedDefenseUsed
+            || assistedDefenseMessageIds.length
+            || pending?.assisted
+        ),
+        assistedDefenseMessageIds,
+        assistedDefenseActorUuids,
+        assistedDefenseTokenUuids,
+        assistedDefenseMessageId: assistedDefenseMessageIds.at(-1) ?? null,
+        assistedDefenseActorUuid: assistedDefenseActorUuids.at(-1) ?? null,
     };
+    historyContext.defensePhase = defensePhaseForOffense(original) === DEFENSE_PHASE.UNAVAILABLE
+        ? DEFENSE_PHASE.UNAVAILABLE
+        : defensePhaseAfterParticipantDecision(historyContext, {
+            targetActorUuid: target?.actor?.uuid ?? null,
+            targetTokenUuid: target?.uuid ?? primaryTargetTokenUuid(originalContext),
+            eligibleDefenderRemains: Boolean(
+                services.getEligibleDefenderChoices?.(original, game.user, historyContext)?.length
+            ),
+        });
     if (!activeDefenseChangesDifficulty(defenseCheck, displayedDefenseValue)) {
         await setOffenseContext(original, historyContext);
         return original;
@@ -172,6 +224,18 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
         defenseValue: newDefense,
         defenseType: defenseCheck.defenseType,
     }, newDefense, defenseCheck.defenseType);
+}
+
+function resolveLinkedAssistedDefenseMessageId(context, ignoredDefenseMessageId = null) {
+    const messageIds = Array.from(new Set([
+        ...(context?.defenseMessageIds ?? []),
+        context?.defenseMessageId,
+    ].filter(Boolean)));
+    return messageIds.find((messageId) => {
+        if (messageId === ignoredDefenseMessageId) return false;
+        const defense = game.messages.get(messageId);
+        return services.getMessageContext(defense)?.assisted === true;
+    }) ?? null;
 }
 
 export function recreateOffenseAfterSplinterpoint(root, original, { actorUuid, kind }) {

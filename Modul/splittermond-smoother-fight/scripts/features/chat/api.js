@@ -6,11 +6,19 @@ export {
 
 export {
     addDamageRecoveryActions,
+    applyRemoteDefenseNumbingDamage,
     applyRemoteDamageApplication,
+    finalizeRemoteDamageApplication,
+    finishRemoteDefenseNumbingDamage,
     finishRemoteDamageApplication,
+    getDamageApplicationState,
     getNumbingDamageApplicationState,
-    setDamageApplicationState,
 } from "./damage-application.js";
+
+export {
+    applyRemoteLegacyTickAdvance,
+    finishRemoteLegacyTickAdvance,
+} from "./legacy-ticks.js";
 
 export {
     isDiceAnimationPending,

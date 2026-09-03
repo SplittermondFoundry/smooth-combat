@@ -74,7 +74,7 @@ const serviceStubs = {
     refreshAllCombatPositionOverlays: async (...args) => record("refreshAllCombatPositionOverlays", args),
     syncDefaultMovementRoutePreviews: (...args) => record("syncDefaultMovementRoutePreviews", args),
     scheduleRenderAfterTokenMovement: (...args) => record("scheduleRenderAfterTokenMovement", args),
-    resetCompletedMovementReversalApplication: (...args) => record("resetCompletedMovementReversalApplication", args),
+    resetCompletedMovementReversalApplication: async (...args) => record("resetCompletedMovementReversalApplication", args),
     seedHealthFeedbackState: (...args) => record("seedHealthFeedbackState", args),
     rememberActorHealthCost: (...args) => record("rememberActorHealthCost", args),
     announceAppliedDamageFeedback: (...args) => record("announceAppliedDamageFeedback", args),
@@ -87,6 +87,7 @@ const serviceStubs = {
     publishOwnTarget: (...args) => record("publishOwnTarget", args),
     announceTurnFeedback: (...args) => record("announceTurnFeedback", args),
     resetPersonalCombatantSelection: (...args) => record("resetPersonalCombatantSelection", args),
+    reconcileControlledCombatTokenSelection: (...args) => record("reconcileControlledCombatTokenSelection", args),
     syncActiveCombatantTokenSelection: (...args) => {
         record("syncActiveCombatantTokenSelection", args);
         return behavior.syncActiveCombatantTokenSelection?.(...args);
@@ -132,6 +133,12 @@ const serviceStubs = {
     },
     setLocalTarget: (...args) => record("setLocalTarget", args),
     receivePublishedFeedback: (...args) => record("receivePublishedFeedback", args),
+    receivePublishedPendingDefense: (...args) => record("receivePublishedPendingDefense", args),
+    applyRemoteMovementPlanAbort: async (...args) => {
+        record("applyRemoteMovementPlanAbort", args);
+        return behavior.applyRemoteMovementPlanAbort(...args);
+    },
+    finishRemoteMovementPlanAbort: (...args) => record("finishRemoteMovementPlanAbort", args),
     resolveActorUuid: (...args) => {
         record("resolveActorUuid", args);
         return behavior.resolveActorUuid(...args);
@@ -139,6 +146,10 @@ const serviceStubs = {
     isDamageMessage: (...args) => {
         record("isDamageMessage", args);
         return behavior.isDamageMessage(...args);
+    },
+    isDefenseMessage: (...args) => {
+        record("isDefenseMessage", args);
+        return behavior.isDefenseMessage(...args);
     },
     mayUserApplyDamageToActor: (...args) => {
         record("mayUserApplyDamageToActor", args);
@@ -148,7 +159,30 @@ const serviceStubs = {
         record("applyRemoteDamageApplication", args);
         return behavior.applyRemoteDamageApplication(...args);
     },
+    finalizeRemoteDamageApplication: async (...args) => {
+        record("finalizeRemoteDamageApplication", args);
+        return behavior.finalizeRemoteDamageApplication(...args);
+    },
     finishRemoteDamageApplication: (...args) => record("finishRemoteDamageApplication", args),
+    applyRemoteDefenseNumbingDamage: async (...args) => {
+        record("applyRemoteDefenseNumbingDamage", args);
+        return behavior.applyRemoteDefenseNumbingDamage(...args);
+    },
+    finishRemoteDefenseNumbingDamage: (...args) => record("finishRemoteDefenseNumbingDamage", args),
+    applyRemoteLegacyTickAdvance: async (...args) => {
+        record("applyRemoteLegacyTickAdvance", args);
+        return behavior.applyRemoteLegacyTickAdvance(...args);
+    },
+    finishRemoteLegacyTickAdvance: (...args) => record("finishRemoteLegacyTickAdvance", args),
+    getFumbleData: (...args) => {
+        record("getFumbleData", args);
+        return behavior.getFumbleData(...args);
+    },
+    applyRemoteFumbleAction: async (...args) => {
+        record("applyRemoteFumbleAction", args);
+        return behavior.applyRemoteFumbleAction(...args);
+    },
+    finishRemoteFumbleAction: (...args) => record("finishRemoteFumbleAction", args),
     recordCompletedDamageApplication: (...args) => record("recordCompletedDamageApplication", args),
     setDamageApplicationState: async (...args) => record("setDamageApplicationState", args),
     canUserDeclineActiveDefense: (...args) => {
@@ -197,9 +231,16 @@ function resetHarness(gameStub) {
         resolveToken: () => null,
         resolveActorUuid: () => null,
         isDamageMessage: (message) => message?.type === "damageMessage",
+        isDefenseMessage: (message) => message?.type === "defenseMessage",
         mayUserApplyDamageToActor: () => false,
         getActivePrimaryGm: () => null,
         applyRemoteDamageApplication: async () => ({ state: "completed", error: null }),
+        applyRemoteMovementPlanAbort: async () => ({ applied: true, error: null }),
+        finalizeRemoteDamageApplication: async () => ({ state: "completed", error: null }),
+        applyRemoteDefenseNumbingDamage: async () => ({ state: "completed", error: null }),
+        applyRemoteLegacyTickAdvance: async () => ({ applied: true, error: null }),
+        getFumbleData: (message) => message?.fumble ?? null,
+        applyRemoteFumbleAction: async () => ({ applied: true, error: null }),
         waitForChatMessage: () => null,
         normalizePendingDefense: (value) => value?.attackMessageId ? value : null,
         canUserSubmitDefense: () => false,
@@ -273,8 +314,8 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         callLog.length = 0;
         handlersFor(hookRegistrations, "userConnected")[0]({ id: "player" }, true);
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
-        assert.deepEqual(callsOf("advanceContinuousActions"), [[gameStub.combat]]);
-        assert.deepEqual(callsOf("advancePendingMovements"), [[gameStub.combat]]);
+        assert.deepEqual(callsOf("advanceContinuousActions"), [[null]]);
+        assert.deepEqual(callsOf("advancePendingMovements"), [[null]]);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "sightRefresh")[0]({});
@@ -297,13 +338,19 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         callLog.length = 0;
         const movedToken = { id: "token" };
         const movementOptions = { animate: true };
+        behavior.getActivePrimaryGm = () => ({ id: "primary-gm" });
         handlersFor(hookRegistrations, "updateToken")[0](movedToken, { hidden: false, x: 120 }, movementOptions, "player");
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
         assert.deepEqual(callsOf("scheduleRenderAfterTokenMovement"), [[movedToken]]);
-        assert.deepEqual(callsOf("resetCompletedMovementReversalApplication"), [[movedToken]]);
+        assert.deepEqual(callsOf("resetCompletedMovementReversalApplication"), []);
         assert.deepEqual(callsOf("cancelMovementPlanAfterManualMove"), [[movedToken, movementOptions, "player"]]);
-        assert.deepEqual(callsOf("syncDefaultMovementRoutePreviews"), [[gameStub.combat]]);
+        assert.deepEqual(callsOf("syncDefaultMovementRoutePreviews"), [[null]]);
         assert.deepEqual(callsOf("refreshCombatPositionOverlay"), [[movedToken]]);
+
+        callLog.length = 0;
+        gameStub.user = { id: "primary-gm", isGM: true };
+        handlersFor(hookRegistrations, "updateToken")[0](movedToken, { y: 80 }, movementOptions, "player");
+        assert.deepEqual(callsOf("resetCompletedMovementReversalApplication"), [[movedToken]]);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "drawToken")[0](movedToken);
@@ -319,6 +366,14 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         callLog.length = 0;
         handlersFor(hookRegistrations, "recordToken")[0](movedToken);
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
+
+        callLog.length = 0;
+        const canvasCombat = { id: "canvas-combat" };
+        gameStub.combat = canvasCombat;
+        handlersFor(hookRegistrations, "canvasReady")[1]({ id: "canvas" });
+        assert.deepEqual(callsOf("reconcileControlledCombatTokenSelection"), [[canvasCombat]]);
+        assert.deepEqual(callsOf("advanceContinuousActions"), [[canvasCombat]]);
+        assert.deepEqual(callsOf("advancePendingMovements"), [[canvasCombat]]);
 
         callLog.length = 0;
         const currentUser = {
@@ -383,9 +438,14 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         callLog.length = 0;
         const removedCombatant = { id: "removed-combatant", parent: endedCombat };
         for (const callback of handlersFor(hookRegistrations, "deleteCombatant")) callback(removedCombatant);
+        await new Promise((resolve) => setTimeout(resolve, 0));
         assert.deepEqual(callsOf("clearAttackPreparationForCombatant"), [[removedCombatant]]);
         assert.deepEqual(callsOf("clearContinuousActionForCombatant"), [[removedCombatant]]);
         assert.deepEqual(callsOf("clearMovementPlanForCombatant"), [[removedCombatant]]);
+        assert.deepEqual(callsOf("reconcileControlledCombatTokenSelection"), [[endedCombat]]);
+        assert.deepEqual(callsOf("announceTurnFeedback"), [[endedCombat]]);
+        assert.deepEqual(callsOf("advanceContinuousActions"), [[endedCombat]]);
+        assert.deepEqual(callsOf("advancePendingMovements"), [[endedCombat]]);
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
 
         callLog.length = 0;
@@ -557,37 +617,133 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         }]]);
     });
 
-    await t.test("damage completion requires a recipient GM, valid damage message, and authorized sender", async () => {
+    await t.test("published active-defense rolls require a matching target owner", async () => {
+        resetHarness(gameStub);
+        const sender = { id: "defender", isGM: false };
+        const target = {
+            uuid: "Scene.s.Token.target",
+            actor: { testUserPermission: (user, permission) => user === sender && permission === "OWNER" },
+        };
+        const offense = {
+            id: "attack",
+            type: "attackRollMessage",
+            flags: {
+                "splittermond-smoother-fight": {
+                    context: { primaryTargetTokenUuid: target.uuid },
+                },
+            },
+        };
+        const pending = {
+            pendingDefenseId: "pending-defense",
+            attackMessageId: offense.id,
+            primaryTargetTokenUuid: target.uuid,
+        };
+        gameStub.users.set(sender.id, sender);
+        gameStub.messages.set(offense.id, offense);
+        behavior.resolveToken = (uuid) => uuid === target.uuid ? target : null;
+
+        await socketHandler({
+            type: "active-defense-pending",
+            senderId: sender.id,
+            active: true,
+            pending: { ...pending, primaryTargetTokenUuid: "Scene.s.Token.spoofed" },
+        });
+        assert.deepEqual(callsOf("receivePublishedPendingDefense"), []);
+
+        await socketHandler({
+            type: "active-defense-pending",
+            senderId: sender.id,
+            active: true,
+            pending,
+        });
+        assert.deepEqual(callsOf("receivePublishedPendingDefense"), [[pending, sender.id, true]]);
+
+        callLog.length = 0;
+        gameStub.messages.delete(offense.id);
+        await socketHandler({
+            type: "active-defense-pending",
+            senderId: sender.id,
+            active: false,
+            pending,
+        });
+        assert.deepEqual(callsOf("receivePublishedPendingDefense"), [[pending, sender.id, false]]);
+    });
+
+    await t.test("movement abort requests execute on their recipient GM and resolve for the requesting player", async () => {
+        resetHarness(gameStub);
+        const player = { id: "player", isGM: false };
+        const gm = { id: "gm", isGM: true };
+        gameStub.user = gm;
+        gameStub.users.set(player.id, player);
+        gameStub.users.set(gm.id, gm);
+        const request = {
+            type: "movement-plan-abort-request",
+            senderId: player.id,
+            recipientId: gm.id,
+            requestId: "movement-request",
+            tokenUuid: "Scene.scene.Token.token",
+            planId: "movement-plan",
+            combatId: "combat",
+        };
+
+        await socketHandler({ ...request, recipientId: "other-gm" });
+        assert.deepEqual(callsOf("applyRemoteMovementPlanAbort"), []);
+
+        await socketHandler(request);
+        assert.deepEqual(callsOf("applyRemoteMovementPlanAbort"), [[request, player]]);
+        const result = {
+            type: "movement-plan-abort-result",
+            senderId: gm.id,
+            recipientId: player.id,
+            requestId: request.requestId,
+            tokenUuid: request.tokenUuid,
+            planId: request.planId,
+            applied: true,
+            error: null,
+        };
+        assert.deepEqual(callsOf("socketEmit"), [["module.splittermond-smoother-fight", result]]);
+
+        callLog.length = 0;
+        gameStub.user = player;
+        await socketHandler({ ...result, senderId: "unknown" });
+        assert.deepEqual(callsOf("finishRemoteMovementPlanAbort"), []);
+
+        await socketHandler(result);
+        assert.deepEqual(callsOf("finishRemoteMovementPlanAbort"), [[result, gm]]);
+    });
+
+    await t.test("client-owned damage completion is finalized only by its recipient GM", async () => {
         resetHarness(gameStub);
         const sender = { id: "sender", isGM: false };
         const message = { id: "damage-message", type: "damageMessage" };
-        const actor = { id: "actor" };
         gameStub.users.set(sender.id, sender);
         gameStub.messages.set(message.id, message);
-        behavior.resolveActorUuid = () => actor;
         behavior.isDamageMessage = () => true;
-        behavior.mayUserApplyDamageToActor = () => true;
         const payload = {
             type: "damage-application-completed",
             senderId: sender.id,
             recipientId: gameStub.user.id,
+            requestId: "request",
             messageId: message.id,
             actorUuid: "Actor.actor",
+            state: "completed",
         };
 
         await socketHandler(payload);
-        assert.deepEqual(callsOf("setDamageApplicationState"), []);
+        assert.deepEqual(callsOf("finalizeRemoteDamageApplication"), []);
 
         gameStub.user.isGM = true;
-        behavior.mayUserApplyDamageToActor = () => false;
         await socketHandler(payload);
-        assert.deepEqual(callsOf("setDamageApplicationState"), []);
-
-        behavior.mayUserApplyDamageToActor = () => true;
-        await socketHandler(payload);
-        assert.deepEqual(callsOf("setDamageApplicationState"), [[message, "completed", { initiatedBy: sender.id }]]);
-        assert.deepEqual(callsOf("scheduleRender"), [[0]]);
-        assert.deepEqual(callsOf("mayUserApplyDamageToActor").at(-1), [sender, actor]);
+        assert.deepEqual(callsOf("finalizeRemoteDamageApplication"), [[message, payload, sender]]);
+        assert.deepEqual(callsOf("socketEmit").at(-1), ["module.splittermond-smoother-fight", {
+            type: "damage-application-result",
+            senderId: gameStub.user.id,
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: message.id,
+            state: "completed",
+            error: null,
+        }]);
     });
 
     await t.test("damage requests execute only on their recipient GM and return a correlated result", async () => {
@@ -649,6 +805,173 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         }]]);
     });
 
+    await t.test("defense numbing damage is applied only by the recipient GM and completes on the requesting client", async () => {
+        resetHarness(gameStub);
+        const sender = { id: "defender", isGM: false };
+        const gm = { id: "gm", isGM: true };
+        const message = { id: "defense-numbing", type: "defenseMessage" };
+        gameStub.user = gm;
+        gameStub.users.set(sender.id, sender);
+        gameStub.users.set(gm.id, gm);
+        gameStub.messages.set(message.id, message);
+        const payload = {
+            type: "defense-numbing-damage-request",
+            senderId: sender.id,
+            recipientId: gm.id,
+            requestId: "numbing-request",
+            messageId: message.id,
+            damage: 4,
+        };
+
+        await socketHandler({ ...payload, recipientId: "other-gm" });
+        assert.deepEqual(callsOf("applyRemoteDefenseNumbingDamage"), []);
+
+        await socketHandler(payload);
+        assert.deepEqual(callsOf("applyRemoteDefenseNumbingDamage"), [[message, payload.damage, sender]]);
+        assert.deepEqual(callsOf("socketEmit"), [["module.splittermond-smoother-fight", {
+            type: "defense-numbing-damage-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: message.id,
+            state: "completed",
+            error: null,
+        }]]);
+
+        callLog.length = 0;
+        gameStub.user = sender;
+        const resultPayload = {
+            type: "defense-numbing-damage-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: message.id,
+            state: "completed",
+            error: null,
+        };
+        await socketHandler({ ...resultPayload, senderId: "unknown" });
+        assert.deepEqual(callsOf("finishRemoteDefenseNumbingDamage"), []);
+
+        await socketHandler(resultPayload);
+        assert.deepEqual(callsOf("finishRemoteDefenseNumbingDamage"), [[resultPayload, gm]]);
+    });
+
+    await t.test("legacy tick advances are authorized and completed by their recipient GM", async () => {
+        resetHarness(gameStub);
+        const sender = { id: "defender", isGM: false };
+        const gm = { id: "gm", isGM: true };
+        const message = { id: "defense-message" };
+        gameStub.user = gm;
+        gameStub.users.set(sender.id, sender);
+        gameStub.users.set(gm.id, gm);
+        gameStub.messages.set(message.id, message);
+        const payload = {
+            type: "legacy-tick-advance-request",
+            senderId: sender.id,
+            recipientId: gm.id,
+            requestId: "legacy-request",
+            messageId: message.id,
+            offeredTicks: 3,
+            ticks: 3,
+        };
+
+        await socketHandler({ ...payload, recipientId: "other-gm" });
+        assert.deepEqual(callsOf("applyRemoteLegacyTickAdvance"), []);
+
+        await socketHandler(payload);
+        assert.deepEqual(callsOf("applyRemoteLegacyTickAdvance"), [[message, {
+            offeredTicks: 3,
+            ticks: 3,
+        }, sender]]);
+        assert.deepEqual(callsOf("socketEmit"), [["module.splittermond-smoother-fight", {
+            type: "legacy-tick-advance-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: message.id,
+            applied: true,
+            error: null,
+        }]]);
+
+        callLog.length = 0;
+        gameStub.user = sender;
+        await socketHandler({
+            type: "legacy-tick-advance-result",
+            senderId: "unknown",
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: message.id,
+            applied: true,
+            error: null,
+        });
+        assert.deepEqual(callsOf("finishRemoteLegacyTickAdvance"), []);
+
+        const resultPayload = {
+            type: "legacy-tick-advance-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: message.id,
+            applied: true,
+            error: null,
+        };
+        await socketHandler(resultPayload);
+        assert.deepEqual(callsOf("finishRemoteLegacyTickAdvance"), [[resultPayload, gm]]);
+    });
+
+    await t.test("fumble consequences are authorized and completed by their recipient GM", async () => {
+        resetHarness(gameStub);
+        const sender = { id: "fumble-owner", isGM: false };
+        const gm = { id: "gm", isGM: true };
+        const message = { id: "fumble-message", fumble: { kind: "fight" } };
+        gameStub.user = gm;
+        gameStub.users.set(sender.id, sender);
+        gameStub.users.set(gm.id, gm);
+        gameStub.messages.set(message.id, message);
+        const payload = {
+            type: "fumble-action-request",
+            senderId: sender.id,
+            recipientId: gm.id,
+            requestId: "fumble-request",
+            messageId: message.id,
+            action: "ticks",
+        };
+
+        await socketHandler({ ...payload, recipientId: "other-gm" });
+        assert.deepEqual(callsOf("applyRemoteFumbleAction"), []);
+
+        await socketHandler(payload);
+        assert.deepEqual(callsOf("applyRemoteFumbleAction"), [[message, "ticks", sender]]);
+        assert.deepEqual(callsOf("socketEmit"), [["module.splittermond-smoother-fight", {
+            type: "fumble-action-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: message.id,
+            action: payload.action,
+            applied: true,
+            error: null,
+        }]]);
+
+        callLog.length = 0;
+        gameStub.user = sender;
+        const resultPayload = {
+            type: "fumble-action-result",
+            senderId: gm.id,
+            recipientId: sender.id,
+            requestId: payload.requestId,
+            messageId: message.id,
+            action: payload.action,
+            applied: true,
+            error: null,
+        };
+        await socketHandler({ ...resultPayload, senderId: "unknown" });
+        assert.deepEqual(callsOf("finishRemoteFumbleAction"), []);
+
+        await socketHandler(resultPayload);
+        assert.deepEqual(callsOf("finishRemoteFumbleAction"), [[resultPayload, gm]]);
+    });
+
     await t.test("active-defense decline requests require the target owner's authorization", async () => {
         resetHarness(gameStub);
         gameStub.user.isGM = true;
@@ -661,6 +984,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             senderId: sender.id,
             recipientId: gameStub.user.id,
             messageId: offense.id,
+            defenderTokenUuid: "Token.helper",
         };
 
         await socketHandler(payload);
@@ -668,7 +992,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
 
         behavior.canUserDeclineActiveDefense = () => true;
         await socketHandler(payload);
-        assert.deepEqual(callsOf("declineActiveDefenseForUser"), [[offense, sender]]);
+        assert.deepEqual(callsOf("declineActiveDefenseForUser"), [[offense, sender, "Token.helper"]]);
     });
 
     await t.test("offense follow-ups are serialized by the recipient GM and return their latest message", async () => {

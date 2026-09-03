@@ -85,6 +85,8 @@ class TestToken {
         this.clearCalls = 0;
         this.clearError = null;
         this.rejectState = false;
+        this.revertReachesOrigin = true;
+        this.revertResult = true;
     }
 
     getFlag(scope, key) {
@@ -100,8 +102,8 @@ class TestToken {
 
     async revertRecordedMovement() {
         this.revertCalls += 1;
-        this.x = 0;
-        return true;
+        if (this.revertReachesOrigin) this.x = 0;
+        return this.revertResult;
     }
 
     async clearMovementHistory() {
@@ -249,4 +251,20 @@ test("a rejected movement write prevents the token from moving", async (t) => {
     );
     assert.equal(token.revertCalls, 0);
     assert.equal(token.x, 100);
+});
+
+test("movement reversal trusts the recorded origin rather than an inconsistent Foundry result", async () => {
+    installGlobals();
+    const reached = new TestToken();
+    reached.revertResult = false;
+
+    assert.equal(await revertTokenMovementApplication({ token: reached }), true);
+    assert.equal(reached.x, 0);
+    assert.deepEqual(reached.movementHistory, []);
+
+    const missed = new TestToken();
+    missed.revertReachesOrigin = false;
+    assert.equal(await revertTokenMovementApplication({ token: missed }), false);
+    assert.equal(missed.x, 100);
+    assert.notDeepEqual(missed.movementHistory, []);
 });

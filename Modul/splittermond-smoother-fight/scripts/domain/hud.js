@@ -85,6 +85,14 @@ export function resolveCombatEventOpenIds(previousEventIds, previousOpenEventIds
         ? new Set(latestEventId ? [latestEventId] : [])
         : new Set(current.filter((eventId) => previouslyOpen.has(eventId)));
 
+    if (turn.flowManaged) {
+        const focusedEventId = turn.focusedEventId ?? null;
+        if (focusedEventId && currentSet.has(focusedEventId)) return new Set([focusedEventId]);
+        const previousFocusedEventId = turn.previousFocusedEventId ?? null;
+        if (previousFocusedEventId) open.delete(previousFocusedEventId);
+        for (const eventId of newEventIds) open.delete(eventId);
+    }
+
     const currentCombatantId = turn.currentCombatantId ?? null;
     if (!latestEventId) return open;
     const eventCombatantId = mapValue(turn.eventCombatantIds, latestEventId);
@@ -92,7 +100,7 @@ export function resolveCombatEventOpenIds(previousEventIds, previousOpenEventIds
     const currentActorId = turn.currentActorId ?? null;
     const outOfTurn = new Set(turn.outOfTurnEventIds ?? []).has(latestEventId);
     const newlyMarkedOutOfTurn = outOfTurn && !new Set(turn.previousOutOfTurnEventIds ?? []).has(latestEventId);
-    if (newlyMarkedOutOfTurn) return new Set([latestEventId]);
+    if (newlyMarkedOutOfTurn && !turn.flowManaged) return new Set([latestEventId]);
     if (!currentCombatantId && !currentActorId) return open;
 
     const belongsToCurrent = eventCombatantId === currentCombatantId

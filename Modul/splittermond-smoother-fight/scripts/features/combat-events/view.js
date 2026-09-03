@@ -1,5 +1,7 @@
 import { combatEventState } from "./state.js";
 
+import { collectCombatEventPresentation } from "./service.js";
+
 import { services } from "../../core/services.js";
 
 import {
@@ -17,11 +19,12 @@ import {
 } from "../../shared/values.js";
 
 export function buildCombatEvents(context) {
-    const groups = services.collectCombatEventGroups(context);
+    const presentation = collectCombatEventPresentation(context);
+    const { groups, focus } = presentation;
     const title = combatEventState.cardsCollapsed ? t("SMOOTHER_FIGHT.HUD.ExpandCards") : t("SMOOTHER_FIGHT.HUD.CollapseCards");
     const body = !groups.length
         ? `<p class="sf-events-empty">${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoEvents"))}</p>`
-        : groups.map((group, index) => buildEventGroup(group, index === groups.length - 1, context)).join("");
+        : groups.map((group, index) => buildEventGroup(group, index === groups.length - 1, context, focus)).join("");
     return `<section class="sf-events ${combatEventState.cardsCollapsed ? "is-collapsed" : ""}">
         <button type="button" class="sf-events-heading" data-sf-action="toggle-cards" title="${escapeAttr(title)}">
             <span><i class="fa-solid fa-message"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.CombatEvents"))}</span>
@@ -31,8 +34,10 @@ export function buildCombatEvents(context) {
     </section>`;
 }
 
-function buildEventGroup(group, isLatest, hudContext) {
+function buildEventGroup(group, isLatest, hudContext, focus = null) {
+    if (group.kind === "interruption") return buildStandaloneInterruptionGroup(group, focus);
     const primary = group.primary;
+    const interruptions = group.interruptions ?? [];
     const context = services.getMessageContext(primary);
     const recalculated = context?.recalculatedFrom;
     const superseded = context?.supersededBy;
@@ -54,43 +59,118 @@ function buildEventGroup(group, isLatest, hudContext) {
                 ? `<span class="sf-event-badge is-defense-declined"><i class="fa-solid fa-xmark"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefenseDeclined"))}</span>`
                 : "";
     const targetBadge = buildEventTargetBadge(context);
-    const belongsToActiveCombatant = messageBelongsToCombatant(primary, hudContext.combatant, context);
-    const open = isLatest && (belongsToActiveCombatant || context?.outOfTurn) && !combatEventState.cardsCollapsed ? "open" : "";
-    const hasDamage = group.damages.length > 0;
+    const focused = focus?.groupId === primary.id;
+    const open = focused && !combatEventState.cardsCollapsed ? "open" : "";
+    const defaultMessageId = defaultOpenMessageId(group);
+    const focusBadge = focused
+        ? `<span class="sf-event-badge is-flow-focus"><i class="fa-solid fa-forward-step"></i>${escapeHtml(flowStepLabel(focus.step))}</span>`
+        : "";
     const eventActorId = primary.speaker?.actor ?? "";
-    return `<details class="sf-event-group ${defenseAlert ? "is-defense-alert" : ""}" data-event-id="${escapeAttr(primary.id)}" data-event-combatant-id="${escapeAttr(context?.combatantId ?? "")}" data-event-actor-id="${escapeAttr(eventActorId)}" data-event-out-of-turn="${Boolean(context?.outOfTurn)}" ${open}>
-        <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${badge}${defenseBadge}${targetBadge}<i class="fa-solid fa-chevron-down"></i></summary>
+    return `<details class="sf-event-group ${defenseAlert ? "is-defense-alert" : ""} ${focused ? "is-flow-focus" : ""}" data-event-id="${escapeAttr(primary.id)}" data-event-combatant-id="${escapeAttr(context?.combatantId ?? "")}" data-event-actor-id="${escapeAttr(eventActorId)}" data-event-out-of-turn="${Boolean(context?.outOfTurn)}" ${open}>
+        <summary><span>${escapeHtml(primary.speaker?.alias ?? primary.author?.name ?? t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"))}</span>${focusBadge}${badge}${defenseBadge}${targetBadge}<i class="fa-solid fa-chevron-down"></i></summary>
         <div class="sf-event-body">
+            ${focused && focus.synthetic ? buildPendingDefenseEvent(focus) : ""}
             ${group.defenses.map((message) => buildAssociatedEvent(message, {
                 kind: "defense",
                 icon: "fa-shield",
                 label: `${t("SMOOTHER_FIGHT.HUD.DefenseResult")} · ${message.speaker?.alias ?? message.author?.name ?? "–"}`,
-                open: !hasDamage,
+                open: focus ? focused && focus.messageId === message.id : defaultMessageId === message.id,
+                focused: focused && focus?.messageId === message.id,
             })).join("")}
-            ${chatMessageHtml(primary)}
-            ${group.damages.map((message, index) => buildAssociatedEvent(message, {
+            ${buildAssociatedEvent(primary, {
+                kind: "offense",
+                icon: group.kind === "spell" ? "fa-wand-sparkles" : "fa-hand-fist",
+                label: t(group.kind === "spell" ? "SMOOTHER_FIGHT.HUD.Spells" : "SMOOTHER_FIGHT.HUD.Attacks"),
+                open: focus ? focused && focus.messageId === primary.id : defaultMessageId === primary.id,
+                focused: focused && focus?.messageId === primary.id,
+            })}
+            ${group.damages.map((message) => buildAssociatedEvent(message, {
                 kind: "damage",
                 icon: "fa-droplet",
                 label: t("SMOOTHER_FIGHT.HUD.Damage"),
-                open: index === group.damages.length - 1,
+                open: focus ? focused && focus.messageId === message.id : defaultMessageId === message.id,
+                focused: focused && focus?.messageId === message.id,
             })).join("")}
-            ${group.fumbles.map((message, index) => buildAssociatedEvent(message, {
+            ${interruptions.map((message) => buildAssociatedEvent(message, {
+                kind: "interruption",
+                icon: "fa-triangle-exclamation",
+                label: interruptionLabel(message, true),
+                open: focus ? focused && focus.messageId === message.id : defaultMessageId === message.id,
+                focused: focused && focus?.messageId === message.id,
+            })).join("")}
+            ${group.fumbles.map((message) => buildAssociatedEvent(message, {
                 kind: "fumble",
                 icon: "fa-burst",
                 label: services.getFumbleData(message)?.kind === "fight"
                     ? t("SMOOTHER_FIGHT.HUD.CombatFumble")
                     : t("SMOOTHER_FIGHT.HUD.MagicFumble"),
-                open: index === group.fumbles.length - 1,
+                open: focus ? focused && focus.messageId === message.id : defaultMessageId === message.id,
+                focused: focused && focus?.messageId === message.id,
             })).join("")}
         </div>
     </details>`;
 }
 
-function buildAssociatedEvent(message, { kind, icon, label, open = false }) {
-    return `<details class="sf-associated-card is-${escapeAttr(kind)}" data-subevent-id="${escapeAttr(message.id)}" data-subevent-kind="${escapeAttr(kind)}" data-subevent-actor-id="${escapeAttr(message.speaker?.actor ?? "")}" ${open ? "open" : ""}>
+function buildStandaloneInterruptionGroup(group, focus) {
+    const message = group.primary;
+    const card = services.getContinuousActionInterruptionCard?.(message) ?? {};
+    const focused = focus?.groupId === message.id;
+    const open = focused && !combatEventState.cardsCollapsed ? "open" : "";
+    const focusBadge = focused
+        ? `<span class="sf-event-badge is-flow-focus"><i class="fa-solid fa-forward-step"></i>${escapeHtml(flowStepLabel("interruption"))}</span>`
+        : "";
+    return `<details class="sf-event-group is-interruption ${focused ? "is-flow-focus" : ""}" data-event-id="${escapeAttr(message.id)}" data-event-combatant-id="${escapeAttr(card.combatantId ?? "")}" data-event-actor-id="${escapeAttr(message.speaker?.actor ?? "")}" data-event-out-of-turn="true" ${open}>
+        <summary><span>${escapeHtml(message.speaker?.alias ?? message.author?.name ?? t("SMOOTHER_FIGHT.HUD.ContinuousActionInterruptionTitle"))}</span>${focusBadge}<span class="sf-event-badge is-interruption"><i class="fa-solid fa-triangle-exclamation"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ContinuousActionInterruptionTitle"))}</span><i class="fa-solid fa-chevron-down"></i></summary>
+        <div class="sf-event-body">
+            ${buildAssociatedEvent(message, {
+                kind: "interruption",
+                icon: "fa-triangle-exclamation",
+                label: interruptionLabel(message),
+                open: focused,
+                focused,
+            })}
+        </div>
+    </details>`;
+}
+
+function interruptionLabel(message, includeActor = false) {
+    const label = t("SMOOTHER_FIGHT.HUD.ContinuousActionInterruptionTitle");
+    const actor = message.speaker?.alias ?? message.author?.name;
+    return includeActor && actor ? `${label} · ${actor}` : label;
+}
+
+function buildAssociatedEvent(message, { kind, icon, label, open = false, focused = false }) {
+    return `<details class="sf-associated-card sf-event-card is-${escapeAttr(kind)} ${focused ? "is-flow-focus" : ""}" data-subevent-id="${escapeAttr(message.id)}" data-subevent-kind="${escapeAttr(kind)}" data-subevent-actor-id="${escapeAttr(message.speaker?.actor ?? "")}" data-sf-flow-focus="${focused}" ${open ? "open" : ""}>
         <summary><span><i class="fa-solid ${escapeAttr(icon)}"></i>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down"></i></summary>
         <div class="sf-associated-body">${chatMessageHtml(message)}</div>
     </details>`;
+}
+
+function buildPendingDefenseEvent(focus) {
+    const label = flowStepLabel(focus.step);
+    return `<details class="sf-associated-card sf-event-card is-defense is-defense-rolling is-flow-focus" data-subevent-id="${escapeAttr(focus.messageId)}" data-subevent-kind="defense" data-sf-flow-focus="true" open>
+        <summary><span><i class="fa-solid fa-shield-halved"></i>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down"></i></summary>
+        <div class="sf-defense-progress" role="status"><i class="fa-solid fa-dice fa-beat"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ActiveDefenseInProgress"))}</span></div>
+    </details>`;
+}
+
+function defaultOpenMessageId(group) {
+    return [group.primary, ...group.defenses, ...group.damages, ...(group.interruptions ?? []), ...group.fumbles]
+        .sort((left, right) => Number(left.timestamp) - Number(right.timestamp))
+        .at(-1)?.id ?? group.primary.id;
+}
+
+function flowStepLabel(step) {
+    const suffix = {
+        "defense-decision": "DefenseDecision",
+        "defense-roll": "DefenseRoll",
+        "defense-ticks": "DefenseTicks",
+        damage: "Damage",
+        fumble: "Fumble",
+        interruption: "Interruption",
+        offense: "Offense",
+    }[step] ?? "Offense";
+    return t(`SMOOTHER_FIGHT.HUD.CombatFlow.${suffix}`);
 }
 
 function buildEventTargetBadge(context) {
@@ -124,15 +204,40 @@ function primaryTargetTokenUuid(context) {
 }
 
 function shouldHighlightActiveDefense(group, isLatest, hudContext, messageContext) {
+    return Boolean(pendingActiveDefenseParticipant(group, isLatest, hudContext, messageContext));
+}
+
+function pendingActiveDefenseParticipant(group, isLatest, hudContext, messageContext) {
     if (group.damages.length > 0) return false;
     if (!services.defenseAwaitsResponse(group.primary)) return false;
     if (messageContext?.supersededBy) return false;
     const storedTarget = services.resolveToken(primaryTargetTokenUuid(messageContext));
     if (storedTarget) {
-        const alreadyDefended = messageContext?.attemptedDefenseActorUuids?.includes?.(storedTarget.actor?.uuid);
-        return !alreadyDefended && services.isCurrentUserTarget(storedTarget);
+        const contextTokenUuid = services.tokenUuid?.(hudContext?.token) ?? hudContext?.token?.uuid ?? null;
+        const targetPending = !(services.hasDefenseParticipantDecided?.(messageContext, {
+            actorUuid: storedTarget.actor?.uuid,
+            tokenUuid: storedTarget.uuid,
+        }) ?? Boolean(
+            messageContext?.attemptedDefenseActorUuids?.includes?.(storedTarget.actor?.uuid)
+            || messageContext?.declinedDefenseActorUuids?.includes?.(storedTarget.actor?.uuid)
+        ));
+        const controlsTarget = Boolean(
+            services.isCurrentUserTarget(storedTarget)
+            || (contextTokenUuid && contextTokenUuid === storedTarget.uuid
+                && (game.user?.isGM || storedTarget.actor?.isOwner))
+        );
+        if (targetPending && controlsTarget) {
+            return { role: "target", target: storedTarget, defender: null };
+        }
+
+        const defenderChoices = services.getEligibleDefenderChoices?.(group.primary, game.user) ?? [];
+        const defender = defenderChoices.find((choice) => choice.token?.uuid === contextTokenUuid)?.token ?? null;
+        if (defender) return { role: "defender", target: storedTarget, defender };
+        return null;
     }
-    return Boolean(isLatest && services.isCurrentUserTarget(hudContext?.target));
+    return isLatest && services.isCurrentUserTarget(hudContext?.target)
+        ? { role: "target", target: hudContext.target, defender: null }
+        : null;
 }
 
 export function hasPendingActiveDefense(context) {
@@ -140,14 +245,21 @@ export function hasPendingActiveDefense(context) {
 }
 
 export function getPendingActiveDefense(context) {
-    const groups = services.collectCombatEventGroups(context);
-    const latest = groups.at(-1);
+    const presentation = collectCombatEventPresentation(context);
+    if (presentation.focus && presentation.focus.step !== "defense-decision") return null;
+    const focused = presentation.focus?.step === "defense-decision"
+        ? presentation.groups.find((group) => group.primary.id === presentation.focus.groupId)
+        : null;
+    const latest = focused ?? presentation.groups.at(-1);
     if (!latest) return null;
     const messageContext = services.getMessageContext(latest.primary);
-    if (!shouldHighlightActiveDefense(latest, true, context, messageContext)) return null;
+    const participant = pendingActiveDefenseParticipant(latest, true, context, messageContext);
+    if (!participant) return null;
     return {
         message: latest.primary,
-        target: services.resolveToken(primaryTargetTokenUuid(messageContext)) ?? context?.target ?? null,
+        target: participant.target ?? services.resolveToken(primaryTargetTokenUuid(messageContext)) ?? context?.target ?? null,
+        defender: participant.defender,
+        role: participant.role,
     };
 }
 
@@ -176,6 +288,7 @@ function chatMessageHtml(message) {
 function promoteChatCardActions(content, message) {
     const template = document.createElement("template");
     template.innerHTML = content ?? "";
+    enforceInterruptionCardPermission(template.content, message);
     arrangeCheckResults(template.content, message);
     for (const actions of template.content.querySelectorAll(".splittermond.check > .actions, .actions.splittermond-chat-action-container")) {
         const precedingOptions = actions.previousElementSibling;
@@ -199,6 +312,24 @@ function promoteChatCardActions(content, message) {
     const wrapper = document.createElement("div");
     wrapper.append(template.content.cloneNode(true));
     return wrapper.innerHTML;
+}
+
+function enforceInterruptionCardPermission(root, message) {
+    const buttons = root.querySelectorAll('[data-sf-action="roll-continuous-action-interruption"]');
+    if (!buttons.length) return;
+    const card = services.getContinuousActionInterruptionCard?.(message);
+    const mayRoll = services.canCurrentUserRollContinuousActionInterruption?.(message);
+    for (const button of buttons) {
+        if (card?.tokenUuid) button.dataset.sfTokenUuid = card.tokenUuid;
+        if (card?.requestId) button.dataset.requestId = card.requestId;
+        if (mayRoll) {
+            button.classList.add("is-next-interruption-roll");
+            button.disabled = false;
+            button.removeAttribute("aria-disabled");
+            continue;
+        }
+        (button.closest?.(".sf-continuous-action-interruption-actions") ?? button).remove();
+    }
 }
 
 function arrangeCheckResults(root, message) {

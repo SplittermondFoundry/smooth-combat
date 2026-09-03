@@ -9,7 +9,10 @@ import {
 
 import {
     MODULE_ID,
+    SOCKET,
 } from "../../core/constants.js";
+
+import { getApplicableCombat } from "../../core/combat-compatibility.js";
 
 import {
     APPLICATION_STALE_AFTER_MS,
@@ -36,6 +39,8 @@ import {
 
 const fumbleActionLocks = new Set();
 const staleFumbleActionTimers = new Map();
+const remoteFumbleActionRequests = new Map();
+const REMOTE_FUMBLE_ACTION_TIMEOUT_MS = 15_000;
 
 export async function attachFumbleActions(message, renderedRoot = null, sourceMessageId = null, sourceItemId = null) {
     const existing = getFumbleData(message);
@@ -213,6 +218,14 @@ export function getFumbleActionKeys(fumble) {
     return actions;
 }
 
+export function hasPendingFumbleActions(message) {
+    const fumble = getFumbleData(message) ?? createFumbleData(message);
+    if (!fumble) return false;
+    return getFumbleActionKeys(fumble).some((action) =>
+        getFumbleActionApplicationState(fumble, action) !== "completed"
+    );
+}
+
 function fumbleActionButtonMarkup(fumble, action) {
     if (action === "ticks") return `<button type="button" data-sf-fumble-action="ticks"><i class="fa-solid fa-stopwatch"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleTicks", { ticks: fumble.ticks }))}</button>`;
     if (action === "weapon") return `<button type="button" data-sf-fumble-action="weapon"><i class="fa-solid fa-hammer"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.ApplyFumbleWeaponDamage"))}</button>`;
@@ -271,16 +284,25 @@ function applyFumbleActionState(message, root) {
     const actor = resolveFumbleActor(message, fumble);
     const allowed = Boolean(game.user.isGM || actor?.isOwner);
     root.querySelectorAll(".sf-fumble-recovery-actions").forEach((element) => element.remove());
+    if (!allowed) {
+        root.querySelectorAll(".sf-fumble-actions").forEach((element) => element.remove());
+        return;
+    }
+    const focused = Boolean(root.closest?.('.sf-event-card[data-sf-flow-focus="true"]'));
     const uncertain = new Set();
     for (const button of root.querySelectorAll("[data-sf-fumble-action]")) {
         const action = button.dataset.sfFumbleAction;
         const definition = fumbleActionDefinition(action);
-        const state = getFumbleActionApplicationState(fumble, action);
+        const storedState = getFumbleActionApplicationState(fumble, action);
+        const state = storedState === "idle" && hasPendingRemoteFumbleAction(message.id, action)
+            ? "applying"
+            : storedState;
         const blocked = state !== "idle";
-        button.disabled = blocked || !allowed;
+        button.disabled = blocked;
         button.classList.toggle("is-applied", state === "completed");
         button.classList.toggle("is-applying", state === "applying");
         button.classList.toggle("is-uncertain", state === "uncertain");
+        button.classList.toggle("is-next-fumble-action", focused && state === "idle");
         button.title = applicationStateTitle(state, operationStateLabels());
         if (state === "applying") scheduleStaleFumbleRender(message, fumble, definition);
         if (state === "uncertain" && definition) uncertain.add(definition.key);
@@ -295,17 +317,66 @@ export async function handleFumbleAction(message, action) {
     const fumble = getFumbleData(message) ?? createFumbleData(message);
     if (!fumble) return;
     const actor = resolveFumbleActor(message, fumble);
-    if (!actor || !(game.user.isGM || actor.isOwner)) {
+    if (!actor || !canUserApplyFumbleAction(message, fumble, game.user)) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.FumbleNotAllowed"));
-        return;
+        return false;
     }
     const definition = fumbleActionDefinition(action);
-    if (!definition || getFumbleActionApplicationState(fumble, action) !== "idle") return;
+    if (!definition || getFumbleActionApplicationState(fumble, action) !== "idle") return false;
+    if (!game.user.isGM && !canCurrentUserUpdateFumbleMessage(message)) {
+        return requestRemoteFumbleAction(message, action);
+    }
+    return performFumbleAction(message, action, game.user);
+}
+
+export async function applyRemoteFumbleAction(message, action, user) {
+    const fumble = getFumbleData(message);
+    if (!fumble || !canUserApplyFumbleAction(message, fumble, user)) {
+        return { applied: false, error: "not-allowed" };
+    }
+    try {
+        const applied = await performFumbleAction(message, action, user);
+        return { applied: Boolean(applied), error: applied ? null : "not-applied" };
+    } catch (error) {
+        console.error(`${MODULE_ID} | Remote fumble action failed`, error);
+        return { applied: false, error: "failed" };
+    }
+}
+
+export function finishRemoteFumbleAction(payload, sender) {
+    const request = remoteFumbleActionRequests.get(payload?.requestId);
+    if (!request
+        || sender?.id !== request.gmId
+        || payload?.messageId !== request.messageId
+        || payload?.action !== request.action) return false;
+    clearTimeout(request.timeoutId);
+    remoteFumbleActionRequests.delete(payload.requestId);
+    if (payload.error) globalThis.ui?.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+    services.scheduleRender?.(0);
+    request.resolve(Boolean(payload.applied));
+    return true;
+}
+
+async function performFumbleAction(message, action, user) {
+    const fumble = getFumbleData(message) ?? createFumbleData(message);
+    if (!fumble) return false;
+    if (action === "ticks" && services.canAdvanceCombatWorkflowTicks?.(message) === false) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.CombatFlow.TickBlocked"));
+        services.scheduleRender?.(0);
+        return false;
+    }
+    const actor = resolveFumbleActor(message, fumble);
+    if (!actor || !canUserApplyFumbleAction(message, fumble, user)) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.FumbleNotAllowed"));
+        return false;
+    }
+    const definition = fumbleActionDefinition(action);
+    if (!definition || getFumbleActionApplicationState(fumble, action) !== "idle") return false;
     const lockKey = message.id;
-    if (fumbleActionLocks.has(lockKey)) return;
+    if (fumbleActionLocks.has(lockKey)) return false;
     fumbleActionLocks.add(lockKey);
     try {
-        await applyFumbleAction(message, actor, fumble, action, definition);
+        return await applyFumbleAction(message, actor, fumble, action, definition);
     } finally {
         fumbleActionLocks.delete(lockKey);
     }
@@ -326,7 +397,7 @@ async function applyFumbleAction(message, actor, fumble, action, definition) {
         || (action === "weapon" && fumble.sourceItemId)
         || (action === "damage" && fumble.damage > 0)
         || ((action === "conditions" || action.startsWith("condition:")) && selectedConditions.length);
-    if (!actionable) return;
+    if (!actionable) return false;
 
     const before = fumbleEffectSnapshot(actor, action, item);
     let updated = await setFumbleActionApplicationState(message, fumble, definition, "applying");
@@ -361,6 +432,64 @@ async function applyFumbleAction(message, actor, fumble, action, definition) {
     }
     if (notification) ui.notifications.info(notification);
     services.scheduleRender(0);
+    return true;
+}
+
+function requestRemoteFumbleAction(message, action) {
+    if (hasPendingRemoteFumbleAction(message.id)) return false;
+    const user = globalThis.game?.user;
+    const gm = services.getActivePrimaryGm?.();
+    if (!user || !gm) {
+        globalThis.ui?.notifications?.warn?.(localizeSystem("splittermond.chatCard.noGMConnected", "Kein GM verbunden."));
+        return false;
+    }
+    const requestId = globalThis.foundry?.utils?.randomID?.() ?? `${user.id}:${message.id}:${Date.now()}`;
+    return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+            remoteFumbleActionRequests.delete(requestId);
+            globalThis.ui?.notifications?.error?.(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
+            services.scheduleRender?.(0);
+            resolve(false);
+        }, REMOTE_FUMBLE_ACTION_TIMEOUT_MS);
+        timeoutId?.unref?.();
+        remoteFumbleActionRequests.set(requestId, {
+            action,
+            gmId: gm.id,
+            messageId: message.id,
+            resolve,
+            timeoutId,
+        });
+        services.scheduleRender?.(0);
+        globalThis.game?.socket?.emit?.(SOCKET, {
+            type: "fumble-action-request",
+            senderId: user.id,
+            recipientId: gm.id,
+            requestId,
+            messageId: message.id,
+            action,
+        });
+    });
+}
+
+function hasPendingRemoteFumbleAction(messageId, action = null) {
+    return Array.from(remoteFumbleActionRequests.values()).some((request) => (
+        request.messageId === messageId && (!action || request.action === action)
+    ));
+}
+
+function canCurrentUserUpdateFumbleMessage(message) {
+    const user = globalThis.game?.user;
+    if (user?.isGM) return true;
+    if (typeof message?.testUserPermission === "function") return message.testUserPermission(user, "OWNER");
+    return Boolean(message?.isOwner);
+}
+
+function canUserApplyFumbleAction(message, fumble, user) {
+    const actor = resolveFumbleActor(message, fumble);
+    if (!actor || !user) return false;
+    if (user.isGM) return true;
+    if (typeof actor.testUserPermission === "function") return actor.testUserPermission(user, "OWNER");
+    return Boolean(user.id === globalThis.game?.user?.id && actor.isOwner);
 }
 
 function fumbleActionDefinition(action) {
@@ -430,7 +559,7 @@ function fumbleEffectSnapshot(actor, action, item) {
             .map((candidate) => [candidate.id ?? candidate.uuid ?? candidate.name, candidate.name, numericValue(candidate.system?.level)])
             .sort((left, right) => String(left[0]).localeCompare(String(right[0])));
     }
-    const initiatives = Array.from(game.combat?.combatants ?? [])
+    const initiatives = Array.from(getApplicableCombat()?.combatants ?? [])
         .filter((combatant) => combatant.actorId === actor.id || combatant.actor?.uuid === actor.uuid)
         .map((combatant) => [combatant.id, Number(combatant.initiative)]);
     return initiatives.length > 0 ? initiatives : null;

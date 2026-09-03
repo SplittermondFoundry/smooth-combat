@@ -32,6 +32,10 @@ const ATTACK_COMPLETION_ACTIONS = new Set(["aim", "readyRangedAttack", "searchOp
 const MOVEMENT_COMPLETION_ACTIONS = new Set(CONTINUOUS_MOVEMENT_ACTION_IDS);
 const SPELL_COMPLETION_ACTIONS = new Set(["focusMagic"]);
 const CONTINUOUS_ACTION_COMPLETION_TRIGGERS = new Set(["attack", "movement", "spell", "tick"]);
+const STAND_UP_STARTING_POSITIONS = Object.freeze({
+    standUpProne: "prone",
+    standUpKneeling: "kneeling",
+});
 const continuousActionLocks = new Set();
 
 export function registerContinuousActionStatusEffect() {
@@ -65,7 +69,10 @@ export function normalizeContinuousAction(value) {
     const completionTrigger = CONTINUOUS_ACTION_COMPLETION_TRIGGERS.has(value.completionTrigger)
         ? value.completionTrigger
         : defaultContinuousActionCompletionTrigger(actionId);
-    return {
+    const startingCombatPosition = optionalString(value.startingCombatPosition);
+    if (startingCombatPosition
+        && startingCombatPosition !== requiredStandUpStartingPosition(actionId)) return null;
+    const record = {
         version,
         id: optionalString(value.id),
         actionId,
@@ -79,6 +86,12 @@ export function normalizeContinuousAction(value) {
         createdBy: optionalString(value.createdBy),
         updatedAt: nullableNumber(value.updatedAt),
     };
+    if (startingCombatPosition) record.startingCombatPosition = startingCombatPosition;
+    return record;
+}
+
+export function requiredStandUpStartingPosition(actionId) {
+    return STAND_UP_STARTING_POSITIONS[actionId] ?? null;
 }
 
 export function getContinuousAction(tokenLike, combat = globalThis.game?.combat) {
@@ -106,6 +119,7 @@ export function isTokenInContinuousAction(tokenLike, combat = globalThis.game?.c
 export async function beginContinuousAction(context, {
     actionId,
     completionTrigger = defaultContinuousActionCompletionTrigger(actionId),
+    startingCombatPosition = null,
     startTick = combatantInitiative(context?.combatant, context?.combat),
     endTick = combatantInitiative(context?.combatant, context?.combat),
 } = {}) {
@@ -134,6 +148,7 @@ export async function beginContinuousAction(context, {
         createdAt: Date.now(),
         createdBy: globalThis.game?.user?.id ?? null,
         updatedAt: Date.now(),
+        ...(startingCombatPosition ? { startingCombatPosition } : {}),
     });
     if (!record) return null;
 
@@ -154,12 +169,17 @@ export async function beginContinuousAction(context, {
     return record;
 }
 
-export async function completeContinuousAction(context, { trigger = null, actionIds = null } = {}) {
+export async function completeContinuousAction(context, {
+    actionIds = null,
+    expectedId = null,
+    trigger = null,
+} = {}) {
     const token = continuousActionToken(context);
     const action = readContinuousAction(token);
     if (!token || !action) return false;
     const combat = context?.combat ?? globalThis.game?.combat;
     if (combat?.id && action.combatId !== optionalString(combat.id)) return false;
+    if (expectedId && action.id !== expectedId) return false;
     if (trigger && continuousActionCompletionTrigger(action) !== trigger) return false;
     if (actionIds && !new Set(actionIds).has(action.actionId)) return false;
     return clearContinuousAction(token, { expectedId: action.id });
@@ -264,6 +284,7 @@ async function syncContinuousAction(token, combatant, combat) {
         const initiative = finiteNumber(combatant.initiative, action.endTick);
         if (continuousActionBecomesReadyAtOwnTurn(action)
             && continuousActionReachedCompletionTick(action, combat)) {
+            await applyContinuousActionCompletion(token.actor, action);
             await setRequiredDocumentFlag(token, CONTINUOUS_ACTION_FLAG, null);
             await removeContinuousActionEffects(token.actor, action);
             await clearContinuousActionInterruptionRequests(token, {
@@ -285,6 +306,16 @@ async function syncContinuousAction(token, combatant, combat) {
 
         return ensureContinuousActionEffects(token.actor, action);
     });
+}
+
+async function applyContinuousActionCompletion(actor, action) {
+    const requiredPosition = requiredStandUpStartingPosition(action?.actionId);
+    if (!requiredPosition || action.startingCombatPosition !== requiredPosition) return false;
+    if (typeof services.setCombatPosition !== "function") {
+        throw new Error("The combat-position service is unavailable.");
+    }
+    await services.setCombatPosition(actor, "standing");
+    return true;
 }
 
 async function ensureContinuousActionEffects(actor, action) {

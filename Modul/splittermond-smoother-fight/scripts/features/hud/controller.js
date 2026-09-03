@@ -13,7 +13,9 @@ import {
 import {
     applyActionMenuExpansionRequest,
     applyCombatEventExpansionRequest,
+    applyCombatWorkflowFocus,
     captureHudViewState,
+    enforceCombatEventAccordion,
     requestActionMenuExpansion,
     restoreHudViewState,
 } from "./view-state.js";
@@ -81,6 +83,18 @@ export function closeTickActionReferenceOnEscape(root, event) {
     event.stopPropagation();
     disclosure.open = false;
     disclosure.querySelector(":scope > summary")?.focus();
+    return true;
+}
+
+export function closeTickActionReferenceAfterSuccess(root, trigger, completed) {
+    if (completed !== true) return false;
+    const sourceDisclosure = trigger?.closest?.(".sf-tick-action-reference");
+    if (!sourceDisclosure) return false;
+    const disclosure = root?.contains?.(sourceDisclosure)
+        ? sourceDisclosure
+        : root?.querySelector?.(".sf-tick-action-reference");
+    if (!disclosure) return false;
+    disclosure.open = false;
     return true;
 }
 
@@ -265,6 +279,27 @@ export async function renderHud() {
     await hudState.hud.render();
 }
 
+export function shouldDisableContinuousActionInterruptionControl(result, message) {
+    if (!result || ["cancelled", "unknown", "rolling"].includes(result.status)) return false;
+    return message
+        ? !services.canCurrentUserRollContinuousActionInterruption?.(message)
+        : true;
+}
+
+export function synchronizeContinuousActionInterruptionControls(root, requestId, disabled) {
+    if (!root?.querySelectorAll || !requestId) return 0;
+    let synchronized = 0;
+    for (const control of root.querySelectorAll('[data-sf-action="roll-continuous-action-interruption"]')) {
+        if (control.dataset?.requestId !== requestId) continue;
+        control.disabled = disabled;
+        control.classList?.toggle?.("is-next-interruption-roll", !disabled);
+        if (disabled) control.setAttribute?.("aria-disabled", "true");
+        else control.removeAttribute?.("aria-disabled");
+        synchronized += 1;
+    }
+    return synchronized;
+}
+
 class SmootherFightHud {
     constructor() {
         this.element = null;
@@ -287,7 +322,10 @@ class SmootherFightHud {
                 toggleTickActionReferenceOnKeyboard(this.element, event);
             }
         });
-        this.element.addEventListener("toggle", (event) => fitTickActionReferencePanel(event.target), true);
+        this.element.addEventListener("toggle", (event) => {
+            fitTickActionReferencePanel(event.target);
+            enforceCombatEventAccordion(this.element, event.target);
+        }, true);
         this.element.addEventListener("contextmenu", (event) => this.onContextMenu(event));
         this.element.addEventListener("dragstart", (event) => this.onFavoriteSkillDragStart(event));
         this.element.addEventListener("dragover", (event) => this.onFavoriteSkillDragOver(event));
@@ -343,6 +381,7 @@ class SmootherFightHud {
         restoreHudViewState(this.element, viewState, { forceLatestEvent });
         if (forceLatestEvent) services.clearCombatEventDeletionPending();
         applyCombatEventExpansionRequest(this.element);
+        applyCombatWorkflowFocus(this.element);
         applyActionMenuExpansionRequest(this.element);
     }
 
@@ -403,11 +442,38 @@ class SmootherFightHud {
             await services.beginActiveDefense(game.messages.get(target.dataset.messageId));
             return;
         }
+        if (action === "respond-defender-defense") {
+            await services.beginDefenderDefense(
+                game.messages.get(target.dataset.messageId),
+                target.dataset.defenderTokenUuid
+            );
+            return;
+        }
         if (action === "decline-active-defense") {
             target.disabled = true;
             if (!await services.requestActiveDefenseDecline(
-                game.messages.get(target.dataset.messageId)
+                game.messages.get(target.dataset.messageId),
+                target.dataset.defenderTokenUuid ?? null
             ) && target.isConnected) target.disabled = false;
+            return;
+        }
+        if (action === "roll-continuous-action-interruption") {
+            event.preventDefault();
+            const messageId = target.closest(".sf-chat-message[data-message-id]")?.dataset.messageId;
+            const message = globalThis.game?.messages?.get?.(messageId);
+            const requestId = target.dataset.requestId;
+            synchronizeContinuousActionInterruptionControls(this.element, requestId, true);
+            let result = null;
+            try {
+                result = await services.rollContinuousActionInterruption(
+                    message ?? target.dataset.sfTokenUuid,
+                    requestId
+                );
+            } finally {
+                const disabled = shouldDisableContinuousActionInterruptionControl(result, message);
+                synchronizeContinuousActionInterruptionControls(this.element, requestId, disabled);
+                services.scheduleRender?.(0);
+            }
             return;
         }
 
@@ -427,12 +493,6 @@ class SmootherFightHud {
                 }
                 case "skill":
                     await services.requireOwner(context, () => context.actor.rollSkill(target.dataset.skillId));
-                    break;
-                case "roll-continuous-action-interruption":
-                    await services.requireOwner(context, () => services.rollContinuousActionInterruption(
-                        target.dataset.sfTokenUuid || context,
-                        target.dataset.requestId
-                    ));
                     break;
                 case "toggle-favorite-skill":
                     await services.requireOwner(context, () => {
@@ -479,13 +539,15 @@ class SmootherFightHud {
                 case "add-ticks":
                     await services.requireOwner(context, () => services.addCombatTicks(context, target.dataset.ticks));
                     break;
-                case "share-tick-action":
-                    await services.requireOwner(context, () => services.performTickAction(
+                case "share-tick-action": {
+                    const completed = await services.requireOwner(context, () => services.performTickAction(
                         context,
                         target.dataset.tickActionId,
                         target.dataset.tickActionAdvance
                     ));
+                    closeTickActionReferenceAfterSuccess(this.element, target, completed);
                     break;
+                }
                 case "abort-selected-movement":
                     target.disabled = true;
                     if (!await abortSelectedTokenMovement(context.combat, target.dataset.tokenUuid)
@@ -555,7 +617,10 @@ class SmootherFightHud {
                     ));
                     break;
                 case "defend-other":
-                    await services.beginDefenderDefense(game.messages.get(target.dataset.messageId));
+                    await services.beginDefenderDefense(
+                        game.messages.get(target.dataset.messageId),
+                        target.dataset.defenderTokenUuid ?? null
+                    );
                     break;
                 case "defend-target":
                     await services.beginAdditionalTargetDefense(game.messages.get(target.dataset.messageId));

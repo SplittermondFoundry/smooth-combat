@@ -52,9 +52,49 @@
 }
 
 #splittermond-smoother-fight-hud .sf-associated-card.is-defense {
-    grid-column: auto;
+    grid-column: 1 / -1;
     overflow: hidden;
     background: rgba(108, 201, 193, 0.055);
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card.is-offense {
+    border-color: rgba(216, 168, 93, 0.28);
+    background: rgba(216, 168, 93, 0.025);
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card.is-interruption {
+    border-color: rgba(222, 111, 91, 0.58);
+    background: linear-gradient(135deg, rgba(114, 42, 35, 0.16), rgba(216, 168, 93, 0.035));
+}
+
+#splittermond-smoother-fight-hud .sf-associated-card.is-interruption > summary > span > i {
+    color: #f39a82;
+}
+
+#splittermond-smoother-fight-hud .sf-event-card.is-flow-focus {
+    border-color: rgba(242, 206, 135, 0.7);
+    box-shadow: 0 0 0 1px rgba(242, 206, 135, 0.13), 0 0 16px rgba(216, 168, 93, 0.11);
+}
+
+#splittermond-smoother-fight-hud .sf-event-card.is-flow-focus > summary {
+    color: #fff0bd;
+    background: linear-gradient(90deg, rgba(216, 168, 93, 0.13), rgba(108, 201, 193, 0.06));
+}
+
+#splittermond-smoother-fight-hud .sf-defense-progress {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    min-height: 62px;
+    padding: 12px;
+    color: var(--sf-text);
+    font-weight: 700;
+}
+
+#splittermond-smoother-fight-hud .sf-defense-progress > i {
+    color: var(--sf-gold-bright);
+    font-size: 18px;
 }
 
 #splittermond-smoother-fight-hud .sf-event-body > .sf-associated-card.is-defense:nth-of-type(odd):has(+ .sf-chat-message) {
@@ -299,11 +339,28 @@
     font-size: 12px;
 }
 
+/* Foundry updates relative timestamps periodically. Keep that text on one line
+ * so a shorter or longer timestamp cannot change a chat message's height and
+ * displace the user's current scroll position. */
+.chat-message .message-header .message-sender {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-message .message-header .message-metadata,
+.chat-message .message-header .message-timestamp {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
 #splittermond-smoother-fight-hud .sf-chat-message .message-content {
     overflow: visible;
 }
 
-.chat-message .sf-tick-action-chat-card {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card {
     overflow: hidden;
     border: 1px solid rgba(42, 105, 107, 0.5);
     border-radius: 7px;
@@ -311,7 +368,7 @@
     box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
 }
 
-.chat-message .sf-tick-action-chat-card > header {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card > header {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -320,12 +377,12 @@
     background: linear-gradient(135deg, #173739, #24575a);
 }
 
-.chat-message .sf-tick-action-chat-card > header > i {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card > header > i {
     color: #e4bd72;
     font-size: 22px;
 }
 
-.chat-message .sf-tick-action-chat-card > header small {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card > header small {
     display: block;
     margin-bottom: 2px;
     color: #b9d9d6;
@@ -336,7 +393,7 @@
     text-transform: uppercase;
 }
 
-.chat-message .sf-tick-action-chat-card > header h2 {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card > header h2 {
     margin: 0;
     padding: 0;
     border: 0;
@@ -345,7 +402,7 @@
     line-height: 1.15;
 }
 
-.chat-message .sf-tick-action-chat-card > dl {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card > dl {
     display: grid;
     gap: 0;
     margin: 0;
@@ -353,14 +410,14 @@
     border-bottom: 1px solid rgba(42, 105, 107, 0.28);
 }
 
-.chat-message .sf-tick-action-chat-card > dl > div {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card > dl > div {
     display: grid;
     grid-template-columns: minmax(64px, 0.4fr) minmax(0, 1fr);
     gap: 8px;
     padding: 4px 0;
 }
 
-.chat-message .sf-tick-action-chat-card dt {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card dt {
     color: var(--color-text-subtle, #5b655f);
     font-size: 10px;
     font-weight: 700;
@@ -368,20 +425,20 @@
     text-transform: uppercase;
 }
 
-.chat-message .sf-tick-action-chat-card dd {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card dd {
     margin: 0;
     font-weight: 700;
 }
 
-.chat-message .sf-tick-action-chat-card > section {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card > section {
     padding: 8px 12px;
 }
 
-.chat-message .sf-tick-action-chat-card > section + section {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card > section + section {
     padding-top: 0;
 }
 
-.chat-message .sf-tick-action-chat-card > section h3 {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card > section h3 {
     margin: 0 0 3px;
     color: #276b6c;
     font-size: 10px;
@@ -389,16 +446,16 @@
     text-transform: uppercase;
 }
 
-.chat-message .sf-tick-action-chat-card > section p {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-tick-action-chat-card > section p {
     margin: 0;
     line-height: 1.35;
 }
 
-.chat-message .sf-continuous-action-interruption-card > header {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-continuous-action-interruption-card > header {
     background: linear-gradient(135deg, #5b241f, #8a3d31);
 }
 
-.chat-message .sf-continuous-action-interruption-actions .splittermond-chat-action {
+:is(.chat-message, #splittermond-smoother-fight-hud .sf-chat-message) .sf-continuous-action-interruption-actions .splittermond-chat-action {
     width: 100%;
     margin: 0;
     border-color: rgba(138, 61, 49, 0.55);
@@ -773,12 +830,22 @@
 }
 
 #splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls .sf-splinterpoint-defense-action {
+    border-color: rgba(108, 201, 193, 0.4);
+    color: #dffbf7;
+    background: linear-gradient(135deg, rgba(27, 74, 75, 0.4), rgba(37, 75, 72, 0.2));
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls .sf-splinterpoint-defense-action i {
+    color: #b9dcd7;
+}
+
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls .sf-splinterpoint-defense-action.is-hit-preventing {
     border-color: rgba(216, 168, 93, 0.64);
     color: #fff4d8;
     background: linear-gradient(135deg, rgba(122, 83, 30, 0.62), rgba(52, 112, 106, 0.38));
 }
 
-#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls .sf-splinterpoint-defense-action i {
+#splittermond-smoother-fight-hud .sf-chat-message .sf-promoted-controls .sf-splinterpoint-defense-action.is-hit-preventing i {
     color: var(--sf-gold-bright);
 }
 
@@ -790,6 +857,10 @@
 #splittermond-smoother-fight-hud .sf-chat-message .is-own-fumble-roll,
 #splittermond-smoother-fight-hud .sf-chat-message .is-gm-target-application,
 #splittermond-smoother-fight-hud .sf-chat-message .is-self-target,
+#splittermond-smoother-fight-hud .sf-chat-message .is-next-active-defense,
+#splittermond-smoother-fight-hud .sf-chat-message .is-next-fumble-action:not(:disabled),
+#splittermond-smoother-fight-hud .sf-chat-message .is-next-interruption-roll:not(:disabled),
+#splittermond-smoother-fight-hud .sf-chat-message .sf-splinterpoint-defense-action.is-hit-preventing,
 #splittermond-smoother-fight-hud .sf-chat-message .sf-splinterpoint-resonance-action {
     border: 1px solid rgba(242, 206, 135, 0.82) !important;
     color: #fff7d6 !important;
@@ -987,6 +1058,10 @@
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-own-fumble-roll,
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-gm-target-application,
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-self-target,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-next-active-defense,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-next-fumble-action,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .is-next-interruption-roll,
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .sf-splinterpoint-defense-action.is-hit-preventing,
     #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-chat-message .sf-splinterpoint-resonance-action {
         animation: none;
     }
@@ -1006,6 +1081,10 @@
 #splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-own-fumble-roll,
 #splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-gm-target-application,
 #splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-self-target,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-next-active-defense,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-next-fumble-action,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .is-next-interruption-roll,
+#splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .sf-splinterpoint-defense-action.is-hit-preventing,
 #splittermond-smoother-fight-hud.sf-motion-none .sf-chat-message .sf-splinterpoint-resonance-action {
     animation: none;
 }

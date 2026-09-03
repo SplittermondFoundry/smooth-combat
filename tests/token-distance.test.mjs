@@ -7,6 +7,7 @@ import {
     measureTokenDistance,
     sceneDistanceUnit,
     tokenDistanceMeasurement,
+    tokenFootprintsAdjacent,
 } from "../Modul/splittermond-smoother-fight/scripts/shared/token-distance.js";
 
 test("token distance uses Foundry's grid path measurement between token centers", () => {
@@ -31,6 +32,7 @@ test("token distance uses Foundry's grid path measurement between token centers"
         unit: "m",
         metric: true,
         available: true,
+        adjacent: false,
     });
 });
 
@@ -52,8 +54,30 @@ test("token distance falls back to a three-dimensional straight line", () => {
         unit: "ft",
         metric: false,
         available: true,
+        adjacent: null,
     });
     assert.equal(measureTokenDistance({}, {}, canvasContext), Number.POSITIVE_INFINITY);
+});
+
+test("touch adjacency compares token footprints on the active square grid", () => {
+    const canvasContext = { grid: { size: 100, type: 1 } };
+    const source = { x: 0, y: 0, width: 1, height: 1, elevation: 0 };
+
+    assert.equal(tokenFootprintsAdjacent(source, {
+        x: 100, y: 0, width: 1, height: 1, elevation: 0,
+    }, canvasContext), true);
+    assert.equal(tokenFootprintsAdjacent(source, {
+        x: 100, y: 100, width: 1, height: 1, elevation: 0,
+    }, canvasContext), true);
+    assert.equal(tokenFootprintsAdjacent(source, {
+        x: 200, y: 0, width: 1, height: 1, elevation: 0,
+    }, canvasContext), false);
+    assert.equal(tokenFootprintsAdjacent(source, {
+        x: 100, y: 0, width: 1, height: 1, elevation: 1,
+    }, canvasContext), false);
+    assert.equal(tokenFootprintsAdjacent(source, {
+        x: 100, y: 0, width: 1, height: 1,
+    }, { grid: { size: 100, type: 0 } }), null);
 });
 
 test("scene units and localized distance labels remain explicit", () => {

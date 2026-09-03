@@ -4,7 +4,9 @@ import test from "node:test";
 import { configureServices } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
 import {
     beginActiveDefense,
+    canUserSubmitDefense,
     claimPendingDefenseForMessage,
+    getEligibleDefenderChoices,
     processDefenseMessage,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/active-defense.js";
 import {
@@ -13,9 +15,14 @@ import {
     getDefenseSplinterpointActions,
     recoverDefenseSplinterpointApplication,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/splinterpoints.js";
-import { recreateOffenseAfterSplinterpoint } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/recalculation.js";
+import {
+    hasResolvedAssistedDefense,
+    queueDefenseForAttack,
+    recreateOffenseAfterSplinterpoint,
+} from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/recalculation.js";
 import {
     beginOffenseFollowUp,
+    canUserDeclineActiveDefense,
     declineActiveDefenseForUser,
     finishOffenseFollowUpRequest,
     requestOffenseFollowUp,
@@ -24,6 +31,7 @@ import {
     defenseAllowsModification,
     defenseAwaitsResponse,
     defensePhaseForOffense,
+    hasActorDeclinedDefense,
     reopenDefensePhaseAfterOutcomeChange,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/phase.js";
 import { activeDefenseState } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/state.js";
@@ -199,6 +207,7 @@ configureServices({
     },
     getDefenseCheck: (message) => harness.checks.get(message.id) ?? null,
     getDefenseSplinterpointActions,
+    getEligibleDefenderChoices,
     getAssignedUser: (combatant) => combatant?.assignedUser ?? null,
     getHudContext: () => null,
     getActivePrimaryGm: () => harness.activeGm,
@@ -409,6 +418,161 @@ test("declining active defense is persistent and rejects a delayed defense resul
     assert.equal(root.flags[MODULE_ID].context.defensePhase, "declined");
 });
 
+test("the target and multiple Defenders may decline independently before the defense phase closes", async () => {
+    resetHarness();
+    const target = createSplinterpointActor("protected-target", { owners: ["target-player"] });
+    const targetToken = {
+        uuid: "Token.protected-target",
+        name: "Protected target",
+        actor: target,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    const helper = {
+        id: "eligible-helper",
+        uuid: "Actor.eligible-helper",
+        items: [{ type: "mastery", name: "Verteidiger", system: { skill: "body" } }],
+        activeDefense: {
+            defense: [{ id: "body-defense", name: "Körper", skill: { id: "body" } }],
+        },
+        testUserPermission: (user) => user?.isGM || user?.id === "helper-player",
+    };
+    const helperToken = {
+        uuid: "Token.eligible-helper",
+        name: "Eligible helper",
+        actor: helper,
+        x: 100,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    const secondHelper = {
+        id: "second-eligible-helper",
+        uuid: "Actor.second-eligible-helper",
+        items: [{ type: "mastery", name: "Verteidiger", system: { skill: "body" } }],
+        activeDefense: {
+            defense: [{ id: "second-body-defense", name: "Körper", skill: { id: "body" } }],
+        },
+        testUserPermission: (user) => user?.isGM || user?.id === "second-helper-player",
+    };
+    const secondHelperToken = {
+        uuid: "Token.second-eligible-helper",
+        name: "Second eligible helper",
+        actor: secondHelper,
+        x: -100,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    harness.tokens.set(targetToken.uuid, targetToken);
+    game.combat = {
+        id: "combat",
+        combatants: [
+            { token: helperToken, actor: helper, isDefeated: false },
+            { token: secondHelperToken, actor: secondHelper, isDefeated: false },
+        ],
+    };
+    canvas.grid = { size: 100, distance: 1 };
+    const root = createAttack("attack-target-declines-with-defender", attackReport(), {
+        defensePhase: "open",
+        primaryTargetTokenUuid: targetToken.uuid,
+    });
+    root.content = '<button data-localaction="activeDefense">Abwehr</button>';
+    const targetPlayer = { id: "target-player", isGM: false };
+    const helperPlayer = { id: "helper-player", isGM: false };
+    const secondHelperPlayer = { id: "second-helper-player", isGM: false };
+
+    assert.equal(await declineActiveDefenseForUser(root, targetPlayer), root);
+    assert.equal(defensePhaseForOffense(root), "open");
+    assert.equal(defenseAwaitsResponse(root), true);
+    assert.equal(hasActorDeclinedDefense(root, target.uuid), true);
+    assert.equal(canUserDeclineActiveDefense(targetPlayer, root), false);
+    assert.equal(getEligibleDefenderChoices(root, helperPlayer).length, 1);
+    assert.equal(canUserDeclineActiveDefense(helperPlayer, root, helperToken.uuid), true);
+
+    const lateTargetDefense = createDefense("late-target-defense", 27, target.id);
+    const latePending = {
+        ...pendingFor(root, lateTargetDefense, 1),
+        targetTokenUuid: targetToken.uuid,
+        targetActorUuid: target.uuid,
+        defenderTokenUuid: targetToken.uuid,
+    };
+    assert.equal(await processDefenseMessage(lateTargetDefense, latePending), undefined);
+    assert.equal(latestOffense(root), root);
+
+    assert.equal(await declineActiveDefenseForUser(root, helperPlayer, helperToken.uuid), root);
+    assert.equal(defensePhaseForOffense(root), "open");
+    assert.equal(defenseAwaitsResponse(root), true);
+    assert.equal(getEligibleDefenderChoices(root, secondHelperPlayer).length, 1);
+    assert.equal(canUserDeclineActiveDefense(secondHelperPlayer, root, secondHelperToken.uuid), true);
+    assert.equal(hasActorDeclinedDefense(root, helper.uuid), true);
+
+    assert.equal(await declineActiveDefenseForUser(root, secondHelperPlayer, secondHelperToken.uuid), root);
+    assert.equal(defensePhaseForOffense(root), "declined");
+    assert.equal(defenseAwaitsResponse(root), false);
+    assert.equal(hasActorDeclinedDefense(root, secondHelper.uuid), true);
+});
+
+test("the attacker cannot keep the defense phase open as Defender for their own target", async () => {
+    resetHarness();
+    const target = createSplinterpointActor("attacker-defender-target", { owners: ["target-player"] });
+    const targetToken = {
+        uuid: "Token.attacker-defender-target",
+        name: "Attacker defender target",
+        actor: target,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    const attacker = {
+        id: "self-defending-attacker",
+        uuid: "Actor.self-defending-attacker",
+        items: [{ type: "mastery", name: "Verteidiger", system: { skill: "body" } }],
+        activeDefense: {
+            defense: [{ id: "body-defense", name: "Körper", skill: { id: "body" } }],
+        },
+        testUserPermission: (user) => user?.isGM || user?.id === "attacker-player",
+    };
+    const attackerToken = {
+        id: "self-defending-attacker-token",
+        uuid: "Token.self-defending-attacker",
+        name: "Self-defending attacker",
+        actor: attacker,
+        x: 100,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    const attackerCombatant = {
+        id: "self-defending-attacker-combatant",
+        token: attackerToken,
+        actor: attacker,
+        isDefeated: false,
+    };
+    harness.tokens.set(targetToken.uuid, targetToken);
+    harness.tokens.set(attackerToken.uuid, attackerToken);
+    game.combat = { id: "combat", combatants: [attackerCombatant] };
+    canvas.grid = { size: 100, distance: 1 };
+    const root = createAttack("attack-cannot-defend-own-target", attackReport(), {
+        attackerActorUuid: attacker.uuid,
+        attackerTokenUuid: attackerToken.uuid,
+        combatantId: attackerCombatant.id,
+        defensePhase: "open",
+        primaryTargetTokenUuid: targetToken.uuid,
+    });
+    root.speaker = { actor: attacker.id, token: attackerToken.id };
+    root.content = '<button data-localaction="activeDefense">Abwehr</button>';
+    const targetPlayer = { id: "target-player", isGM: false };
+
+    assert.deepEqual(getEligibleDefenderChoices(root, game.user), []);
+    assert.equal(await declineActiveDefenseForUser(root, targetPlayer), root);
+    assert.equal(defensePhaseForOffense(root), "declined");
+    assert.equal(defenseAwaitsResponse(root), false);
+});
+
 test("a splinterpoint success reopens an initially unavailable active defense phase", async () => {
     resetHarness();
     const root = createAttack("attack-offense-splinterpoint", attackReport({ succeeded: false }), {
@@ -488,6 +652,288 @@ test("parallel defenses against one root attack form one complete canonical succ
     assert.equal(lowerDefense.flags[MODULE_ID].context.resultingDefenseValue, 24);
     assert.equal(lowerDefense.flags[MODULE_ID].context.effectiveDefenseValue, 27);
     assert.equal(higherDefense.flags[MODULE_ID].context.resultingDefenseValue, 27);
+});
+
+test("multiple Defender attempts are retained and the strongest generated defense wins", async () => {
+    resetHarness();
+    const root = createAttack("attack-assisted-once");
+    const first = createDefense("defender-first", 25, "helper-a");
+    const second = createDefense("defender-second", 28, "helper-b");
+    const firstPending = {
+        ...pendingFor(root, first, 1),
+        defenderTokenUuid: "Token.helper-a",
+        assisted: true,
+    };
+    const secondPending = {
+        ...pendingFor(root, second, 2),
+        defenderTokenUuid: "Token.helper-b",
+        assisted: true,
+    };
+
+    await queueDefenseForAttack(root.id, first, harness.checks.get(first.id), 25, firstPending);
+    const afterFirst = latestOffense(root);
+    assert.equal(afterFirst.flags[MODULE_ID].context.assistedDefenseUsed, true);
+    assert.equal(afterFirst.flags[MODULE_ID].context.assistedDefenseMessageId, first.id);
+    assert.equal(afterFirst.flags[MODULE_ID].context.assistedDefenseActorUuid, "Actor.helper-a");
+
+    await queueDefenseForAttack(root.id, second, harness.checks.get(second.id), 28, secondPending);
+    const afterSecond = latestOffense(root);
+    assert.equal(afterSecond.flags[MODULE_ID].context.assistedDefenseMessageId, second.id);
+    assert.deepEqual(afterSecond.flags[MODULE_ID].context.assistedDefenseMessageIds, [first.id, second.id]);
+    assert.deepEqual(afterSecond.flags[MODULE_ID].context.assistedDefenseActorUuids, ["Actor.helper-a", "Actor.helper-b"]);
+    assert.deepEqual(afterSecond.flags[MODULE_ID].context.assistedDefenseTokenUuids, ["Token.helper-a", "Token.helper-b"]);
+    assert.equal(afterSecond.flags[MODULE_ID].context.defenseMessageIds.includes(second.id), true);
+    assert.equal(afterSecond.flags[MODULE_ID].context.activeDefenseValue, 28);
+    assert.equal(afterSecond.flags[MODULE_ID].context.defenseValue, 28);
+});
+
+test("target and multiple Defenders decide independently while generated VTD including Defensiv selects the winner", async () => {
+    resetHarness();
+    const target = createSplinterpointActor("multi-target", { owners: ["target-player"] });
+    const targetToken = {
+        uuid: "Token.multi-target",
+        name: "Multi target",
+        actor: target,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    const createHelper = (id, x) => {
+        const actor = {
+            id,
+            uuid: `Actor.${id}`,
+            items: [{ type: "mastery", name: "Verteidiger", system: { skill: "melee" } }],
+            activeDefense: {
+                defense: [{ id: `${id}-defense`, name: `Defense ${id}`, skill: { id: "melee" } }],
+            },
+            testUserPermission: (user) => user?.isGM || user?.id === `${id}-player`,
+        };
+        const token = {
+            uuid: `Token.${id}`,
+            name: id,
+            actor,
+            x,
+            y: 0,
+            width: 1,
+            height: 1,
+        };
+        return { actor, token };
+    };
+    const firstHelper = createHelper("helper-one", 100);
+    const secondHelper = createHelper("helper-two", -100);
+    harness.tokens.set(targetToken.uuid, targetToken);
+    harness.tokens.set(firstHelper.token.uuid, firstHelper.token);
+    harness.tokens.set(secondHelper.token.uuid, secondHelper.token);
+    game.combat = {
+        id: "combat",
+        combatants: [
+            { token: firstHelper.token, actor: firstHelper.actor, isDefeated: false },
+            { token: secondHelper.token, actor: secondHelper.actor, isDefeated: false },
+        ],
+    };
+    canvas.grid = { size: 100, distance: 1 };
+
+    const root = createAttack("attack-three-defenses", attackReport({
+        difficulty: 20,
+        roll: { total: 30 },
+        degreeOfSuccess: { fromRoll: 3, modification: 0 },
+    }), { primaryTargetTokenUuid: targetToken.uuid });
+
+    const firstDefense = createDefense("first-helper-defense", 25, firstHelper.actor.id);
+    harness.checks.get(firstDefense.id).skill = "melee";
+    harness.checks.get(firstDefense.id).itemData.id = `${firstHelper.actor.id}-defense`;
+    await processDefenseMessage(firstDefense, {
+        ...pendingFor(root, firstDefense, 1),
+        targetTokenUuid: targetToken.uuid,
+        targetActorUuid: target.uuid,
+        defenderTokenUuid: firstHelper.token.uuid,
+        defenderActorUuid: firstHelper.actor.uuid,
+        defenseId: `${firstHelper.actor.id}-defense`,
+        defenseSkillId: "melee",
+        assisted: true,
+    });
+    const afterFirst = latestOffense(root);
+    assert.equal(afterFirst.flags[MODULE_ID].context.activeDefenseValue, 25);
+    assert.equal(defensePhaseForOffense(afterFirst), "open", "target and second Defender still have decisions");
+
+    const targetDefense = createDefense("target-defense", 22, target.id);
+    await processDefenseMessage(targetDefense, {
+        ...pendingFor(root, targetDefense, 2),
+        targetTokenUuid: targetToken.uuid,
+        targetActorUuid: target.uuid,
+        defenderTokenUuid: targetToken.uuid,
+        defenderActorUuid: target.uuid,
+    });
+    const afterTarget = latestOffense(root);
+    assert.equal(afterTarget, afterFirst, "the weaker personal defense does not recreate the attack");
+    assert.equal(afterTarget.flags[MODULE_ID].context.activeDefenseValue, 25);
+    assert.equal(defensePhaseForOffense(afterTarget), "open", "the second Defender still has a decision");
+
+    const strongestDefense = createDefense("second-helper-defense", 26, secondHelper.actor.id);
+    const strongestCheck = harness.checks.get(strongestDefense.id);
+    strongestCheck.skill = "melee";
+    strongestCheck.itemData = {
+        id: `${secondHelper.actor.id}-defense`,
+        itemFeatures: [{ name: "Defensiv", value: 3 }],
+    };
+    await processDefenseMessage(strongestDefense, {
+        ...pendingFor(root, strongestDefense, 3),
+        targetTokenUuid: targetToken.uuid,
+        targetActorUuid: target.uuid,
+        defenderTokenUuid: secondHelper.token.uuid,
+        defenderActorUuid: secondHelper.actor.uuid,
+        defenseId: `${secondHelper.actor.id}-defense`,
+        defenseSkillId: "melee",
+        assisted: true,
+    });
+
+    const finalAttack = latestOffense(root);
+    assert.notEqual(finalAttack, afterTarget, "the stronger generated VTD recalculates the attack again");
+    assert.equal(strongestDefense.flags[MODULE_ID].context.resultingDefenseValue, 29);
+    assert.equal(strongestDefense.flags[MODULE_ID].context.defensiveFeatureValue, 3);
+    assert.equal(finalAttack.flags[MODULE_ID].context.activeDefenseValue, 29);
+    assert.equal(finalAttack.flags[MODULE_ID].context.defenseValue, 29);
+    assert.equal(finalAttack.system.checkReport.difficulty, 29);
+    assert.equal(defensePhaseForOffense(finalAttack), "resolved");
+    assert.deepEqual(finalAttack.flags[MODULE_ID].context.attemptedDefenseActorUuids, [
+        firstHelper.actor.uuid,
+        target.uuid,
+        secondHelper.actor.uuid,
+    ]);
+});
+
+test("a Defender roll with empty serialized item data replaces a weaker personal defense", async () => {
+    resetHarness();
+    const target = createSplinterpointActor("defender-target", { owners: ["target-player"] });
+    const targetToken = {
+        uuid: "Token.defender-target",
+        name: "Defender target",
+        actor: target,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    const helper = {
+        id: "defender-helper",
+        uuid: "Actor.defender-helper",
+        items: [{ type: "mastery", name: "Verteidiger", system: { skill: "melee" } }],
+        activeDefense: {
+            defense: [{ id: "claw-defense", name: "Prankenhieb", skill: { id: "melee" } }],
+        },
+        testUserPermission: (user) => user?.isGM || user?.id === "helper-player",
+    };
+    const helperToken = {
+        uuid: "Token.defender-helper",
+        name: "Defender helper",
+        actor: helper,
+        x: 100,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    harness.tokens.set(targetToken.uuid, targetToken);
+    harness.tokens.set(helperToken.uuid, helperToken);
+    game.combat = {
+        id: "combat",
+        combatants: [{ token: helperToken, actor: helper, isDefeated: false }],
+    };
+    canvas.grid = { size: 100, distance: 1 };
+
+    const root = createAttack("attack-defender-after-personal", attackReport({
+        difficulty: 20,
+        roll: { total: 21 },
+        degreeOfSuccess: { fromRoll: 1, modification: 0 },
+    }), {
+        primaryTargetTokenUuid: targetToken.uuid,
+    });
+    const personalDefense = createDefense("personal-defense", 21, target.id);
+    await processDefenseMessage(personalDefense, {
+        ...pendingFor(root, personalDefense, 1),
+        targetTokenUuid: targetToken.uuid,
+        targetActorUuid: target.uuid,
+        defenderTokenUuid: targetToken.uuid,
+    });
+    const personalSuccessor = latestOffense(root);
+    assert.equal(personalSuccessor.system.checkReport.difficulty, 21);
+
+    const assistedDefense = createDefense("assisted-empty-item-data", 24, helper.id);
+    const assistedCheck = harness.checks.get(assistedDefense.id);
+    assistedCheck.skill = "magic";
+    assistedCheck.itemData = {};
+    const assistedPending = {
+        ...pendingFor(personalSuccessor, assistedDefense, 2),
+        targetTokenUuid: targetToken.uuid,
+        targetActorUuid: target.uuid,
+        defenderTokenUuid: helperToken.uuid,
+        defenderActorUuid: helper.uuid,
+        defenseId: "claw-defense",
+        defenseSkillId: "melee",
+        assisted: true,
+    };
+    const helperPlayer = { id: "helper-player", isGM: false };
+
+    assert.equal(canUserSubmitDefense(helperPlayer, assistedPending, assistedDefense), false);
+    assistedCheck.skill = "melee";
+    assert.equal(canUserSubmitDefense(helperPlayer, assistedPending, assistedDefense), true);
+
+    await processDefenseMessage(assistedDefense, assistedPending);
+
+    const assistedSuccessor = latestOffense(root);
+    assert.notEqual(assistedSuccessor.id, personalSuccessor.id);
+    assert.equal(assistedSuccessor.system.checkReport.difficulty, 24);
+    assert.equal(assistedSuccessor.system.checkReport.succeeded, false);
+    assert.equal(assistedSuccessor.flags[MODULE_ID].context.activeDefenseValue, 24);
+    assert.equal(assistedSuccessor.flags[MODULE_ID].context.assistedDefenseMessageId, assistedDefense.id);
+    assert.equal(assistedDefense.flags[MODULE_ID].context.resultingDefenseValue, 24);
+});
+
+test("reload recovery recognizes a legacy linked Defender roll without consuming another helper's decision", () => {
+    resetHarness();
+    const targetActor = { id: "protected", uuid: "Actor.protected" };
+    const targetToken = {
+        uuid: "Token.protected",
+        actor: targetActor,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    const helperActor = {
+        id: "helper-after-reload",
+        uuid: "Actor.helper-after-reload",
+        items: [{ type: "mastery", name: "Verteidiger", system: { skill: "body" } }],
+        activeDefense: {
+            defense: [{ id: "body-defense", name: "Körper", skill: { id: "body" } }],
+        },
+    };
+    const helperToken = {
+        uuid: "Token.helper-after-reload",
+        actor: helperActor,
+        x: 100,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    const root = createAttack("attack-legacy-assisted", attackReport(), {
+        defensePhase: "open",
+        primaryTargetTokenUuid: targetToken.uuid,
+    });
+    const legacyDefense = createDefense("legacy-assisted-defense", 25, "old-helper");
+    legacyDefense.flags[MODULE_ID] = {};
+    legacyDefense.flags[MODULE_ID].context = {
+        assisted: true,
+        attackMessageId: root.id,
+    };
+    harness.tokens.set(targetToken.uuid, targetToken);
+    game.combat = { combatants: [{ token: helperToken, actor: helperActor }] };
+    canvas.grid = { size: 100, distance: 1 };
+
+    assert.equal(getEligibleDefenderChoices(root, game.user).length, 1);
+    root.flags[MODULE_ID].context.defenseMessageIds = [legacyDefense.id];
+    assert.equal(hasResolvedAssistedDefense(root), true);
+    assert.equal(getEligibleDefenderChoices(root, game.user).length, 1);
 });
 
 test("a recreated attack retains its roll without triggering Dice So Nice again", async () => {

@@ -9,6 +9,7 @@ import {
 import { COMBAT_TICK_ACTIONS } from "../Modul/splittermond-smoother-fight/scripts/domain/combat/ticks.js";
 import {
     bindTickActionReferenceFilters,
+    closeTickActionReferenceAfterSuccess,
     closeTickActionReferenceOnEscape,
     fitTickActionReferencePanel,
     toggleTickActionReferenceOnKeyboard,
@@ -28,14 +29,63 @@ import {
 import { performTickAction } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/tick-actions.js";
 import { services } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
 import { withTemporarySystemTargets } from "../Modul/splittermond-smoother-fight/scripts/features/targeting/targeting.js";
+import { buildTickActionChatModel } from "../Modul/splittermond-smoother-fight/scripts/features/chat/tick-action-localization.js";
 
 const german = JSON.parse(fs.readFileSync(
     new URL("../Modul/splittermond-smoother-fight/lang/de.json", import.meta.url),
     "utf8"
 ));
+const english = JSON.parse(fs.readFileSync(
+    new URL("../Modul/splittermond-smoother-fight/lang/en.json", import.meta.url),
+    "utf8"
+));
 
 function translation(key) {
     return key.split(".").reduce((value, segment) => value?.[segment], german) ?? key;
+}
+
+test("tick-action cards localize independently for every viewing client", (context) => {
+    const previousGame = globalThis.game;
+    context.after(() => {
+        if (previousGame === undefined) delete globalThis.game;
+        else globalThis.game = previousGame;
+    });
+    const sprint = COMBAT_TICK_ACTIONS.find(({ id }) => id === "sprint");
+
+    globalThis.game = { i18n: dictionaryI18n(german) };
+    const germanCard = buildTickActionChatModel(sprint, 10, { movementDistance: 9 });
+    globalThis.game = { i18n: dictionaryI18n(english) };
+    const englishCard = buildTickActionChatModel(sprint, 10, { movementDistance: 9 });
+
+    assert.equal(germanCard.name, "Sprinten");
+    assert.equal(germanCard.durationLabel, "Dauer");
+    assert.equal(germanCard.type, "Kontinuierliche Aktion");
+    assert.match(germanCard.description, /höchstmöglichem Tempo/u);
+    assert.equal(germanCard.special, "3 × GSW in m (9 m bewegt)");
+    assert.equal(englishCard.name, "Sprint");
+    assert.equal(englishCard.durationLabel, "Duration");
+    assert.equal(englishCard.type, "Continuous action");
+    assert.match(englishCard.description, /fastest possible pace/u);
+    assert.equal(englishCard.special, "3 × speed in metres (9 m moved)");
+});
+
+test("the German Defender button never falls back to the English mastery name", () => {
+    assert.equal(german.SMOOTHER_FIGHT.HUD.DefenderAction, "Für {target} verteidigen");
+    const defenderTexts = Object.entries(german.SMOOTHER_FIGHT.HUD)
+        .filter(([key]) => key.startsWith("Defender"))
+        .map(([, value]) => String(value));
+    assert.equal(defenderTexts.some((value) => /\bDefender\b/u.test(value)), false);
+});
+
+function dictionaryI18n(dictionary) {
+    const localize = (key) => key.split(".").reduce((value, segment) => value?.[segment], dictionary) ?? key;
+    return {
+        localize,
+        format: (key, data) => Object.entries(data ?? {}).reduce(
+            (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+            localize(key),
+        ),
+    };
 }
 
 test("every combat action has card-ready descriptive text", () => {
@@ -101,6 +151,24 @@ test("Escape closes the tick action disclosure and restores focus to its summary
     assert.equal(prevented, 1);
     assert.equal(stopped, 1);
     assert.equal(closeTickActionReferenceOnEscape(root, { ...event, key: "Enter" }), false);
+});
+
+test("a successfully applied overview action closes the tick action disclosure", () => {
+    const staleDisclosure = { open: true };
+    const currentDisclosure = { open: true };
+    const trigger = { closest: () => staleDisclosure };
+    const root = {
+        contains: () => false,
+        querySelector: () => currentDisclosure,
+    };
+
+    assert.equal(closeTickActionReferenceAfterSuccess(root, trigger, true), true);
+    assert.equal(currentDisclosure.open, false, "the disclosure from a meanwhile rerendered HUD closes");
+
+    currentDisclosure.open = true;
+    assert.equal(closeTickActionReferenceAfterSuccess(root, trigger, false), false);
+    assert.equal(currentDisclosure.open, true, "a cancelled action keeps the overview open");
+    assert.equal(closeTickActionReferenceAfterSuccess(root, { closest: () => null }, true), false);
 });
 
 test("the tick action panel opens toward the larger available viewport area", () => {
@@ -1220,7 +1288,7 @@ test("out-of-range warnings remain advisory and do not suppress attack or spell 
         }
     );
 
-    const spell = { id: "bolt", name: "Flammenstrahl", difficulty: "VTD", range: "6 m" };
+    const spell = { id: "blessing", name: "Segnung", difficulty: 18, range: "Berührung" };
     let spellRolls = 0;
     const spellActor = {
         id: "caster",
@@ -1238,7 +1306,7 @@ test("out-of-range warnings remain advisory and do not suppress attack or spell 
     assert.equal(spellRolls, 1);
     assert.equal(warnings.length, 2);
     assert.match(warnings[0], /Schwert.*8 m.*6 m.*nicht blockiert/u);
-    assert.match(warnings[1], /Flammenstrahl.*8 m.*6 m.*nicht blockiert/u);
+    assert.match(warnings[1], /Segnung.*8 m.*Berührung.*nicht blockiert/u);
 });
 
 test("an older roll completion cannot clear a newer pending offense context", async () => {
@@ -1350,6 +1418,15 @@ test("clickable tick actions create a public chat card for the acting token", as
     assert.match(created[0].content, /Quelle: GRW, S\. 161/u);
     assert.deepEqual(created[0].flags["splittermond-smoother-fight"].tickAction, {
         id: "searchOpening",
+        localization: {
+            description: null,
+            descriptionData: null,
+            descriptionKey: null,
+            movementDistance: null,
+            special: null,
+            specialData: null,
+            specialKey: null,
+        },
         ticks: "4",
         tokenUuid: "Scene.scene-1.Token.token-1",
     });

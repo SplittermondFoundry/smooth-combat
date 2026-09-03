@@ -14,7 +14,26 @@ export function tokenDistanceMeasurement(left, right, canvasContext = globalThis
         unit,
         metric: isMeterUnit(unit),
         available: Number.isFinite(distance),
+        adjacent: tokenFootprintsAdjacent(left, right, canvasContext),
     };
+}
+
+export function tokenFootprintsAdjacent(left, right, canvasContext = globalThis.canvas) {
+    if (canvasContext?.grid?.isGridless === true || Number(canvasContext?.grid?.type ?? canvasContext?.scene?.grid?.type) === 0) {
+        return null;
+    }
+    const gridSize = Number(canvasContext?.grid?.size ?? canvasContext?.scene?.grid?.size);
+    if (!Number.isFinite(gridSize) || gridSize <= 0) return null;
+
+    const leftBounds = tokenBounds(left, gridSize);
+    const rightBounds = tokenBounds(right, gridSize);
+    if (!leftBounds || !rightBounds) return null;
+    if (Math.abs(leftBounds.elevation - rightBounds.elevation) > 1e-9) return false;
+
+    const horizontalGap = Math.max(0, leftBounds.left - rightBounds.right, rightBounds.left - leftBounds.right);
+    const verticalGap = Math.max(0, leftBounds.top - rightBounds.bottom, rightBounds.top - leftBounds.bottom);
+    const tolerance = Math.max(1e-6, gridSize * 1e-6);
+    return horizontalGap <= tolerance && verticalGap <= tolerance;
 }
 
 export function measureTokenDistance(left, right, canvasContext = globalThis.canvas) {
@@ -70,4 +89,21 @@ function tokenObjectCenter(token) {
     return object?.center && Number.isFinite(Number(object.center.x)) && Number.isFinite(Number(object.center.y))
         ? { x: Number(object.center.x), y: Number(object.center.y) }
         : null;
+}
+
+function tokenBounds(token, gridSize) {
+    const document = token?.document ?? token;
+    const x = Number(document?.x);
+    const y = Number(document?.y);
+    const width = Number(document?.width);
+    const height = Number(document?.height);
+    if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+    const elevation = Number(document?.elevation);
+    return {
+        left: x,
+        right: x + width * gridSize,
+        top: y,
+        bottom: y + height * gridSize,
+        elevation: Number.isFinite(elevation) ? elevation : 0,
+    };
 }

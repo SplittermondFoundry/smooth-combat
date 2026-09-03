@@ -22,6 +22,8 @@ import {
     SOCKET,
 } from "../../core/constants.js";
 
+import { getApplicableCombat } from "../../core/combat-compatibility.js";
+
 import {
     APPLICATION_STALE_AFTER_MS,
     effectiveApplicationState,
@@ -93,7 +95,7 @@ export function getDefenseSplinterpointActions(message, user = game.user) {
 
     const appliedResonances = new Set(context.vtdSplinterpointResonanceActorUuids ?? []);
     if (appliedResonances.size > 0) return [];
-    const combatants = Array.from(game.combat?.combatants ?? []);
+    const combatants = Array.from(getApplicableCombat()?.combatants ?? []);
     const actions = [];
     const seenActors = new Set();
     for (const combatant of combatants) {
@@ -192,7 +194,7 @@ export async function applyDefenseSplinterpointForUser(message, spenderActorUuid
 
             const resultContext = services.getMessageContext(result) ?? {};
             const target = services.resolveToken(primaryTargetTokenUuid(resultContext));
-            const combatant = Array.from(game.combat?.combatants ?? [])
+            const combatant = Array.from(getApplicableCombat()?.combatants ?? [])
                 .find((candidate) => actorUuid(combatantActor(candidate)) === spenderActorUuid);
             try {
                 await services.createDefenseSplinterpointChatCard({
