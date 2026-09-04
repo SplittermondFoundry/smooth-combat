@@ -1,5 +1,6 @@
 import { MODULE_ID } from "../../core/constants.js";
 import { t } from "../../shared/values.js";
+import { statusEffectTimingData, statusEffectTimingUpdate } from "../../shared/status-effect-compatibility.js";
 
 import {
     combatPositionFromItem,
@@ -50,13 +51,13 @@ export function getCombatPositionStatusData(requestedPosition) {
             source: t(`${translationRoot}.Source`),
             modifier: "",
             level: 1,
-            combatEvent: {
+            ...statusEffectTimingData({
                 startTick: null,
                 interval: null,
                 repeats: null,
                 macroRef: { name: null, uuid: null },
                 postDescription: true,
-            },
+            }),
         },
         effects: [],
         flags: {
@@ -88,19 +89,25 @@ export async function setCombatPosition(actor, requestedPosition) {
 
     if (!keptMarker) {
         const creationData = getCombatPositionStatusData(position);
-        creationData.system.combatEvent.interval = CREATION_COMPATIBILITY_INTERVAL;
-        creationData.system.combatEvent.repeats = 1;
-        creationData.system.combatEvent.postDescription = false;
+        Object.assign(creationData.system, statusEffectTimingData({
+            startTick: null,
+            interval: CREATION_COMPATIBILITY_INTERVAL,
+            repeats: 1,
+            macroRef: { name: null, uuid: null },
+            postDescription: false,
+        }));
         const created = await actor.createEmbeddedDocuments("Item", [creationData]);
         createdMarker = Array.from(created ?? [])[0] ?? null;
         keptMarker = createdMarker;
         try {
             await actor.updateEmbeddedDocuments("Item", [{
                 _id: documentId(createdMarker),
-                "system.combatEvent.startTick": null,
-                "system.combatEvent.interval": null,
-                "system.combatEvent.repeats": null,
-                "system.combatEvent.postDescription": true,
+                ...statusEffectTimingUpdate({
+                    startTick: null,
+                    interval: null,
+                    repeats: null,
+                    postDescription: true,
+                }),
             }]);
         } catch (error) {
             try {

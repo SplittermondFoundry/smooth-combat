@@ -79,6 +79,8 @@ Splittermond 14.3 wertet zielabhängige Würfe über das erste Element von `game
 
 ## Stabile Laufzeitverträge
 
+Die Schreibzugriffe für zeitgesteuerte Status-Items laufen über `shared/status-effect-compatibility.js`: Splittermond 14.2.x verwendet `startTick`, `interval` und `times`; neuere 14.3-Versionen verwenden `combatEvent`. Das registrierte `CONFIG.Item.dataModels.statuseffect.schema` entscheidet über das Format, weil frühe 14.3-Vorabversionen noch das alte Schema besitzen. Die Versionsnummer ist nur ein Fallback bei fehlendem Schema. Patzerfolgen und Kampfpositionsmarker verwenden denselben Adapter. Fachliche Dauer, Stufe, Modifier und bestehende Dokumente werden nicht migriert oder umgeschrieben.
+
 Folgende Strukturen sind persistierte oder externe Verträge und dürfen nicht beiläufig umbenannt oder umgeformt werden:
 
 - Setting-Schlüssel und ihre Scopes, Typen und Defaults

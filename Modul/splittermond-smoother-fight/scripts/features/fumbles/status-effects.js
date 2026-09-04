@@ -1,5 +1,6 @@
 import { MODULE_ID } from "../../core/constants.js";
 import { cloneData, numericValue } from "../../shared/values.js";
+import { statusEffectTimingData } from "../../shared/status-effect-compatibility.js";
 import { getBundledFumbleStatusEffectData } from "./status-effect-templates.js";
 
 const STATUS_EFFECT_ITEM_TYPE = "statuseffect";
@@ -99,10 +100,12 @@ function normalizeEmbeddedStatusEffectData(template, condition) {
     source.system.source ??= "";
     source.system.modifier ??= "";
     source.system.level = conditionLevel(condition);
-    source.system.combatEvent = normalizedCombatEvent(source.system, condition.durationTicks);
+    const timing = statusEffectTimingData(normalizedCombatEvent(source.system, condition.durationTicks));
+    delete source.system.combatEvent;
     delete source.system.startTick;
     delete source.system.interval;
     delete source.system.times;
+    Object.assign(source.system, timing);
     source.effects = Array.isArray(source.effects) ? source.effects : [];
     source.flags ??= {};
     return source;

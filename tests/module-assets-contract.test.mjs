@@ -21,8 +21,12 @@ test("Foundry manifest entry points remain stable", () => {
     const manifest = readManifest();
     const packageMetadata = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.6.0");
+    assert.equal(manifest.version, "0.6.1");
     assert.equal(packageMetadata.version, manifest.version);
+    assert.equal(manifest.download, `${manifest.url}/releases/download/v${manifest.version}/${manifest.id}-v${manifest.version}.zip`);
+    const releaseNotes = fs.readFileSync(path.join(projectRoot, "RELEASE_NOTES.md"), "utf8");
+    assert.ok(releaseNotes.startsWith(`# Splittermond Smoother Fight ${manifest.version}\n`)
+        || releaseNotes.startsWith(`# Splittermond Smoother Fight ${manifest.version}\r\n`));
     assert.deepEqual(manifest.esmodules, ["scripts/smoother-fight.js"]);
     assert.deepEqual(manifest.styles, [`styles/smoother-fight-${manifest.version}.css`]);
     assert.equal(manifest.socket, true);
@@ -34,7 +38,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(manifest.relationships.systems, [{
         id: "splittermond",
         type: "system",
-        compatibility: { minimum: "14.3.0-alpha4" },
+        compatibility: { minimum: "14.2.0" },
     }]);
     assert.deepEqual(manifest.languages.map(({ lang, path: languagePath }) => [lang, languagePath]), [
         ["de", "lang/de.json"],
