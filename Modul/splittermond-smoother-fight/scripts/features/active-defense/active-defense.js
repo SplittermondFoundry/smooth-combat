@@ -61,10 +61,6 @@ function primaryTargetTokenUuid(context) {
     return context?.primaryTargetTokenUuid ?? context?.targetTokenUuid ?? null;
 }
 
-function primaryTargetActorUuid(context) {
-    return context?.primaryTargetActorUuid ?? context?.targetActorUuid ?? null;
-}
-
 const PENDING_DEFENSE_TTL_MS = 10 * 60 * 1000;
 
 function createPendingDefenseId() {
