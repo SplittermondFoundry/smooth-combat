@@ -280,7 +280,6 @@ async function syncContinuousAction(token, combatant, combat) {
             return true;
         }
 
-        const currentTick = combatTick(combat);
         const initiative = finiteNumber(combatant.initiative, action.endTick);
         if (continuousActionBecomesReadyAtOwnTurn(action)
             && continuousActionReachedCompletionTick(action, combat)) {
