@@ -96,12 +96,6 @@ export function hasActorDeclinedDefense(message, actorUuid) {
     return Array.from(context.declinedDefenseActorUuids ?? []).includes(actorUuid);
 }
 
-export function hasTokenDeclinedDefense(message, tokenUuid) {
-    if (!message || !tokenUuid) return false;
-    const context = services.getMessageContext(message) ?? {};
-    return Array.from(context.declinedDefenseTokenUuids ?? []).includes(tokenUuid);
-}
-
 export function hasDefenseParticipantDecided(context, { actorUuid = null, tokenUuid = null } = {}) {
     const attemptedActors = new Set(context?.attemptedDefenseActorUuids ?? []);
     const attemptedTokens = new Set(context?.attemptedDefenseTokenUuids ?? []);
