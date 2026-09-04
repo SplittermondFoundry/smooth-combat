@@ -244,10 +244,6 @@ function pendingActiveDefenseParticipant(group, isLatest, hudContext, messageCon
         : null;
 }
 
-export function hasPendingActiveDefense(context) {
-    return Boolean(getPendingActiveDefense(context));
-}
-
 export function getPendingActiveDefense(context) {
     const presentation = collectCombatEventPresentation(context);
     if (presentation.focus && presentation.focus.step !== "defense-decision") return null;
