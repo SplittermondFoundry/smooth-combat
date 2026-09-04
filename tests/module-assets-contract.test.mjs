@@ -24,6 +24,16 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(manifest.esmodules, ["scripts/smoother-fight.js"]);
     assert.deepEqual(manifest.styles, [`styles/smoother-fight-${manifest.version}.css`]);
     assert.equal(manifest.socket, true);
+    assert.deepEqual(manifest.compatibility, {
+        minimum: "14.359",
+        verified: "14.363",
+        maximum: "14",
+    });
+    assert.deepEqual(manifest.relationships.systems, [{
+        id: "splittermond",
+        type: "system",
+        compatibility: { minimum: "14.3.0-alpha4" },
+    }]);
     assert.deepEqual(manifest.languages.map(({ lang, path: languagePath }) => [lang, languagePath]), [
         ["de", "lang/de.json"],
         ["en", "lang/en.json"],

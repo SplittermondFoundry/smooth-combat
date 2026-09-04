@@ -17,8 +17,8 @@
   "bugs": "https://github.com/SplittermondFoundry/smooth-combat/issues",
   "changelog": "https://github.com/SplittermondFoundry/smooth-combat/releases",
   "compatibility": {
-    "minimum": "14",
-    "verified": "14",
+    "minimum": "14.359",
+    "verified": "14.363",
     "maximum": "14"
   },
   "relationships": {
@@ -27,7 +27,7 @@
         "id": "splittermond",
         "type": "system",
         "compatibility": {
-          "minimum": "14"
+          "minimum": "14.3.0-alpha4"
         }
       }
     ]
