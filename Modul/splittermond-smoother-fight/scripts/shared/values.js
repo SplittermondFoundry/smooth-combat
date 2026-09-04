@@ -97,10 +97,6 @@ export function escapeAttr(value) {
     return escapeHtml(value);
 }
 
-export function escapeCssUrl(value) {
-    return String(value ?? "").replaceAll("\\", "\\\\").replaceAll("'", "\\'").replaceAll("\n", "");
-}
-
 export function asElement(html) {
     if (html instanceof HTMLElement) return html;
     return html?.[0] instanceof HTMLElement ? html[0] : null;
