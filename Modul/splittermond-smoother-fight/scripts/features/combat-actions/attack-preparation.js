@@ -120,23 +120,6 @@ export function resolveAttackPreparationUse(preparation, { attackId, isRanged, t
     };
 }
 
-export function applyAttackPreparationModifier(rollOptions, preparation) {
-    const existingModifier = Number(rollOptions?.modifier);
-    return {
-        ...(rollOptions ?? {}),
-        modifier: (Number.isFinite(existingModifier) ? existingModifier : 0) + preparation.bonus,
-    };
-}
-
-export function prepareAttackPreparationRollOptions(
-    attack,
-    rollOptions,
-    preparation,
-    options = {}
-) {
-    return prepareAttackRollOptions(attack, rollOptions, preparation, options);
-}
-
 export function prepareAttackRollOptions(
     attack,
     rollOptions,
