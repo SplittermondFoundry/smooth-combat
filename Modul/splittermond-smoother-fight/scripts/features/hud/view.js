@@ -92,7 +92,7 @@ export async function buildHud(context) {
     const turnNotice = currentPlayersTurn
         ? `<span class="sf-your-turn"><i class="fa-solid fa-bolt"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YourTurn"))}</span>`
         : "";
-    const controllerNotice = assignedUser && runtimeController?.id !== assignedUser.id
+    const controllerNotice = runtimeController && assignedUser && runtimeController.id !== assignedUser.id
         ? `<span class="sf-runtime-controller"><i class="fa-solid fa-user-shield"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.RuntimeControllerFor", {
             controller: runtimeController?.name ?? t("SMOOTHER_FIGHT.HUD.NoRuntimeController"),
             assigned: assignedUser.name,

@@ -31,6 +31,7 @@ const harness = {
     controlledToken: null,
     controlCalls: [],
     meleeRange: 2,
+    minimized: false,
     movementTracking: true,
     pendingDefense: null,
     pendingInterruption: null,
@@ -157,6 +158,7 @@ function installFixture() {
     harness.controlledToken = null;
     harness.controlCalls = [];
     harness.meleeRange = 2;
+    harness.minimized = false;
     harness.movementTracking = true;
     harness.pendingDefense = null;
     harness.pendingInterruption = null;
@@ -192,11 +194,13 @@ function installFixture() {
         i18n: {
             lang: "de",
             localize: (key) => key,
-            format: (key, data) => `${key}:${JSON.stringify(data)}`,
+            format: (key, data) => key === "SMOOTHER_FIGHT.HUD.RuntimeControllerFor"
+                ? `Steuerung: ${data.controller} · ${data.assigned} offline`
+                : `${key}:${JSON.stringify(data)}`,
         },
         settings: {
             get: (_moduleId, key) => ({
-                minimized: false,
+                minimized: harness.minimized,
                 meleeRange: harness.meleeRange,
                 movementTracking: harness.movementTracking,
                 revealTargetDefenses: harness.revealTargetDefenses,
@@ -289,6 +293,40 @@ test("the active GM-controlled combatant becomes the GM's selected canvas token"
 
     assert.equal(syncActiveCombatantTokenSelection(combat), true);
     assert.deepEqual(harness.controlCalls, [{ id: first.id, options: { releaseOthers: true } }]);
+});
+
+test("runtime GM fallback explains an offline assigned user in expanded and minimized HUDs", async () => {
+    const { active } = installFixture();
+    const gm = { id: "gm", isGM: true, name: "GM" };
+    active.assignedUser = { id: "patrick", isGM: false, name: "Patrick", active: false };
+    active.runtimeController = gm;
+    globalThis.game.user = gm;
+
+    const expanded = await buildHud(getHudContext());
+    assert.match(expanded, /class="sf-your-turn"/u);
+    assert.match(expanded, /class="sf-runtime-controller"/u);
+    assert.match(expanded, /Steuerung: GM · Patrick offline/u);
+
+    harness.minimized = true;
+    const minimized = await buildHud(getHudContext());
+    assert.match(minimized, /class="sf-shell is-current-user-turn is-minimized"/u);
+    assert.match(minimized, /class="sf-runtime-controller"/u);
+    assert.match(minimized, /Steuerung: GM · Patrick offline/u);
+});
+
+test("runtime controller notice stays hidden without an actual fallback", async () => {
+    const { active } = installFixture();
+    const assignedUser = { id: "player", isGM: false, name: "Player", active: true };
+    active.actor.isOwner = true;
+    active.assignedUser = assignedUser;
+    active.runtimeController = assignedUser;
+    globalThis.game.user = assignedUser;
+
+    assert.doesNotMatch(await buildHud(getHudContext()), /sf-runtime-controller/u);
+
+    assignedUser.active = false;
+    active.runtimeController = null;
+    assert.doesNotMatch(await buildHud(getHudContext()), /sf-runtime-controller/u);
 });
 
 test("reload keeps selecting the active GM-controlled combatant", () => {

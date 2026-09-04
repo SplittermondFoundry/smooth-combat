@@ -503,7 +503,7 @@
       "PlayerPrimaryTargetName": "Primary target of {user}: {target}",
       "AutomaticOwner": "automatic by ownership",
       "NoRuntimeController": "no active controller",
-      "RuntimeControllerFor": "Controller: {controller} (substituting for {assigned})",
+      "RuntimeControllerFor": "Control: {controller} · {assigned} offline",
       "RuntimeControllerUnavailable": "No active assigned user or GM is currently available for this character.",
       "SystemTargetUnavailable": "The primary target could not be synchronized for the Splittermond roll.",
       "CombatEvents": "Combat events",

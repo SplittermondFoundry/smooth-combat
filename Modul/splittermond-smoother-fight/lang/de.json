@@ -503,7 +503,7 @@
       "PlayerPrimaryTargetName": "Primärziel von {user}: {target}",
       "AutomaticOwner": "automatisch über Owner-Rechte",
       "NoRuntimeController": "keine aktive Steuerung",
-      "RuntimeControllerFor": "Steuerung: {controller} (Vertretung für {assigned})",
+      "RuntimeControllerFor": "Steuerung: {controller} · {assigned} offline",
       "RuntimeControllerUnavailable": "Für diesen Charakter ist derzeit kein aktiver Benutzer oder GM verfügbar.",
       "SystemTargetUnavailable": "Das Primärziel konnte für den Splittermond-Wurf nicht synchronisiert werden.",
       "CombatEvents": "Kampfereignisse",
