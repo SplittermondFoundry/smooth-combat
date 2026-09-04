@@ -301,7 +301,9 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
     assert.deepEqual(callsOf("prepareExistingRenderedChatMessages"), [[]]);
     assert.equal(socketRegistrations.length, 1);
     assert.equal(socketRegistrations[0].channel, "module.splittermond-smoother-fight");
-    const socketHandler = socketRegistrations[0].callback;
+    const foundrySocketHandler = socketRegistrations[0].callback;
+    const socketHandler = (payload, authenticatedSenderId = payload?.senderId) =>
+        foundrySocketHandler(payload, authenticatedSenderId);
 
     await t.test("hook callbacks retain their routing and state transitions", async () => {
         resetHarness(gameStub);
@@ -504,6 +506,41 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         assert.deepEqual(callsOf("renderTokenOwnerControl"), [[{ id: "hud" }, htmlElement]]);
         assert.deepEqual(callsOf("renderTokenMovementControl"), [[{ id: "hud" }, htmlElement]]);
         assert.deepEqual(callsOf("renderTokenCombatPositionControl"), [[{ id: "hud" }, htmlElement]]);
+    });
+
+    await t.test("socket messages require Foundry's authenticated sender identity", async () => {
+        resetHarness(gameStub);
+        const player = { id: "player", isGM: false };
+        const gm = { id: "gm", isGM: true };
+        const message = { id: "damage-request", type: "damageMessage" };
+        gameStub.user = gm;
+        gameStub.users.set(player.id, player);
+        gameStub.users.set(gm.id, gm);
+        gameStub.messages.set(message.id, message);
+        const spoofedRequest = {
+            type: "damage-application-request",
+            senderId: gm.id,
+            recipientId: gm.id,
+            messageId: message.id,
+            actionData: { action: "applyDamageToSelf" },
+        };
+
+        await foundrySocketHandler(spoofedRequest);
+        await foundrySocketHandler(spoofedRequest, player.id);
+        assert.deepEqual(callsOf("applyRemoteDamageApplication"), []);
+        assert.deepEqual(callsOf("socketEmit"), []);
+
+        const authenticatedRequest = { ...spoofedRequest, senderId: player.id };
+        await foundrySocketHandler(authenticatedRequest, player.id);
+        assert.deepEqual(callsOf("applyRemoteDamageApplication"), [[message, authenticatedRequest.actionData, player]]);
+        assert.deepEqual(callsOf("socketEmit"), [["module.splittermond-smoother-fight", {
+            type: "damage-application-result",
+            senderId: gm.id,
+            recipientId: player.id,
+            messageId: message.id,
+            state: "completed",
+            error: null,
+        }]]);
     });
 
     await t.test("target updates reject foreign players and accept self or GM updates", async () => {

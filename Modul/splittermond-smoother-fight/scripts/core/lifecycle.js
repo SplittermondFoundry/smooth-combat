@@ -197,12 +197,14 @@ function runAuthoritativeCleanup(operation) {
 }
 
 export function registerSocket() {
-    game.socket.on(SOCKET, async (payload) => {
+    game.socket.on(SOCKET, async (payload, authenticatedSenderId) => {
         if (!payload || typeof payload !== "object") return;
+        if (typeof authenticatedSenderId !== "string" || payload.senderId !== authenticatedSenderId) return;
+        const sender = game.users.get(authenticatedSenderId);
+        if (!sender) return;
 
         if (payload.type === "target-update" && typeof payload.userId === "string") {
-            const sender = game.users.get(payload.senderId);
-            if (payload.senderId !== payload.userId && !sender?.isGM) return;
+            if (authenticatedSenderId !== payload.userId && !sender.isGM) return;
             const targetUuids = normalizeTargetReferences(payload.targetTokenUuids ?? payload.targetUuids ?? [payload.tokenUuid]);
             const primaryTargetTokenUuid = payload.primaryTargetTokenUuid ?? payload.targetTokenUuid ?? payload.tokenUuid ?? null;
             services.rememberTargetReferences(payload.userId, targetUuids, primaryTargetTokenUuid);
@@ -211,8 +213,7 @@ export function registerSocket() {
         }
 
         if (payload.type === "set-target" && payload.recipientId === game.user.id) {
-            const sender = game.users.get(payload.senderId);
-            if (!sender?.isGM) return;
+            if (!sender.isGM) return;
             const target = services.resolveToken(payload.tokenUuid);
             if (!target) return;
             services.setLocalTarget(target, payload.targeted !== false, Boolean(payload.releaseOthers));
@@ -224,9 +225,8 @@ export function registerSocket() {
             return;
         }
 
-        if (payload.type === "combat-feedback" && payload.senderId !== game.user.id) {
-            const sender = game.users.get(payload.senderId);
-            if (!sender || payload.kind !== "damageBlocked") return;
+        if (payload.type === "combat-feedback" && authenticatedSenderId !== game.user.id) {
+            if (payload.kind !== "damageBlocked") return;
             services.receivePublishedFeedback(payload.kind, {
                 tokenUuid: payload.tokenUuid,
                 actorUuid: payload.actorUuid,
@@ -234,10 +234,9 @@ export function registerSocket() {
             return;
         }
 
-        if (payload.type === "active-defense-pending" && payload.senderId !== game.user.id) {
-            const sender = game.users.get(payload.senderId);
+        if (payload.type === "active-defense-pending" && authenticatedSenderId !== game.user.id) {
             const pending = payload.pending;
-            if (!sender || !pending || typeof pending !== "object") return;
+            if (!pending || typeof pending !== "object") return;
             if (payload.active !== false) {
                 const offense = game.messages.get(pending.attackMessageId);
                 const context = services.getMessageContext(offense);
@@ -254,20 +253,17 @@ export function registerSocket() {
                     || expectedTargetUuid !== publishedTargetUuid
                     || !ownsParticipant) return;
             }
-            services.receivePublishedPendingDefense(pending, sender.id, payload.active !== false);
+            services.receivePublishedPendingDefense(pending, authenticatedSenderId, payload.active !== false);
             return;
         }
 
         if (payload.type === "movement-plan-abort-request"
             && payload.recipientId === game.user.id && game.user.isGM) {
-            const sender = game.users.get(payload.senderId);
-            const result = sender
-                ? await services.applyRemoteMovementPlanAbort(payload, sender)
-                : { applied: false, error: "invalid" };
+            const result = await services.applyRemoteMovementPlanAbort(payload, sender);
             game.socket.emit(SOCKET, {
                 type: "movement-plan-abort-result",
                 senderId: game.user.id,
-                recipientId: payload.senderId,
+                recipientId: authenticatedSenderId,
                 requestId: payload.requestId,
                 tokenUuid: payload.tokenUuid,
                 planId: payload.planId,
@@ -277,17 +273,15 @@ export function registerSocket() {
         }
 
         if (payload.type === "movement-plan-abort-result" && payload.recipientId === game.user.id) {
-            const sender = game.users.get(payload.senderId);
-            if (!sender?.isGM) return;
+            if (!sender.isGM) return;
             services.finishRemoteMovementPlanAbort(payload, sender);
             return;
         }
 
         if (payload.type === "damage-application-request" && payload.recipientId === game.user.id && game.user.isGM) {
-            const sender = game.users.get(payload.senderId);
             const message = game.messages.get(payload.messageId);
             let result = { state: "idle", error: "invalid" };
-            if (sender && message && services.isDamageMessage(message)) {
+            if (message && services.isDamageMessage(message)) {
                 try {
                     result = await services.applyRemoteDamageApplication(message, payload.actionData, sender);
                 } catch (error) {
@@ -298,7 +292,7 @@ export function registerSocket() {
             game.socket.emit(SOCKET, {
                 type: "damage-application-result",
                 senderId: game.user.id,
-                recipientId: payload.senderId,
+                recipientId: authenticatedSenderId,
                 messageId: payload.messageId,
                 ...result,
             });
@@ -306,23 +300,21 @@ export function registerSocket() {
         }
 
         if (payload.type === "damage-application-result" && payload.recipientId === game.user.id) {
-            const sender = game.users.get(payload.senderId);
-            if (!sender?.isGM) return;
+            if (!sender.isGM) return;
             services.finishRemoteDamageApplication(payload.messageId, payload);
             return;
         }
 
         if (payload.type === "defense-numbing-damage-request" && payload.recipientId === game.user.id && game.user.isGM) {
-            const sender = game.users.get(payload.senderId);
             const message = game.messages.get(payload.messageId);
             let result = { state: "idle", error: "invalid" };
-            if (sender && message && services.isDefenseMessage(message)) {
+            if (message && services.isDefenseMessage(message)) {
                 result = await services.applyRemoteDefenseNumbingDamage(message, payload.damage, sender);
             }
             game.socket.emit(SOCKET, {
                 type: "defense-numbing-damage-result",
                 senderId: game.user.id,
-                recipientId: payload.senderId,
+                recipientId: authenticatedSenderId,
                 requestId: payload.requestId,
                 messageId: payload.messageId,
                 ...result,
@@ -331,23 +323,21 @@ export function registerSocket() {
         }
 
         if (payload.type === "defense-numbing-damage-result" && payload.recipientId === game.user.id) {
-            const sender = game.users.get(payload.senderId);
-            if (!sender?.isGM) return;
+            if (!sender.isGM) return;
             services.finishRemoteDefenseNumbingDamage(payload, sender);
             return;
         }
 
         if (payload.type === "damage-application-completed" && payload.recipientId === game.user.id && game.user.isGM) {
-            const sender = game.users.get(payload.senderId);
             const message = game.messages.get(payload.messageId);
             let result = { state: "idle", error: "invalid" };
-            if (sender && message && services.isDamageMessage(message)) {
+            if (message && services.isDamageMessage(message)) {
                 result = await services.finalizeRemoteDamageApplication(message, payload, sender);
             }
             game.socket.emit(SOCKET, {
                 type: "damage-application-result",
                 senderId: game.user.id,
-                recipientId: payload.senderId,
+                recipientId: authenticatedSenderId,
                 requestId: payload.requestId,
                 messageId: payload.messageId,
                 ...result,
@@ -356,10 +346,9 @@ export function registerSocket() {
         }
 
         if (payload.type === "legacy-tick-advance-request" && payload.recipientId === game.user.id && game.user.isGM) {
-            const sender = game.users.get(payload.senderId);
             const message = game.messages.get(payload.messageId);
             let result = { applied: false, error: "invalid" };
-            if (sender && message) {
+            if (message) {
                 result = await services.applyRemoteLegacyTickAdvance(message, {
                     offeredTicks: payload.offeredTicks,
                     ticks: payload.ticks,
@@ -368,7 +357,7 @@ export function registerSocket() {
             game.socket.emit(SOCKET, {
                 type: "legacy-tick-advance-result",
                 senderId: game.user.id,
-                recipientId: payload.senderId,
+                recipientId: authenticatedSenderId,
                 requestId: payload.requestId,
                 messageId: payload.messageId,
                 ...result,
@@ -377,23 +366,21 @@ export function registerSocket() {
         }
 
         if (payload.type === "legacy-tick-advance-result" && payload.recipientId === game.user.id) {
-            const sender = game.users.get(payload.senderId);
-            if (!sender?.isGM) return;
+            if (!sender.isGM) return;
             services.finishRemoteLegacyTickAdvance(payload, sender);
             return;
         }
 
         if (payload.type === "fumble-action-request" && payload.recipientId === game.user.id && game.user.isGM) {
-            const sender = game.users.get(payload.senderId);
             const message = game.messages.get(payload.messageId);
             let result = { applied: false, error: "invalid" };
-            if (sender && message && services.getFumbleData(message)) {
+            if (message && services.getFumbleData(message)) {
                 result = await services.applyRemoteFumbleAction(message, payload.action, sender);
             }
             game.socket.emit(SOCKET, {
                 type: "fumble-action-result",
                 senderId: game.user.id,
-                recipientId: payload.senderId,
+                recipientId: authenticatedSenderId,
                 requestId: payload.requestId,
                 messageId: payload.messageId,
                 action: payload.action,
@@ -403,27 +390,24 @@ export function registerSocket() {
         }
 
         if (payload.type === "fumble-action-result" && payload.recipientId === game.user.id) {
-            const sender = game.users.get(payload.senderId);
-            if (!sender?.isGM) return;
+            if (!sender.isGM) return;
             services.finishRemoteFumbleAction(payload, sender);
             return;
         }
 
         if (payload.type === "decline-active-defense" && payload.recipientId === game.user.id && game.user.isGM) {
-            const sender = game.users.get(payload.senderId);
             const offense = game.messages.get(payload.messageId);
-            if (!sender || !offense || !isOffensiveCombatMessage(offense)) return;
+            if (!offense || !isOffensiveCombatMessage(offense)) return;
             if (!services.canUserDeclineActiveDefense(sender, offense, payload.defenderTokenUuid)) return;
             await services.declineActiveDefenseForUser(offense, sender, payload.defenderTokenUuid);
             return;
         }
 
         if (payload.type === "begin-offense-follow-up" && payload.recipientId === game.user.id && game.user.isGM) {
-            const sender = game.users.get(payload.senderId);
             const offense = game.messages.get(payload.messageId);
             let latest = null;
             let reason = "not-allowed";
-            if (sender && offense && isOffensiveCombatMessage(offense)) {
+            if (offense && isOffensiveCombatMessage(offense)) {
                 try {
                     latest = await services.beginOffenseFollowUp(offense, sender, { notify: false });
                     if (latest) reason = null;
@@ -436,7 +420,7 @@ export function registerSocket() {
             game.socket.emit(SOCKET, {
                 type: "begin-offense-follow-up-result",
                 senderId: game.user.id,
-                recipientId: payload.senderId,
+                recipientId: authenticatedSenderId,
                 requestId: payload.requestId,
                 messageId: payload.messageId,
                 allowed: Boolean(latest),
@@ -447,17 +431,15 @@ export function registerSocket() {
         }
 
         if (payload.type === "begin-offense-follow-up-result" && payload.recipientId === game.user.id) {
-            const sender = game.users.get(payload.senderId);
-            if (!sender?.isGM) return;
+            if (!sender.isGM) return;
             await services.finishOffenseFollowUpRequest(payload, sender);
             return;
         }
 
         if (payload.type === "recalculate-defense" && payload.recipientId === game.user.id && game.user.isGM) {
-            const sender = game.users.get(payload.senderId);
             const message = await services.waitForChatMessage(payload.defenseMessageId);
             const authorId = message?.author?.id ?? message?.user?.id ?? message?.user;
-            if (!sender || !message || (!sender.isGM && authorId !== sender.id)) return;
+            if (!message || (!sender.isGM && authorId !== sender.id)) return;
 
             const pending = services.normalizePendingDefense(payload.pending);
             const offense = game.messages.get(pending?.attackMessageId);
@@ -470,9 +452,8 @@ export function registerSocket() {
         }
 
         if (payload.type === "apply-defense-splinterpoint" && payload.recipientId === game.user.id && game.user.isGM) {
-            const sender = game.users.get(payload.senderId);
             const message = game.messages.get(payload.messageId);
-            if (!sender || !message || typeof payload.spenderActorUuid !== "string") return;
+            if (!message || typeof payload.spenderActorUuid !== "string") return;
             await services.applyDefenseSplinterpointForUser(message, payload.spenderActorUuid, sender);
         }
     });
