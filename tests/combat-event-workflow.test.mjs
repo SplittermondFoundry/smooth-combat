@@ -703,6 +703,30 @@ test("advancing the attacker through another tick control completes the card tic
     assert.deepEqual(presentation.candidates.map((entry) => entry.messageId), ["current"]);
 });
 
+test("an actor-only card stays pending when only one of multiple shared-actor combatants advanced", () => {
+    services.getMessageContext = (entry) => entry?.flags?.["splittermond-smoother-fight"]?.context ?? {};
+    globalThis.game = {
+        combat: {
+            id: "combat",
+            combatants: new Map([
+                ["wolf-a", { id: "wolf-a", actorId: "wolf", tokenId: "token-a", initiative: 20 }],
+                ["wolf-b", { id: "wolf-b", actorId: "wolf", tokenId: "token-b", initiative: 10 }],
+            ]),
+        },
+    };
+    const offense = message("ambiguous-offense", {
+        content: '<button data-action="advanceToken">Ticks</button>',
+        context: {
+            combatId: "combat",
+            attackerActorUuid: "Actor.wolf",
+            attackerInitiativeAtCreation: 10,
+        },
+    });
+    offense.speaker = { actor: "wolf" };
+
+    assert.equal(messageHasPendingTicks(offense), true);
+});
+
 test("singular attack costs remain part of the offense workflow", () => {
     const offense = message("offense", {
         content: '<button data-action="consumeCost">Cost</button>',

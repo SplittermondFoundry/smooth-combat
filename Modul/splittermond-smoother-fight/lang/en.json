@@ -266,6 +266,7 @@
       "NoTargetDetail": "Target with T or use the target menu.",
       "YouAreTarget": "You are the target",
       "NoOwner": "Only owners of this token can use its actions.",
+      "AmbiguousCombatant": "The action cannot be assigned to a unique token in combat.",
       "SelectOwnedToken": "Choose one of your combatants from the menu or canvas.",
       "ChooseOwnCombatant": "Choose your combatant",
       "Skills": "Skills",

@@ -1326,6 +1326,36 @@ test("resonance is offered only to another owned hero-level-three combatant", ()
     assert.deepEqual(getDefenseSplinterpointActions(attack, otherOwner), []);
 });
 
+test("resonance eligibility checks every combatant that shares the spender actor", () => {
+    resetHarness();
+    const target = createSplinterpointActor("target-shared-resonance");
+    const resonanceOwner = { id: "resonance-owner", isGM: false };
+    const otherOwner = { id: "other-owner", isGM: false };
+    const resonator = createSplinterpointActor("shared-resonator", {
+        heroLevel: 3,
+        owners: [resonanceOwner.id],
+    });
+    const targetTokenUuid = "Token.target-shared-resonance";
+    harness.tokens.set(targetTokenUuid, { uuid: targetTokenUuid, actor: target });
+    game.combat = {
+        combatants: [
+            { actor: target, token: { uuid: targetTokenUuid, actor: target }, runtimeController: otherOwner },
+            { actor: resonator, token: { uuid: "Token.resonator-a", actor: resonator }, runtimeController: otherOwner },
+            { actor: resonator, token: { uuid: "Token.resonator-b", actor: resonator }, runtimeController: resonanceOwner },
+        ],
+    };
+    const attack = createAttack("attack-shared-resonance", attackReport(), {
+        primaryTargetTokenUuid: targetTokenUuid,
+        vtdSplinterpointActorUuid: target.uuid,
+        vtdSplinterpointBonus: 3,
+    });
+    attack.content = '<button data-localaction="activeDefense">Abwehr</button>';
+
+    assert.deepEqual(getDefenseSplinterpointActions(attack, resonanceOwner), [
+        { kind: "resonance", actorUuid: resonator.uuid },
+    ]);
+});
+
 test("different splinter bearers remain resonance partners under the same runtime GM fallback", () => {
     resetHarness();
     const target = createSplinterpointActor("target-gm-fallback");

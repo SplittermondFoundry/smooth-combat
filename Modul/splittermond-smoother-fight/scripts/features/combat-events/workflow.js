@@ -2,6 +2,7 @@ import {
     combatWorkflowCandidates,
     selectCombatWorkflowFocus,
 } from "../../domain/combat-flow.js";
+import { resolveCombatantByReferences } from "../../domain/combatant-resolution.js";
 import { preparedSpellReleaseTickCost } from "../../domain/spell-release.js";
 
 import { MODULE_ID } from "../../core/constants.js";
@@ -284,11 +285,11 @@ function messageSpeakerHasAdvanced(message, combat = getApplicableCombat()) {
     const messageCombat = combatForContext(context, combat);
     if (!messageCombat) return false;
     const combatants = combatantDocuments(messageCombat);
-    const attackerTokenId = tokenIdFromReference(context.attackerTokenUuid) ?? message?.speaker?.token ?? null;
-    const combatant = messageCombat.combatants?.get?.(context.combatantId)
-        ?? combatants.find((candidate) => candidate.id === context.combatantId)
-        ?? combatants.find((candidate) => combatantTokenId(candidate) === attackerTokenId)
-        ?? combatants.find((candidate) => candidate.actorId === message?.speaker?.actor);
+    const combatant = resolveCombatantByReferences(combatants, {
+        combatantId: context.combatantId,
+        tokenReferences: [context.attackerTokenUuid, message?.speaker?.token],
+        actorReferences: [context.attackerActorUuid, message?.speaker?.actor],
+    });
     const currentInitiative = Number(combatant?.initiative);
     return Number.isFinite(currentInitiative) && currentInitiative > initialInitiative;
 }
@@ -314,17 +315,6 @@ function unwrapCollectionEntry(candidate) {
     return Array.isArray(candidate) && candidate.length === 2 ? candidate[1] : candidate;
 }
 
-function tokenIdFromReference(reference) {
-    const value = String(reference ?? "");
-    return value.match(/\.Token\.([^.]+)/u)?.[1] ?? null;
-}
-
-function combatantTokenId(combatant) {
-    return combatant?.tokenId
-        ?? combatant?.token?.id
-        ?? combatant?.token?.document?.id
-        ?? null;
-}
 
 function messageTimestamp(message) {
     const value = Number(message?.timestamp);

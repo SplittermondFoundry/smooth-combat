@@ -24,6 +24,8 @@ import {
 
 import { getApplicableCombat } from "../../core/combat-compatibility.js";
 
+import { resolveCombatantByReferences } from "../../domain/combatant-resolution.js";
+
 import {
     APPLICATION_STALE_AFTER_MS,
     effectiveApplicationState,
@@ -103,10 +105,14 @@ export function getDefenseSplinterpointActions(message, user = game.user) {
         const uuid = actorUuid(actor);
         if (!actor || !uuid || uuid === targetActorUuid || seenActors.has(uuid) || appliedResonances.has(uuid)) continue;
         seenActors.add(uuid);
+        const actorCombatants = combatants.filter((candidate) =>
+            actorUuid(combatantActor(candidate)) === uuid
+        );
         if (Number(actor.system?.experience?.heroLevel) < 3 || availableSplinterpoints(actor) < 1) continue;
         if (!userOwnsActor(user, actor)) continue;
-        const controller = services.getRuntimeController(combatant);
-        if (!user.isGM && controller?.id !== user.id) continue;
+        if (!user.isGM && !actorCombatants.some((candidate) =>
+            services.getRuntimeController(candidate)?.id === user.id
+        )) continue;
         if (getDefenseSplinterpointApplicationStatus(message, uuid).state !== "idle") continue;
         actions.push({ kind: "resonance", actorUuid: uuid });
     }
@@ -194,12 +200,23 @@ export async function applyDefenseSplinterpointForUser(message, spenderActorUuid
 
             const resultContext = services.getMessageContext(result) ?? {};
             const target = services.resolveToken(primaryTargetTokenUuid(resultContext));
-            const combatant = Array.from(getApplicableCombat()?.combatants ?? [])
-                .find((candidate) => actorUuid(combatantActor(candidate)) === spenderActorUuid);
+            const actorCombatants = Array.from(getApplicableCombat()?.combatants ?? [])
+                .filter((candidate) => actorUuid(combatantActor(candidate)) === spenderActorUuid);
+            const controlledCombatants = user.isGM
+                ? actorCombatants
+                : actorCombatants.filter((candidate) => services.getRuntimeController(candidate)?.id === user.id);
+            const combatant = resolveCombatantByReferences(controlledCombatants, {
+                actorReferences: [spenderActorUuid],
+            }, {
+                resolveToken: services.resolveCombatantToken,
+            });
+            const speakerToken = action.kind === "primary" && actorUuid(target?.actor) === spenderActorUuid
+                ? target
+                : combatantToken(combatant);
             try {
                 await services.createDefenseSplinterpointChatCard({
                     actor,
-                    token: combatantToken(combatant),
+                    token: speakerToken,
                     targetName: target?.name ?? target?.actor?.name ?? resultContext.primaryTargetName ?? "–",
                     targetTokenUuid: target?.uuid ?? primaryTargetTokenUuid(resultContext),
                     defenseValue: Number(resultContext.defenseValue),

@@ -266,6 +266,7 @@
       "NoTargetDetail": "Mit T ein Ziel markieren oder das Zielmenü verwenden.",
       "YouAreTarget": "Du bist das Ziel",
       "NoOwner": "Nur Owner dieses Tokens können Aktionen ausführen.",
+      "AmbiguousCombatant": "Die Aktion kann keinem eindeutigen Token im Kampf zugeordnet werden.",
       "SelectOwnedToken": "Wähle eine eigene Figur im Menü oder auf dem Canvas aus.",
       "ChooseOwnCombatant": "Eigene Figur auswählen",
       "Skills": "Fertigkeiten",

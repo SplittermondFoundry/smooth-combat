@@ -9,6 +9,8 @@ import {
 
 import { getApplicableCombat } from "../../core/combat-compatibility.js";
 
+import { resolveCombatantByReferences } from "../../domain/combatant-resolution.js";
+
 import {
     services,
 } from "../../core/services.js";
@@ -169,6 +171,10 @@ export async function advanceLegacyChatTicks(message, button, user = globalThis.
     }
 
     const combatant = resolveMessageSpeakerCombatant(message, actor);
+    if (!combatant) {
+        ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.AmbiguousCombatant"));
+        return false;
+    }
     const previousInitiative = Number(combatant?.initiative);
     services.addPendingLegacyTickMessage(message.id);
     let applying = null;
@@ -292,27 +298,17 @@ function resolveMessageSpeakerCombatant(message, actor = services.resolveSpeaker
     const combat = getApplicableCombat();
     if (!combat) return null;
     const context = services.getMessageContext(message);
-    const token = services.resolveToken(
-        (services.isDefenseMessage(message) ? context?.defenderTokenUuid : context?.attackerTokenUuid)
-        ?? services.speakerTokenUuid(message)
-    );
-    const combatants = Array.from(combat.combatants ?? []);
-    const tokenCombatant = token ? combatants.find((combatant) => {
-        const combatantToken = services.resolveCombatantToken?.(combatant);
-        const combatantTokenUuid = services.tokenUuid?.(combatantToken) ?? combatantToken?.uuid;
-        return Boolean(
-            (token.uuid && combatantTokenUuid === token.uuid)
-            || (token.id && combatant.tokenId === token.id)
-        );
-    }) : null;
-    if (tokenCombatant) return tokenCombatant;
-    const exactActorCombatant = combatants.find((combatant) =>
-        combatant.actor === actor
-        || Boolean(actor?.uuid && combatant.actor?.uuid === actor.uuid)
-    );
-    return exactActorCombatant
-        ?? combatants.find((combatant) => combatant.actorId === actor?.id)
-        ?? null;
+    const defenseMessage = services.isDefenseMessage(message);
+    const contextTokenReference = defenseMessage
+        ? context?.defenderTokenUuid
+        : context?.attackerTokenUuid;
+    return resolveCombatantByReferences(combat.combatants, {
+        combatantId: defenseMessage ? null : context?.combatantId,
+        tokenReferences: [contextTokenReference, services.speakerTokenUuid(message), message.speaker?.token],
+        actorReferences: [actor?.uuid, actor?.id, message.speaker?.actor],
+    }, {
+        resolveToken: services.resolveCombatantToken,
+    });
 }
 
 function currentCombatantInitiative(combatant) {

@@ -38,11 +38,11 @@ configureServices({
     },
     getAssignedUser: (combatant) => {
         record("getAssignedUser", combatant);
-        return harness.assignedUser;
+        return combatant?.assignedUser ?? null;
     },
     getRuntimeController: (combatant) => {
         record("getRuntimeController", combatant);
-        return harness.runtimeController;
+        return combatant?.runtimeController ?? null;
     },
     getMessageContext: (message) => harness.contexts.get(message) ?? null,
     getTargetSelectionForUser: (user) => {
@@ -161,6 +161,8 @@ function createFixture({ diceActive = true, fumble = false, pendingKind = null }
         actor,
         token: attackerToken,
         initiative: 12,
+        assignedUser,
+        runtimeController,
     };
     const currentUser = { id: "current-user", targets: new Set([targetA]) };
     const message = {
@@ -345,6 +347,39 @@ test("chat creation freezes offense mechanics before Dice So Nice presentation w
 
         assert.equal(harness.contexts.get(fixture.message)?.combatantId, fixture.combatant.id);
         assert.equal(harness.contexts.get(fixture.message)?.outOfTurn, true);
+    });
+
+    await t.test("an actor-only message does not guess between combatants sharing that actor", async () => {
+        const fixture = createFixture({ diceActive: false });
+        const otherToken = {
+            id: "token-other",
+            uuid: "Scene.scene.Token.other",
+            actor: fixture.actor,
+        };
+        const otherCombatant = {
+            id: "combatant-other",
+            actorId: fixture.actor.id,
+            tokenId: otherToken.id,
+            actor: fixture.actor,
+            token: otherToken,
+            initiative: 4,
+            assignedUser: { id: "other-user" },
+            runtimeController: { id: "other-controller" },
+        };
+        game.combat.combatants = [otherCombatant, fixture.combatant];
+        game.combat.combatant = fixture.combatant;
+        delete fixture.message.speaker.token;
+
+        await onCreateChatMessage(fixture.message);
+
+        const context = harness.contexts.get(fixture.message);
+        assert.equal(context?.combatantId, null);
+        assert.equal(context?.attackerTokenUuid, null);
+        assert.equal(context?.assignedUserId, null);
+        assert.equal(context?.runtimeControllerId, null);
+        assert.equal(context?.attackerInitiativeAtCreation, null);
+        assert.equal(context?.outOfTurn, false);
+        assert.equal(context?.attackerActorUuid, fixture.actor.uuid);
     });
 
     await t.test("with Dice So Nice disabled the existing processing remains immediate", async () => {

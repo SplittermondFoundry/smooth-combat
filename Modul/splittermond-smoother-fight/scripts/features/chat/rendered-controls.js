@@ -9,6 +9,7 @@ import {
     requiresRollManagementPermission,
 } from "../../combat-rules.js";
 import { vtdSplinterpointPreventsHit } from "../../domain/combat/attack.js";
+import { resolveCombatantByReferences } from "../../domain/combatant-resolution.js";
 import { MODULE_ID } from "../../core/constants.js";
 import { getApplicableCombat } from "../../core/combat-compatibility.js";
 import {
@@ -430,20 +431,27 @@ function decoratePendingDefenseDegreeOptions(degreeOptions, awaitingDefense) {
 export function isMessageSpeakerAssignedToCurrentUser(message) {
     const context = services.getMessageContext(message);
     if (context?.assignedUserId === game.user?.id) return true;
-    const token = services.resolveToken(
-        (services.isDefenseMessage(message) ? context?.defenderTokenUuid : context?.attackerTokenUuid)
-        ?? services.speakerTokenUuid(message)
-    );
+    const contextTokenReference = services.isDefenseMessage(message)
+        ? context?.defenderTokenUuid
+        : context?.attackerTokenUuid;
+    const speakerTokenUuid = services.speakerTokenUuid(message);
+    const token = services.resolveToken(contextTokenReference ?? speakerTokenUuid);
     if (token && services.isCurrentUserTarget(token)) return true;
     const actor = services.resolveSpeakerActor(message);
-    const combatant = Array.from(getApplicableCombat()?.combatants ?? [])
-        .find((candidate) => candidate.actorId === actor?.id);
-    const assignedUser = services.getAssignedUser?.(combatant ?? actor);
+    const combatant = resolveCombatantByReferences(getApplicableCombat()?.combatants, {
+        combatantId: context?.combatantId,
+        tokenReferences: [contextTokenReference, speakerTokenUuid, message.speaker?.token],
+        actorReferences: [actor?.uuid, actor?.id, message.speaker?.actor],
+    }, {
+        resolveToken: services.resolveCombatantToken,
+    });
+    const assignmentSubject = combatant ?? actor;
+    const assignedUser = services.getAssignedUser?.(assignmentSubject);
     if (assignedUser?.id === game.user?.id) return true;
-    if (combatant && actor) {
-        const runtimeController = services.getRuntimeController(combatant);
-        if (runtimeController) return runtimeController.id === game.user?.id;
-    }
+    const runtimeController = assignmentSubject
+        ? services.getRuntimeController?.(assignmentSubject)
+        : null;
+    if (runtimeController) return runtimeController.id === game.user?.id;
     return false;
 }
 

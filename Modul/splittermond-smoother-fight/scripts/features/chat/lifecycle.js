@@ -2,6 +2,8 @@ import { services } from "../../core/services.js";
 
 import { getApplicableCombat } from "../../core/combat-compatibility.js";
 
+import { resolveCombatantByReferences } from "../../domain/combatant-resolution.js";
+
 import {
     enforceOffenseDefensePhaseControls,
     handleRenderedOffenseFollowUp,
@@ -167,16 +169,22 @@ async function attachCombatContext(message) {
     const createdAt = Date.now();
     const combat = getApplicableCombat();
     const combatants = Array.from(combat?.combatants ?? []);
-    const speakerCombatant = (message.speaker?.token
-        ? combatants.find((combatant) => combatant.tokenId === message.speaker.token)
-        : null)
-        ?? (message.speaker?.actor
-            ? combatants.find((combatant) => combatant.actorId === message.speaker.actor)
-            : null);
+    const speakerTokenUuid = services.speakerTokenUuid(message);
+    const speakerCombatant = resolveCombatantByReferences(combatants, {
+        tokenReferences: [message.speaker?.token, speakerTokenUuid],
+        actorReferences: [message.speaker?.actor],
+    }, {
+        resolveToken: services.resolveCombatantToken,
+    });
     const activeCombatant = combat?.combatant ?? combat?.turns?.[0] ?? null;
     const actor = speakerCombatant?.actor ?? (message.speaker?.actor ? game.actors.get(message.speaker.actor) : null);
-    const assignedUser = speakerCombatant && actor ? services.getAssignedUser(speakerCombatant) : game.user;
-    const runtimeController = speakerCombatant && actor ? services.getRuntimeController(speakerCombatant) : game.user;
+    const assignmentSubject = speakerCombatant ?? actor;
+    const assignedUser = assignmentSubject ? services.getAssignedUser(assignmentSubject) : null;
+    const runtimeController = assignmentSubject ? services.getRuntimeController(assignmentSubject) : null;
+    const speakerToken = speakerCombatant?.token?.document
+        ?? speakerCombatant?.token
+        ?? services.resolveCombatantToken?.(speakerCombatant)
+        ?? null;
     const author = message.author
         ?? game.users?.get?.(message.user?.id ?? message.user)
         ?? game.user;
@@ -189,13 +197,13 @@ async function attachCombatContext(message) {
     const context = {
         combatId: combat?.id ?? null,
         combatantId: speakerCombatant?.id ?? null,
-        attackerTokenUuid: speakerCombatant?.token?.uuid ?? services.speakerTokenUuid(message),
+        attackerTokenUuid: speakerTokenUuid ?? speakerToken?.uuid ?? null,
         attackerActorUuid: actor?.uuid ?? null,
         ...targetContext,
         actionKind: pendingKind?.expiresAt >= createdAt ? pendingKind.kind : null,
         outOfTurn: Boolean(activeCombatant && speakerCombatant && activeCombatant.id !== speakerCombatant.id),
         assignedUserId: assignedUser?.id ?? null,
-        runtimeControllerId: runtimeController?.id ?? game.user.id,
+        runtimeControllerId: runtimeController?.id ?? null,
         attackerInitiativeAtCreation: Number.isFinite(Number(speakerCombatant?.initiative))
             ? Number(speakerCombatant.initiative)
             : null,

@@ -314,6 +314,36 @@ test("message action highlighting follows an active runtime substitute", () => {
     assert.equal(isMessageSpeakerAssignedToCurrentUser(message), true);
 });
 
+test("actor-only message permissions do not use the first of multiple shared-actor combatants", () => {
+    const currentUser = { id: "first-token-user", isGM: false };
+    const actor = { id: "shared-actor" };
+    const first = {
+        id: "first-combatant",
+        actorId: actor.id,
+        tokenId: "first-token",
+        assignedUser: currentUser,
+        runtimeController: currentUser,
+    };
+    const second = {
+        id: "second-combatant",
+        actorId: actor.id,
+        tokenId: "second-token",
+        assignedUser: { id: "second-token-user" },
+        runtimeController: { id: "second-token-user" },
+    };
+    const message = { actor, speaker: { actor: actor.id } };
+    globalThis.game = {
+        combat: { combatants: [first, second] },
+        user: currentUser,
+    };
+
+    assert.equal(isMessageSpeakerAssignedToCurrentUser(message), false);
+
+    contexts.set(message, { attackerTokenUuid: "Scene.scene.Token.second-token" });
+    globalThis.game.user = second.assignedUser;
+    assert.equal(isMessageSpeakerAssignedToCurrentUser(message), true);
+});
+
 test("a usable tick action on an associated active defense takes priority", () => {
     const usableTickAction = {
         dataset: { action: "advanceToken" },

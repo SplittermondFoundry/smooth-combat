@@ -4,6 +4,10 @@ import { collectCombatEventPresentation } from "./service.js";
 
 import { services } from "../../core/services.js";
 
+import { getApplicableCombat } from "../../core/combat-compatibility.js";
+
+import { resolveCombatantByReferences } from "../../domain/combatant-resolution.js";
+
 import {
     parseActiveDefenseDescription,
 } from "../../combat-rules.js";
@@ -269,9 +273,15 @@ export function messageOffersActiveDefense(message) {
 
 export function messageBelongsToCombatant(message, combatant, messageContext = services.getMessageContext(message)) {
     if (!message || !combatant) return false;
-    if (messageContext?.combatantId) return messageContext.combatantId === combatant.id;
-    if (message.speaker?.token && combatant.tokenId) return message.speaker.token === combatant.tokenId;
-    return Boolean(message.speaker?.actor && message.speaker.actor === combatant.actorId);
+    const combatants = getApplicableCombat()?.combatants ?? [combatant];
+    const resolved = resolveCombatantByReferences(combatants, {
+        combatantId: messageContext?.combatantId,
+        tokenReferences: [message.speaker?.token],
+        actorReferences: [message.speaker?.actor],
+    }, {
+        resolveToken: services.resolveCombatantToken,
+    });
+    return resolved === combatant || Boolean(resolved?.id && resolved.id === combatant.id);
 }
 
 function chatMessageHtml(message) {

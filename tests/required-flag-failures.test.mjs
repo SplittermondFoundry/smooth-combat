@@ -979,6 +979,28 @@ test("legacy tick confirmation prefers the exact token over another combatant wi
     assert.equal(message.flags[MODULE_ID].legacyTickAdvance.state, "completed");
 });
 
+test("actor-only legacy ticks do not mutate one of multiple shared-actor combatants", async () => {
+    resetHarness();
+    const actor = new TestActor("ambiguous-wolf");
+    const first = { id: "wolf-a", actorId: actor.id, actor, tokenId: "wolf-token-a", initiative: 4 };
+    const second = { id: "wolf-b", actorId: actor.id, actor, tokenId: "wolf-token-b", initiative: 10 };
+    game.combat.combatants = [first, second];
+    const message = new TestMessage("ambiguous-wolf-action", { actor });
+    harness.messages.set(message.id, message);
+
+    const applied = await advanceLegacyChatTicks(
+        message,
+        actionButton(message, { ticks: "3" }, { legacy: true })
+    );
+
+    assert.equal(applied, false);
+    assert.equal(actor.tickApplications, 0);
+    assert.equal(first.initiative, 4);
+    assert.equal(second.initiative, 10);
+    assert.equal(message.flags[MODULE_ID].legacyTickAdvance, undefined);
+    assert.equal(harness.warnings.at(-1), "SMOOTHER_FIGHT.HUD.AmbiguousCombatant");
+});
+
 test("rejected stun-damage completion becomes uncertain and cannot apply defense damage twice", async (t) => {
     resetHarness();
     t.mock.method(console, "error", () => {});
