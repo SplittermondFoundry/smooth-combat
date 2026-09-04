@@ -218,7 +218,7 @@ async function recreateOffenseAfterDefense(root, defenseMessage, defenseCheck, d
         await setOffenseContext(original, historyContext);
         return original;
     }
-    return applyEffectiveDefense(root, original, {
+    return applyEffectiveDefense(original, {
         ...historyContext,
         defenseMessageId: defenseMessage.id,
         defenseValue: newDefense,
@@ -274,10 +274,10 @@ export function recreateOffenseAfterSplinterpoint(root, original, { actorUuid, k
         defenseValue,
         defenseType,
     };
-    return applyEffectiveDefense(root, original, context, defenseValue, defenseType);
+    return applyEffectiveDefense(original, context, defenseValue, defenseType);
 }
 
-async function applyEffectiveDefense(root, original, context, defenseValue, defenseType) {
+async function applyEffectiveDefense(original, context, defenseValue, defenseType) {
     const systemSource = cloneData(original.system?.toObject?.() ?? original.toObject().system);
     const previousReport = systemSource.checkReport;
     const config = globalThis.CONFIG?.splittermond ?? {};
