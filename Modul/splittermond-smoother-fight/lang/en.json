@@ -273,7 +273,7 @@
       "FavoriteSkills": "Favorite skills",
       "FavoriteSkill": "Favorite skill",
       "OpenSkillMenu": "Open skill menu",
-      "ReorderFavoriteSkill": "Drag {skill} to reorder favorites",
+      "ReorderFavoriteSkill": "Roll {skill} · Drag to reorder",
       "SetFavoriteSkill": "Mark as favorite skill",
       "ClearFavoriteSkill": "Remove favorite skill",
       "FavoriteSkillSet": "{skill} was marked as a favorite skill.",

@@ -273,7 +273,7 @@
       "FavoriteSkills": "Favorisierte Fertigkeiten",
       "FavoriteSkill": "Favorisierte Fertigkeit",
       "OpenSkillMenu": "Fertigkeitsmenü öffnen",
-      "ReorderFavoriteSkill": "{skill} ziehen, um die Favoriten neu anzuordnen",
+      "ReorderFavoriteSkill": "{skill} würfeln · Ziehen zum Sortieren",
       "SetFavoriteSkill": "Als Fertigkeitsfavorit markieren",
       "ClearFavoriteSkill": "Fertigkeitsfavorit entfernen",
       "FavoriteSkillSet": "{skill} wurde als Fertigkeitsfavorit markiert.",
