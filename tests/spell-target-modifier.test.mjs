@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { performSpell } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
 import {
-    prepareSmallMagicProtectionRollOptions,
+    prepareSpellTargetRollOptions,
     smallMagicProtectionModifier,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/spell-target-modifier.js";
 import { services } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
@@ -98,7 +98,7 @@ test("the named target modifier remains selected when the system replaces spell 
         },
     };
 
-    const prepared = prepareSmallMagicProtectionRollOptions(spell, target);
+    const prepared = prepareSpellTargetRollOptions(spell, target);
     assert.equal(prepared.usesNamedModifier, true);
     assert.equal(modifierManager._modifier.has(skill.id), false);
 
@@ -151,7 +151,7 @@ test("an open protected roll cannot leak its modifier into a later roll against 
         },
     };
 
-    const protectedRoll = prepareSmallMagicProtectionRollOptions(spell, target);
+    const protectedRoll = prepareSpellTargetRollOptions(spell, target);
     const pendingDialog = skill.roll({
         ...protectedRoll.rollOptions,
         preSelectedModifier: ["Schatten"],
@@ -161,7 +161,7 @@ test("an open protected roll cannot leak its modifier into a later roll against 
     assert.equal(modifierManager._modifier.has(skill.id), false);
     assert.equal(skill.roll, originalRoll);
 
-    const unprotectedRoll = prepareSmallMagicProtectionRollOptions(spell, { actor: { items: [] } });
+    const unprotectedRoll = prepareSpellTargetRollOptions(spell, { actor: { items: [] } });
     await skill.roll({
         ...unprotectedRoll.rollOptions,
         preSelectedModifier: ["Schatten"],

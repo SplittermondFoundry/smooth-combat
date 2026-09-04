@@ -35,12 +35,6 @@ export function smallMagicProtectionModifier(target) {
     };
 }
 
-export function prepareSmallMagicProtectionRollOptions(spell, target, rollOptions = {}) {
-    const modifier = smallMagicProtectionModifier(target);
-    const prepared = prepareSpellRollModifiers(spell, rollOptions, [modifier].filter(Boolean));
-    return { ...prepared, modifier };
-}
-
 export function prepareSpellTargetRollOptions(spell, target, rollOptions = {}) {
     const modifiers = [
         smallMagicProtectionModifier(target),
