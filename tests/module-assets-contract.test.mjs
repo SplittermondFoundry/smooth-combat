@@ -19,8 +19,10 @@ function escapeRegExp(value) {
 
 test("Foundry manifest entry points remain stable", () => {
     const manifest = readManifest();
+    const packageMetadata = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.5.0");
+    assert.equal(manifest.version, "0.6.0");
+    assert.equal(packageMetadata.version, manifest.version);
     assert.deepEqual(manifest.esmodules, ["scripts/smoother-fight.js"]);
     assert.deepEqual(manifest.styles, [`styles/smoother-fight-${manifest.version}.css`]);
     assert.equal(manifest.socket, true);
