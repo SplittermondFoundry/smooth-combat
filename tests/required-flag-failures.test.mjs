@@ -14,6 +14,8 @@ import {
     finishRemoteDamageApplication,
     getDamageApplicationState,
     getNumbingDamageApplicationState,
+    isDamageApplicationBlocked,
+    requestRemoteDamageApplication,
 } from "../Modul/splittermond-smoother-fight/scripts/features/chat/damage-application.js";
 import {
     advanceLegacyChatTicks,
@@ -1121,7 +1123,83 @@ test("a token owner routes linked-target damage from a foreign chat card through
     assert.equal(emitted[0][1].recipientId, gm.id);
     assert.equal(message.setFlagCalls, 0);
     assert.equal(targetActor.damageApplications, 0);
-    finishRemoteDamageApplication(message.id, { state: "idle" });
+    finishRemoteDamageApplication(message.id, {
+        requestId: emitted[0][1].requestId,
+        senderId: gm.id,
+        state: "idle",
+    });
+});
+
+test("a late remote damage result cannot finish a newer retry for the same message", (t) => {
+    resetHarness();
+    const emitted = [];
+    const timers = [];
+    const player = { id: "retrying-player", isGM: false, targets: new Set() };
+    const gm = { id: "gm", isGM: true, active: true };
+    const message = new TestMessage("retried-remote-damage");
+    game.user = player;
+    game.users = [player, gm];
+    game.socket.emit = (_channel, payload) => emitted.push(payload);
+    let nextRequestId = 0;
+    globalThis.foundry.utils.randomID = () => `damage-request-${++nextRequestId}`;
+
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    globalThis.setTimeout = (callback, delay) => {
+        const timer = { callback, cleared: false, delay, unref() {} };
+        timers.push(timer);
+        return timer;
+    };
+    globalThis.clearTimeout = (timer) => {
+        if (timer) timer.cleared = true;
+    };
+    t.after(() => {
+        globalThis.setTimeout = originalSetTimeout;
+        globalThis.clearTimeout = originalClearTimeout;
+    });
+
+    requestRemoteDamageApplication(message, { action: "applyDamageToUserTargets" });
+    const firstRequest = emitted[0];
+    assert.equal(isDamageApplicationBlocked(message), true);
+
+    timers[0].callback();
+    assert.equal(isDamageApplicationBlocked(message), false);
+
+    requestRemoteDamageApplication(message, { action: "applyDamageToUserTargets" });
+    const secondRequest = emitted[1];
+    assert.notEqual(secondRequest.requestId, firstRequest.requestId);
+    assert.equal(isDamageApplicationBlocked(message), true);
+
+    const acceptedLateResult = finishRemoteDamageApplication(message.id, {
+        requestId: firstRequest.requestId,
+        senderId: gm.id,
+        state: "idle",
+        error: "failed",
+    });
+    assert.equal(acceptedLateResult, false);
+    assert.equal(timers[1].cleared, false);
+    assert.equal(isDamageApplicationBlocked(message), true);
+    assert.equal(harness.errors.length, 0);
+
+    const acceptedOtherGmResult = finishRemoteDamageApplication(message.id, {
+        requestId: secondRequest.requestId,
+        senderId: "other-gm",
+        state: "completed",
+        error: null,
+    });
+    assert.equal(acceptedOtherGmResult, false);
+    assert.equal(timers[1].cleared, false);
+    assert.equal(isDamageApplicationBlocked(message), true);
+
+    const acceptedCurrentResult = finishRemoteDamageApplication(message.id, {
+        requestId: secondRequest.requestId,
+        senderId: gm.id,
+        state: "completed",
+        error: null,
+    });
+    assert.equal(acceptedCurrentResult, true);
+    assert.equal(timers[1].cleared, true);
+    assert.equal(isDamageApplicationBlocked(message), false);
 });
 
 test("a token owner routes defense stun damage from a foreign chat card through the active GM", async () => {

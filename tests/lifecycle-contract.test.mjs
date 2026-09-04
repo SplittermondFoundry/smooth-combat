@@ -521,6 +521,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             type: "damage-application-request",
             senderId: gm.id,
             recipientId: gm.id,
+            requestId: "authenticated-damage-request",
             messageId: message.id,
             actionData: { action: "applyDamageToSelf" },
         };
@@ -537,6 +538,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             type: "damage-application-result",
             senderId: gm.id,
             recipientId: player.id,
+            requestId: authenticatedRequest.requestId,
             messageId: message.id,
             state: "completed",
             error: null,
@@ -796,6 +798,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             type: "damage-application-request",
             senderId: sender.id,
             recipientId: gm.id,
+            requestId: "damage-request-id",
             messageId: message.id,
             actionData: { action: "applyDamageToSelf" },
         };
@@ -809,6 +812,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             type: "damage-application-result",
             senderId: gm.id,
             recipientId: sender.id,
+            requestId: payload.requestId,
             messageId: message.id,
             state: "completed",
             error: null,
@@ -820,6 +824,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             type: "damage-application-result",
             senderId: "unknown",
             recipientId: sender.id,
+            requestId: payload.requestId,
             messageId: message.id,
         });
         assert.deepEqual(callsOf("finishRemoteDamageApplication"), []);
@@ -828,6 +833,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             type: "damage-application-result",
             senderId: gm.id,
             recipientId: sender.id,
+            requestId: payload.requestId,
             messageId: message.id,
             state: "completed",
             error: null,
@@ -836,6 +842,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             type: "damage-application-result",
             senderId: gm.id,
             recipientId: sender.id,
+            requestId: payload.requestId,
             messageId: message.id,
             state: "completed",
             error: null,

@@ -18,7 +18,7 @@ import {
 const damageApplicationLocks = new Set();
 const defenseNumbingDamageLocks = new Set();
 const remoteDefenseNumbingDamageRequests = new Map();
-const remoteDamageApplicationTimers = new Map();
+const remoteDamageApplicationRequests = new Map();
 const remoteDamageFinalizationRequests = new Map();
 const staleDamageApplicationTimers = new Map();
 const DAMAGE_APPLICATION_STATES = new Set(["idle", "applying", "completed", "uncertain"]);
@@ -506,20 +506,28 @@ export function requestRemoteDamageApplication(message, actionData) {
         ui.notifications.warn(localizeSystem("splittermond.chatCard.noGMConnected", "Kein GM verbunden."));
         return;
     }
+    const requestId = createDamageAttemptId();
     damageApplicationLocks.add(message.id);
-    clearRemoteDamageApplicationTimer(message.id);
+    clearRemoteDamageApplicationRequest(message.id);
     const timeoutId = setTimeout(() => {
-        remoteDamageApplicationTimers.delete(message.id);
+        const request = remoteDamageApplicationRequests.get(message.id);
+        if (request?.requestId !== requestId) return;
+        remoteDamageApplicationRequests.delete(message.id);
         damageApplicationLocks.delete(message.id);
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageApplicationNoResponse"));
         services.scheduleRender(0);
     }, REMOTE_DAMAGE_APPLICATION_TIMEOUT_MS);
     timeoutId?.unref?.();
-    remoteDamageApplicationTimers.set(message.id, timeoutId);
+    remoteDamageApplicationRequests.set(message.id, {
+        gmId: gm.id,
+        requestId,
+        timeoutId,
+    });
     game.socket.emit(SOCKET, {
         type: "damage-application-request",
         senderId: game.user.id,
         recipientId: gm.id,
+        requestId,
         messageId: message.id,
         actionData,
     });
@@ -579,18 +587,25 @@ export function finishRemoteDamageApplication(messageId, result = {}) {
         services.scheduleRender(0);
         return;
     }
-    clearRemoteDamageApplicationTimer(messageId);
+    const request = remoteDamageApplicationRequests.get(messageId);
+    if (!request
+        || result.requestId !== request.requestId
+        || result.senderId !== request.gmId) return false;
+    clearRemoteDamageApplicationRequest(messageId, result.requestId);
     damageApplicationLocks.delete(messageId);
     if (result.error === "missing-target") ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageTargetMissing"));
     else if (result.error === "not-allowed") ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.DamageTargetNotOwned"));
     else if (result.error) ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
     services.scheduleRender(0);
+    return true;
 }
 
-function clearRemoteDamageApplicationTimer(messageId) {
-    const timeoutId = remoteDamageApplicationTimers.get(messageId);
-    if (timeoutId) clearTimeout(timeoutId);
-    remoteDamageApplicationTimers.delete(messageId);
+function clearRemoteDamageApplicationRequest(messageId, requestId = null) {
+    const request = remoteDamageApplicationRequests.get(messageId);
+    if (!request || (requestId && request.requestId !== requestId)) return false;
+    if (request.timeoutId) clearTimeout(request.timeoutId);
+    remoteDamageApplicationRequests.delete(messageId);
+    return true;
 }
 
 export function resolveDamageApplicationTarget(message) {

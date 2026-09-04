@@ -281,7 +281,7 @@ export function registerSocket() {
         if (payload.type === "damage-application-request" && payload.recipientId === game.user.id && game.user.isGM) {
             const message = game.messages.get(payload.messageId);
             let result = { state: "idle", error: "invalid" };
-            if (message && services.isDamageMessage(message)) {
+            if (payload.requestId && message && services.isDamageMessage(message)) {
                 try {
                     result = await services.applyRemoteDamageApplication(message, payload.actionData, sender);
                 } catch (error) {
@@ -293,6 +293,7 @@ export function registerSocket() {
                 type: "damage-application-result",
                 senderId: game.user.id,
                 recipientId: authenticatedSenderId,
+                requestId: payload.requestId,
                 messageId: payload.messageId,
                 ...result,
             });
