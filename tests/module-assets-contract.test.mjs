@@ -21,7 +21,7 @@ test("Foundry manifest entry points remain stable", () => {
     const manifest = readManifest();
     const packageMetadata = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.6.1");
+    assert.equal(manifest.version, "0.6.2");
     assert.equal(packageMetadata.version, manifest.version);
     assert.equal(manifest.download, `${manifest.url}/releases/download/v${manifest.version}/${manifest.id}-v${manifest.version}.zip`);
     const releaseNotes = fs.readFileSync(path.join(projectRoot, "RELEASE_NOTES.md"), "utf8");

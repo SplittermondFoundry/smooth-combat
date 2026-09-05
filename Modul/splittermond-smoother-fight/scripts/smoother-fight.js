@@ -54,6 +54,9 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", async () => {
+    // Player actions need the GM receiver even if later migration or UI setup
+    // is delayed or fails on that client.
+    registerSocket();
     await migrateAudioFeedbackSettings();
     services.installGmCheatRollInterceptor();
     services.installSystemActionBarActiveDefenseInterceptor();
@@ -62,7 +65,6 @@ Hooks.once("ready", async () => {
     mountHud();
     seedHealthFeedbackState();
     registerHooks();
-    registerSocket();
     const combat = getApplicableCombat();
     void services.refreshAllCombatPositionOverlays();
     void combatActionsApi.advanceContinuousActions(combat);

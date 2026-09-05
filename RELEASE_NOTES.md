@@ -1,33 +1,19 @@
-# Splittermond Smoother Fight 0.6.1
+# Splittermond Smoother Fight 0.6.2
 
-Dieses Kompatibilitätsupdate ermöglicht die Aktivierung auch mit Splittermond **14.2.7** und den übrigen **14.2.x**-Versionen.
+Dieses kleine Fehlerbehebungsupdate verhindert, dass Spieler beim Ausgeben von EG, beim Schadenwurf oder beim Bezahlen von Angriffsticks vergeblich auf die Spielleitung warten, weil deren Modul-Empfänger beim Weltstart nicht registriert wurde.
 
-## Voraussetzungen und Kompatibilität
+## Fehlerbehebung
 
-- Foundry Virtual Tabletop 14 ab Build **14.359**, verifiziert mit **14.363**
-- Splittermond-System ab **14.2.0**; unterstützt werden 14.2.x einschließlich **14.2.7** sowie 14.3.x.
-- Das passende Status-Datenformat wird automatisch erkannt. Für das Modulupdate von 0.6.0 sind keine neuen Einstellungen oder manuellen Datenmigrationen erforderlich.
+- Der Empfänger für Spieleranfragen startet jetzt vor der übrigen Initialisierung. Verzögerungen oder Fehler in nachfolgenden Startschritten verhindern seine Registrierung nicht mehr.
+- Wenn eine Antwort der Spielleitung ausbleibt, enthält die Konsole nun konkrete Angaben zur betroffenen Anfrage und Chatkarte.
+- Die bestehenden Berechtigungsprüfungen und die Reihenfolge von Aktiver Abwehr und Folgeaktionen bleiben erhalten.
 
-## Wichtige Verbesserungen und Fehlerbehebungen
+## Prüfung und Kompatibilität
 
-- Patzerzustände verwenden auch unter Splittermond 14.2.x die vorgesehenen Start-Ticks, Intervalle und Wiederholungen. Zustandsstufen und Modifikatoren werden wie bisher übernommen.
-- Kampfpositionen bleiben dauerhaft bestehen, bis sie geändert oder durch Aufstehen beendet werden. Wechseln, Neuladen und die Rücknahme fehlgeschlagener Positionswechsel berücksichtigen beide System-Datenformate.
-- Für den bisher verwendeten Stand **14.3.0-alpha4** bleiben die erzeugten Statusdaten und Dokumentänderungen unverändert.
+- 691 automatisierte Tests sowie die zusätzlichen Coverage-Prüfungen bestehen. Elf neue Integrationstests prüfen den Spieler–SL–Spieler-Ablauf für EG, Schaden und Ticks sowie offene Abwehren und ausbleibende Antworten. Der Starttest prüft zusätzlich die Registrierung während einer verzögerten Initialisierung.
+- Die Voraussetzungen bleiben unverändert: Foundry VTT 14 ab Build **14.359** und Splittermond ab **14.2.0**, einschließlich **14.2.7**.
+- Die Kompatibilitätskorrekturen aus [0.6.1](https://github.com/SplittermondFoundry/smooth-combat/releases/tag/v0.6.1) sind weiterhin enthalten.
 
-## Sicherheit, Stabilität und Technik
+## Update
 
-- Ein gemeinsamer Status-Adapter erkennt das installierte Datenmodell, einschließlich älterer 14.3-Vorabversionen.
-- 43 zusätzliche Kompatibilitätstests prüfen beide Datenformate. Der Originalcode für Statusschema, Start-Tick und Tickereignisse wurde aus 14.2.0, 14.2.7 und 14.3.0-alpha4 in einer isolierten Testumgebung geprüft. Ein vollständiger Praxistest in laufenden Foundry-Welten ist damit nicht abgedeckt.
-- Manifest, Downloadpfad und CSS-Cacheversionen wurden gemeinsam auf **0.6.1** aktualisiert.
-
-## Installation
-
-In Foundry unter **Add-on-Module → Modul installieren** diese Manifest-URL verwenden:
-
-```text
-https://github.com/SplittermondFoundry/smooth-combat/releases/latest/download/module.json
-```
-
-Nach dem Update kann Smoother Fight in einer Welt mit Splittermond **14.2.7** aktiviert werden. Das Release enthält außerdem ein ZIP für die manuelle Installation.
-
-Die ausführlichen Neuerungen von 0.6.0 stehen in den [Versionshinweisen zu 0.6.0](https://github.com/SplittermondFoundry/smooth-combat/releases/tag/v0.6.0).
+Das Modul über Foundrys Modulverwaltung aktualisieren und die Welt anschließend neu starten. Danach sollen Spielleitung und Spieler ihre Browserseiten neu laden. Einstellungen und Weltdaten müssen nicht migriert werden.

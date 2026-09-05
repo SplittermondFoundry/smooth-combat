@@ -5,6 +5,7 @@ import {
 } from "../../combat-rules.js";
 
 import {
+    MODULE_ID,
     SOCKET,
 } from "../../core/constants.js";
 
@@ -183,6 +184,12 @@ export function requestOffenseFollowUp(message) {
     return new Promise((resolve) => {
         const timeoutId = setTimeout(() => {
             activeDefenseState.offenseFollowUpRequests.delete(requestId);
+            console.error(`${MODULE_ID} | Timed out waiting for the GM's offense follow-up response`, {
+                requestId,
+                messageId: message.id,
+                senderId: game.user.id,
+                recipientId: gm.id,
+            });
             ui.notifications.error(t("SMOOTHER_FIGHT.HUD.ActionFailed"));
             resolve(null);
         }, OFFENSE_FOLLOW_UP_TIMEOUT_MS);

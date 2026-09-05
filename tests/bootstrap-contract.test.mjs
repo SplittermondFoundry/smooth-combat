@@ -8,6 +8,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     const menus = [];
     const keybindings = [];
     const appendedElements = [];
+    const socketRegistrations = [];
 
     globalThis.Hooks = {
         once: (name, callback) => onceCallbacks.set(name, callback),
@@ -29,7 +30,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
             register: (moduleId, key, options) => keybindings.push({ moduleId, key, options }),
         },
         socket: {
-            on: () => {},
+            on: (channel, callback) => socketRegistrations.push({ channel, callback }),
         },
     };
     class TestDie {
@@ -218,7 +219,20 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
         ["openLatestCombatAction", [{ key: "KeyY" }, { key: "KeyZ" }]],
     ]);
 
-    await assert.doesNotReject(() => onceCallbacks.get("ready")());
+    // Audio flag persistence can be delayed independently of the GM's ability
+    // to answer player requests. The socket must already be listening then.
+    let finishAudioMigration;
+    game.user = {
+        getFlag: () => null,
+        setFlag: () => new Promise((resolve) => { finishAudioMigration = resolve; }),
+    };
+    const ready = onceCallbacks.get("ready")();
+    const socketsDuringMigration = socketRegistrations.length;
+    delete game.user;
+    finishAudioMigration();
+    await assert.doesNotReject(() => ready);
+    assert.equal(socketsDuringMigration, 1, "player requests must not depend on audio migration or HUD startup");
+    assert.equal(socketRegistrations[0].channel, "module.splittermond-smoother-fight");
     assert.equal(appendedElements.length, 1, "the ready hook must mount the HUD without a runtime error");
     assert.equal(appendedElements[0].id, "splittermond-smoother-fight-hud");
     assert.ok(hookCallbacks.length > 0, "the ready hook must register runtime hooks");
