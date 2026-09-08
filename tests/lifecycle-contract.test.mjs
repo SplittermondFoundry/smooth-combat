@@ -3,6 +3,11 @@ import test from "node:test";
 
 import { configureServices } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
 import { registerHooks, registerSocket } from "../Modul/splittermond-smoother-fight/scripts/core/lifecycle.js";
+import {
+    applyFearRollRequirement,
+    isFearRollCompatibilityRequired,
+    prepareFearRollDialog,
+} from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/fear-roll-compatibility.js";
 
 const EXPECTED_HOOKS = [
     "combatStart",
@@ -64,6 +69,9 @@ function callsOf(name) {
 }
 
 const serviceStubs = {
+    applyFearRollRequirement,
+    isFearRollCompatibilityRequired,
+    prepareFearRollDialog,
     scheduleRender: (...args) => record("scheduleRender", args),
     scheduleMovementTokenControls: (...args) => record("scheduleMovementTokenControls", args),
     refreshMovementTokenControl: (...args) => record("refreshMovementTokenControl", args),
@@ -307,6 +315,19 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
     assert.deepEqual(callsOf("prepareExistingRenderedChatMessages"), [[]]);
     assert.equal(socketRegistrations.length, 1);
     assert.equal(socketRegistrations[0].channel, "module.splittermond-smoother-fight");
+    await t.test("fear compatibility hooks are registered exclusively for Splittermond 14.2.7", () => {
+        const originalRegistrations = [...hookRegistrations];
+        for (const version of ["14.2.6", "14.2.7", "14.2.8", "14.3.0-beta1", "14.3.0", "15.0.0"]) {
+            gameStub.system = { id: "splittermond", version };
+            hookRegistrations.length = 0;
+            registerHooks();
+            assert.deepEqual(hookRegistrations.map(({ name }) => name), version === "14.2.7"
+                ? ["renderCheckDialog", "splittermond.check.onBeforeCheck", ...EXPECTED_HOOKS]
+                : EXPECTED_HOOKS);
+        }
+        delete gameStub.system;
+        hookRegistrations.splice(0, hookRegistrations.length, ...originalRegistrations);
+    });
     const foundrySocketHandler = socketRegistrations[0].callback;
     const socketHandler = (payload, authenticatedSenderId = payload?.senderId) =>
         foundrySocketHandler(payload, authenticatedSenderId);

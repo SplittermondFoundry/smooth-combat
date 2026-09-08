@@ -19,6 +19,10 @@ import {
 } from "../shared/values.js";
 
 export function registerHooks() {
+    if (services.isFearRollCompatibilityRequired()) {
+        Hooks.on("renderCheckDialog", services.prepareFearRollDialog);
+        Hooks.on("splittermond.check.onBeforeCheck", services.applyFearRollRequirement);
+    }
     const combatProgressHooks = new Set(["combatStart", "combatRound", "combatTurn", "updateCombat"]);
     const combatPositionItemHooks = new Set(["createItem", "updateItem", "deleteItem"]);
     const rerenderHooks = [

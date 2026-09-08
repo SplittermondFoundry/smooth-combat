@@ -2870,3 +2870,17 @@ body > .sf-action-tooltip footer {
     padding: 3px 7px 8px;
     align-items: start;
 }
+.dialog-check.sf-fear-roll-compat .sf-fear-roll-hint {
+    margin: 0 0 12px;
+    padding: 6px 10px;
+    border-left: 3px solid var(--sf-gold);
+    color: inherit;
+    font-size: inherit;
+    line-height: 1.4;
+}
+
+.dialog-check.sf-fear-roll-compat button.sf-fear-roll-preset {
+    outline: 2px solid var(--sf-gold);
+    outline-offset: 1px;
+    font-weight: 700;
+}

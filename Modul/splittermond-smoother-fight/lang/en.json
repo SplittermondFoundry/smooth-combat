@@ -345,6 +345,9 @@
         }
       },
       "MovementTracker": "Movement",
+      "FearRollHint": "Angsterfüllt: safety roll preset. Other roll types require confirmation.",
+      "FearRollConfirmTitle": "Override the safety roll?",
+      "FearRollConfirmBody": "This character is affected by Angsterfüllt and should use safety rolls. Perform a {rollType} anyway?",
       "MovementDistance": "{distance} m moved",
       "MovementMeters": "{distance} m",
       "MovementProgress": "{distance} of {maximum} m moved",

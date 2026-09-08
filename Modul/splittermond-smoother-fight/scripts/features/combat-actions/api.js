@@ -1,4 +1,10 @@
 export {
+    applyFearRollRequirement,
+    isFearRollCompatibilityRequired,
+    prepareFearRollDialog,
+} from "./fear-roll-compatibility.js";
+
+export {
     addCombatTicks,
     cancelPreparedAttack,
     cancelPreparedSpell,

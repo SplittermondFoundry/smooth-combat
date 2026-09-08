@@ -345,6 +345,9 @@
         }
       },
       "MovementTracker": "Bewegung",
+      "FearRollHint": "Angsterfüllt: Sicherheitswurf vorgegeben. Andere Wurfarten erfordern eine Bestätigung.",
+      "FearRollConfirmTitle": "Von Sicherheitswurf abweichen?",
+      "FearRollConfirmBody": "Die Figur ist angsterfüllt und soll Sicherheitswürfe verwenden. Trotzdem einen {rollType} ausführen?",
       "MovementDistance": "{distance} m bewegt",
       "MovementMeters": "{distance} m",
       "MovementProgress": "{distance} von {maximum} m bewegt",
