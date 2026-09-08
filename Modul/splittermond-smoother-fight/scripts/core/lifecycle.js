@@ -40,6 +40,7 @@ export function registerHooks() {
     ];
     rerenderHooks.forEach((hook) => Hooks.on(hook, (document) => {
         services.scheduleRender();
+        services.scheduleMovementTokenControls();
         if (combatPositionItemHooks.has(hook)) {
             void services.refreshCombatPositionOverlaysForActor(document?.parent ?? document?.actor);
         }
@@ -53,15 +54,25 @@ export function registerHooks() {
         if (!controlled) services.clearTemporaryMovementRoutePreview(token);
         services.scheduleRender(0);
     });
-    Hooks.on("canvasTearDown", () => services.clearMovementRoutePreview());
-    Hooks.on("canvasPan", () => services.refreshMovementRoutePreviewScale());
+    Hooks.on("canvasTearDown", () => {
+        services.clearMovementRoutePreview();
+        services.clearMovementTokenControls();
+    });
+    Hooks.on("canvasPan", () => {
+        services.refreshMovementRoutePreviewScale();
+        services.refreshMovementTokenControlScale();
+    });
     Hooks.on("userConnected", () => {
         const combat = getApplicableCombat();
         services.scheduleRender(0);
+        services.scheduleMovementTokenControls();
         void services.advanceContinuousActions(combat);
         void services.advancePendingMovements(combat);
     });
-    Hooks.on("sightRefresh", () => services.scheduleRender(0));
+    Hooks.on("sightRefresh", () => {
+        services.scheduleRender(0);
+        services.scheduleMovementTokenControls();
+    });
     Hooks.on("updateToken", (token, changes, options, userId) => {
         if (Object.hasOwn(changes ?? {}, "hidden")) services.scheduleRender(0);
         if (hasTokenPositionUpdate(changes)) {
@@ -70,9 +81,15 @@ export function registerHooks() {
             services.scheduleRenderAfterTokenMovement(token);
         }
         services.syncDefaultMovementRoutePreviews(getApplicableCombat());
+        services.scheduleMovementTokenControls();
         void services.refreshCombatPositionOverlay(token);
     });
-    Hooks.on("drawToken", (token) => void services.refreshCombatPositionOverlay(token));
+    Hooks.on("drawToken", (token) => {
+        void services.refreshCombatPositionOverlay(token);
+        services.scheduleMovementTokenControls();
+    });
+    Hooks.on("refreshToken", (token) => services.refreshMovementTokenControl(token));
+    Hooks.on("deleteToken", () => services.scheduleMovementTokenControls());
     Hooks.on("recordToken", () => {
         if (getSetting("movementTracking", true)) services.scheduleRender(0);
     });

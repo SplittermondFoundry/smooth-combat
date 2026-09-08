@@ -72,25 +72,30 @@ function collectAllCombatEventGroups(context) {
         fumbles: [],
         interruptions: [],
     }));
+    // Build per-collection indexes: flags and dice state may change between renders.
+    const primaryById = new Map(groups.map((group) => [group.primary.id, group]));
+    const sourceById = new Map(primaryById);
+    const defenseById = new Map();
+    for (const group of groups) {
+        const cardContext = services.getMessageContext(group.primary);
+        const ids = [cardContext?.defenseMessageId, ...(cardContext?.defenseMessageIds ?? [])];
+        // The latest recalculated attack owns its referenced defense, even if the
+        // defense card itself still points to the original attack.
+        for (const id of ids) if (id) defenseById.set(id, group);
+    }
     for (const message of messages) {
         if (services.isDiceAnimationPending(message)) continue;
         if (!services.isDamageMessage(message) && !services.isDefenseMessage(message) && !services.isFumbleTableMessage(message)) continue;
         const fumble = services.getFumbleData(message);
         const cardContext = services.getMessageContext(message);
-        let group = services.isDefenseMessage(message)
-            ? [...groups].reverse().find((candidate) => {
-                const primaryContext = services.getMessageContext(candidate.primary);
-                return primaryContext?.defenseMessageId === message.id
-                    || primaryContext?.defenseMessageIds?.includes?.(message.id);
-            })
-            : null;
+        let group = services.isDefenseMessage(message) ? defenseById.get(message.id) : null;
         group ??= fumble?.sourceMessageId
-            ? findEventGroupForSource(groups, fumble.sourceMessageId)
+            ? sourceById.get(fumble.sourceMessageId)
             : cardContext?.attackMessageId
-            ? groups.find((candidate) => candidate.primary.id === cardContext.attackMessageId)
+            ? primaryById.get(cardContext.attackMessageId)
             : null;
         if (!group) {
-            group = [...groups].reverse().find((candidate) =>
+            group = groups.findLast((candidate) =>
                 message.timestamp >= candidate.primary.timestamp &&
                 (services.isFumbleTableMessage(message)
                     ? (fumble?.kind === "fight" ? candidate.kind === "attack" : candidate.kind === "spell")
@@ -103,13 +108,14 @@ function collectAllCombatEventGroups(context) {
         if (!group) continue;
         if (services.isFumbleTableMessage(message)) group.fumbles.push(message);
         else (services.isDamageMessage(message) ? group.damages : group.defenses).push(message);
+        if (!sourceById.has(message.id)) sourceById.set(message.id, group);
     }
 
     for (const message of messages) {
         if (!services.isContinuousActionInterruptionPending?.(message, context.combat)) continue;
         const interruption = services.getContinuousActionInterruptionCard?.(message);
         if (!interruption || (interruption.combatId && interruption.combatId !== context.combat.id)) continue;
-        const group = findEventGroupForSource(groups, interruption.sourceMessageId);
+        const group = sourceById.get(interruption.sourceMessageId);
         if (group) {
             group.interruptions.push(message);
             continue;
@@ -122,19 +128,10 @@ function collectAllCombatEventGroups(context) {
             fumbles: [],
             interruptions: [],
         });
+        sourceById.set(message.id, groups.at(-1));
     }
 
     return groups;
-}
-
-function findEventGroupForSource(groups, sourceMessageId) {
-    if (!sourceMessageId) return null;
-    return groups.find((group) => [
-        group.primary,
-        ...group.damages,
-        ...group.defenses,
-        ...group.fumbles,
-    ].some((message) => message.id === sourceMessageId)) ?? null;
 }
 
 export function setCombatEventCardsCollapsed(collapsed) {

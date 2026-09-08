@@ -13,7 +13,10 @@ import {
 } from "../domain/combat/range.js";
 
 export function registerSettings() {
-    const rerender = () => services.scheduleRender();
+    const rerender = () => {
+        services.scheduleRender();
+        services.scheduleMovementTokenControls();
+    };
     game.settings.register(MODULE_ID, "enabled", {
         name: "SMOOTHER_FIGHT.Settings.EnabledName",
         hint: "SMOOTHER_FIGHT.Settings.EnabledHint",

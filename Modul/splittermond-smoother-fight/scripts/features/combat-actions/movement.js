@@ -1,4 +1,6 @@
+import { captureMovementRoute, tokenReachedWaypoint } from "./movement-route.js";
 import { services } from "../../core/services.js";
+import { combatActionState } from "./state.js";
 
 import {
     movementActionMilestones,
@@ -18,6 +20,7 @@ import {
     beginContinuousAction,
     completeContinuousAction,
     CONTINUOUS_MOVEMENT_ACTION_IDS,
+    getContinuousAction,
 } from "./continuous-action.js";
 
 import {
@@ -156,13 +159,38 @@ export async function advancePendingMovements(combat = globalThis.game?.combat) 
     return changed;
 }
 
-export async function abortMovementPlan(tokenLike, combat = globalThis.game?.combat) {
+export async function abortMovementPlan(tokenLike, combat = globalThis.game?.combat, expectedId = null) {
     const token = tokenDocument(tokenLike);
-    if (!token || !combat || !mayCurrentUserManageMovementPlan(token)) return false;
+    const state = getMovementAbortState(token, combat);
+    if (!state || !mayCurrentUserManageMovementPlan(token)
+        || (expectedId && expectedId !== state.id)) return false;
     if (!isCurrentUserMovementAuthority()) {
-        return requestRemoteMovementPlanAbort(token, combat, movementPlanIdentity(readMovementPlan(token)));
+        return requestRemoteMovementPlanAbort(token, combat, state.id);
     }
-    return abortMovementPlanAuthoritatively(token, combat);
+    return abortMovementPlanAuthoritatively(token, combat, state.id);
+}
+
+export function getMovementAbortState(tokenLike, combat = globalThis.game?.combat, { includeStop = true } = {}) {
+    const token = tokenDocument(tokenLike);
+    if (!token || !combat) return null;
+    const plan = readMovementPlan(token);
+    const action = getContinuousAction(token, combat);
+    const movement = plan ?? (CONTINUOUS_MOVEMENT_ACTION_IDS.includes(action?.actionId) ? action : null);
+    if (!movement || movement.combatId !== combat.id || movement.tokenUuid !== token.uuid) return null;
+    const combatant = combatantsOf(combat).find((entry) => entry.id === movement.combatantId);
+    if (!combatant) return null;
+    const milestone = plan && includeStop ? movementInterruptionMilestone(plan, combatTick(combat)) : null;
+    const stop = !milestone ? null : milestone.fraction === 0 ? plan.route[0]
+        : movementPathThroughFractions(plan.route, plan.segmentLengths, 0, [milestone.fraction]).at(-1);
+    return {
+        id: plan ? movementPlanIdentity(plan) : `action:${movementPlanIdentity(action)}`,
+        actionId: movement.actionId,
+        endTick: Math.max(combatantTick(combatant, combat), action?.endTick ?? plan?.milestones.at(-1)?.tick ?? 0),
+        tick: combatTick(combat),
+        stop,
+        hasRoute: Boolean(plan),
+        canManage: mayCurrentUserManageMovementPlan(token),
+    };
 }
 
 export async function applyRemoteMovementPlanAbort(payload, sender) {
@@ -171,28 +199,45 @@ export async function applyRemoteMovementPlanAbort(payload, sender) {
     }
     const combat = resolveCombat(payload?.combatId);
     const token = services.resolveToken?.(payload?.tokenUuid);
-    const plan = readMovementPlan(token);
-    if (!combat || !token || !plan || plan.combatId !== combat.id
-        || movementPlanIdentity(plan) !== String(payload?.planId ?? "")
+    const state = getMovementAbortState(token, combat);
+    if (!state || state.id !== String(payload?.planId ?? "")
         || !mayUserManageMovementPlan(token, sender)) {
         return { applied: false, error: "invalid" };
     }
     try {
-        return { applied: await abortMovementPlanAuthoritatively(token, combat) };
+        return { applied: await abortMovementPlanAuthoritatively(token, combat, state.id) };
     } catch (error) {
         console.error(`${MODULE_ID} | Could not process remote movement abort`, error);
         return { applied: false, error: "failed" };
     }
 }
 
-async function abortMovementPlanAuthoritatively(token, combat) {
-    const interruptionTick = combatTick(combat);
+async function abortMovementPlanAuthoritatively(token, combat, expectedId) {
     const lockKey = token.uuid ?? token.id;
-    if (!lockKey) return false;
+    if (!lockKey || combatActionState.movementAborts.has(lockKey)) return false;
+    const task = stopMovement(token, combat, expectedId, lockKey);
+    combatActionState.movementAborts.set(lockKey, task);
+    try {
+        return await task;
+    } finally {
+        combatActionState.movementAborts.delete(lockKey);
+    }
+}
 
+async function stopMovement(token, combat, expectedId, lockKey) {
+    const interruptionTick = combatTick(combat);
     await movementAdvanceTasks.get(lockKey);
+    if (getMovementAbortState(token, combat)?.id !== expectedId) return false;
     const plan = readMovementPlan(token);
-    if (!plan || plan.combatId !== combat.id) return false;
+    if (!plan) {
+        const action = getContinuousAction(token, combat);
+        const completed = await completeContinuousAction({ token, combat }, { expectedId: action.id });
+        if (completed) {
+            ui.notifications.info(t("SMOOTHER_FIGHT.HUD.MovementAbortWithoutRoute"));
+            services.scheduleRender(0);
+        }
+        return completed;
+    }
     const milestone = movementInterruptionMilestone(plan, interruptionTick);
     const completedFraction = movementPlanPositionFraction(token, plan)
         ?? normalizedFraction(plan.completedFraction);
@@ -247,8 +292,7 @@ export async function restoreInterruptedMovementPlan(tokenLike, planLike, combat
 export function getAbortableControlledTokenMovement(combat = globalThis.game?.combat) {
     const token = tokenDocument(services.getControlledTokenDocument?.());
     if (!token || !combat || !mayCurrentUserManageMovementPlan(token)) return null;
-    const plan = readMovementPlan(token);
-    if (!plan || plan.combatId !== combat.id) return null;
+    if (!getMovementAbortState(token, combat)) return null;
     return token;
 }
 
@@ -349,8 +393,7 @@ export function renderTokenMovementControl(app, html) {
     if (!root || !token) return;
 
     root.querySelector(".sf-token-movement-control")?.remove();
-    const plan = readMovementPlan(token);
-    if (!plan || plan.combatId !== globalThis.game?.combat?.id || !mayCurrentUserManageMovementPlan(token)) return;
+    if (!getMovementAbortState(token) || !mayCurrentUserManageMovementPlan(token)) return;
     const column = root.querySelector(".col.right") ?? root.querySelector(".right") ?? root;
     const control = document.createElement("div");
     control.className = "control-icon sf-token-movement-control active";
@@ -379,6 +422,7 @@ export async function cancelMovementPlanAfterManualMove(tokenLike, options = {},
     if (!token || options?.[SCHEDULED_MOVEMENT_OPTION]) return false;
     if (!isCurrentUserManualMovementAuthority(token, userId)) return false;
     const lockKey = token.uuid ?? token.id;
+    if (combatActionState.movementAborts.has(lockKey)) return false;
     if (lockKey && movementLocks.has(lockKey) && userId === globalThis.game?.user?.id) {
         return false;
     }
@@ -461,33 +505,9 @@ function rememberManualMovementRoutePreviewChoice(token, plan, result) {
     });
 }
 
-function captureMovementRoute(token) {
-    if (!token) return null;
-    const history = Array.from(token.movementHistory ?? []).map(serializeWaypoint).filter(Boolean);
-    if (!history.length) return null;
-    const current = serializeWaypoint(token);
-    if (current && !samePosition(history.at(-1), current)) history.push(current);
-    const waypoints = distinctConsecutiveWaypoints(history);
-    if (waypoints.length < 2 || samePosition(waypoints[0], waypoints.at(-1))) return null;
-
-    let measurement = null;
-    try {
-        measurement = token.measureMovementPath?.(waypoints) ?? null;
-    } catch {
-        // Pixel lengths below retain the route if Foundry cannot remeasure it.
-    }
-    const segmentLengths = waypoints.slice(1).map((point, index) => {
-        const measured = Number(measurement?.segments?.[index]?.distance);
-        if (Number.isFinite(measured) && measured > 0) return measured;
-        const previous = waypoints[index];
-        return Math.hypot(point.x - previous.x, point.y - previous.y);
-    });
-    return segmentLengths.some((length) => length > 0) ? { segmentLengths, waypoints } : null;
-}
-
 function queueTokenMovementAdvance(token, combat) {
     const lockKey = token.uuid ?? token.id;
-    if (!lockKey) return Promise.resolve(false);
+    if (!lockKey || combatActionState.movementAborts.has(lockKey)) return Promise.resolve(false);
     movementAdvanceRequests.add(lockKey);
     const activeTask = movementAdvanceTasks.get(lockKey);
     if (activeTask) return activeTask;
@@ -502,6 +522,7 @@ async function drainTokenMovementAdvances(token, combat, lockKey) {
     let changed = false;
     try {
         while (movementAdvanceRequests.delete(lockKey)) {
+            if (combatActionState.movementAborts.has(lockKey)) break;
             const plan = readMovementPlan(token);
             if (!plan || plan.combatId !== combat?.id) break;
             const due = movementDueMilestones(plan, combatTick(combat));
@@ -650,36 +671,6 @@ function clearMovementPlan(token, expectedPlan = null) {
     }
     clearMovementRoutePreviewCanvas(token);
     return setRequiredDocumentFlag(token, MOVEMENT_PLAN_FLAG, null);
-}
-
-function serializeWaypoint(point) {
-    const x = Number(point?.x);
-    const y = Number(point?.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    const result = { x, y };
-    for (const key of ["action", "depth", "elevation", "height", "level", "shape", "width"]) {
-        if (point[key] !== undefined && point[key] !== null) result[key] = point[key];
-    }
-    result.checkpoint = Boolean(point.checkpoint);
-    result.explicit = Boolean(point.explicit);
-    result.snapped = Boolean(point.snapped);
-    return result;
-}
-
-function distinctConsecutiveWaypoints(waypoints) {
-    return waypoints.filter((point, index) => index === 0 || !samePosition(point, waypoints[index - 1]));
-}
-
-function samePosition(left, right) {
-    return left?.x === right?.x && left?.y === right?.y
-        && Number(left?.elevation ?? 0) === Number(right?.elevation ?? 0);
-}
-
-function tokenReachedWaypoint(token, waypoint) {
-    if (!token || !waypoint || Number(token.x) !== Number(waypoint.x)
-        || Number(token.y) !== Number(waypoint.y)) return false;
-    return waypoint.elevation === undefined
-        || Number(token.elevation ?? 0) === Number(waypoint.elevation);
 }
 
 function movementPlanPositionFraction(token, plan) {

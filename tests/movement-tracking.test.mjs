@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { configureServices } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
+import { registerSettings } from "../Modul/splittermond-smoother-fight/scripts/core/settings.js";
 import {
     movementActionMilestones,
     movementDueMilestones,
@@ -19,6 +20,7 @@ import {
     clearMovementRoutePreview,
     clearTemporaryMovementRoutePreview,
     getAbortableControlledTokenMovement,
+    getMovementAbortState,
     isMovementRoutePreviewPersistent,
     isMovementRoutePreviewVisible,
     performTrackedMovementAction,
@@ -27,6 +29,13 @@ import {
     togglePersistentMovementRoutePreview,
     toggleMovementRoutePreview,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement.js";
+import {
+    clearMovementTokenControls,
+    refreshMovementTokenControl,
+    refreshMovementTokenControlScale,
+    scheduleMovementTokenControls,
+    syncMovementTokenControls,
+} from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement-controls.js";
 import {
     finishRemoteMovementPlanAbort,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement-abort-requests.js";
@@ -43,6 +52,7 @@ const renderCalls = [];
 const movementHarness = {};
 configureServices({
     scheduleRender: (...args) => renderCalls.push(args),
+    scheduleMovementTokenControls,
     addCombatTicks: (...args) => movementHarness.addCombatTicks(...args),
     createTickActionChatCard: (...args) => movementHarness.createTickActionChatCard(...args),
     getActivePrimaryGm: () => movementHarness.primaryGm,
@@ -1017,14 +1027,403 @@ test("manual movement cancellation waits for an authoritative milestone update",
     assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
 });
 
+test("aborting at every movement tick uses the nearest segment and preserves the regular turn", async () => {
+    for (const [actionId, positions] of [
+        ["walk", [0, 0, 50, 50, 100, 100]],
+        ["sprint", [0, 0, 25, 25, 50, 50, 75, 75, 75, 100, 100]],
+    ]) {
+        for (const [elapsed, position] of positions.entries()) {
+            const fixture = scheduledMovementFixture(actionId);
+            const duration = actionId === "walk" ? 5 : 10;
+            await performTrackedMovementAction(fixture.context, { id: actionId, ticks: duration });
+            fixture.combatant.initiative += 3.002; // Paid reaction and same-tick ordering must survive.
+            fixture.combat.currentTick = 1 + elapsed;
+            const nextTurn = fixture.combatant.initiative;
+            const activeCombatant = fixture.combat.combatant;
+            const state = getMovementAbortState(fixture.token, fixture.combat);
+            assert.equal(state.stop.x, position, `${actionId} +${elapsed}: preview`);
+            assert.equal(await abortMovementPlan(fixture.token, fixture.combat, state.id), true);
+            assert.equal(fixture.token.x, position, `${actionId} +${elapsed}: position`);
+            assert.equal(fixture.combatant.initiative, nextTurn);
+            assert.equal(fixture.combat.combatant, activeCombatant);
+            assert.equal(fixture.combat.currentTick, 1 + elapsed);
+            assert.equal(fixture.plan(), null);
+            assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+            fixture.combat.currentTick = Math.round(nextTurn);
+            await advancePendingMovements(fixture.combat);
+            assert.equal(fixture.token.x, position, "aborted movement never resumes on its scheduled tick");
+        }
+    }
+});
+
+test("route-less movement is abortable without inventing a position or changing initiative", async () => {
+    const fixture = scheduledMovementFixture("sprint");
+    await performTrackedMovementAction(fixture.context, { id: "sprint", ticks: 10 });
+    await fixture.token.setFlag("splittermond-smoother-fight", "movementPlan", null);
+    fixture.token.x = 17;
+    fixture.combat.currentTick = 5;
+    const state = getMovementAbortState(fixture.token, fixture.combat);
+    assert.equal(state.hasRoute, false);
+    assert.equal(state.stop, null);
+    assert.match(state.id, /^action:/u);
+    assert.equal(await abortMovementPlan(fixture.token, fixture.combat, state.id), true);
+    assert.equal(fixture.token.x, 17);
+    assert.equal(fixture.combatant.initiative, 11);
+    assert.equal(getMovementAbortState(fixture.token, fixture.combat), null);
+});
+
+test("remote aborts authorize a second GM and reject other players and stale action identities", async () => {
+    for (const routeLess of [false, true]) {
+        const fixture = scheduledMovementFixture("walk");
+        await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+        if (routeLess) await fixture.token.setFlag("splittermond-smoother-fight", "movementPlan", null);
+        const owner = { id: "owner", isGM: false };
+        movementHarness.runtimeController = owner;
+        fixture.token.actor.isOwner = true;
+        fixture.token.actor.testUserPermission = (user) => user.id === owner.id;
+        movementHarness.resolveToken = () => fixture.token;
+        const payload = {
+            combatId: fixture.combat.id, tokenUuid: fixture.token.uuid,
+            planId: getMovementAbortState(fixture.token, fixture.combat).id,
+        };
+        try {
+            assert.equal((await applyRemoteMovementPlanAbort(payload, { id: "stranger" })).applied, false);
+            assert.equal((await applyRemoteMovementPlanAbort({ ...payload, planId: "stale" }, owner)).applied, false);
+            assert.equal((await applyRemoteMovementPlanAbort(payload, { id: "second-gm", isGM: true })).applied, true);
+            assert.equal(fixture.combatant.initiative, 6);
+        } finally {
+            movementHarness.runtimeController = null;
+            movementHarness.resolveToken = null;
+        }
+    }
+});
+
+test("an abort waits for its animation, blocks duplicate clicks and suppresses later scheduled movement", async () => {
+    let release;
+    let entered;
+    const moving = new Promise((resolve) => entered = resolve);
+    const blocked = new Promise((resolve) => release = resolve);
+    let calls = 0;
+    const fixture = scheduledMovementFixture("sprint", { beforeMove: async () => {
+        if (++calls === 1) { entered(); await blocked; }
+    } });
+    await performTrackedMovementAction(fixture.context, { id: "sprint", ticks: 10 });
+    fixture.combat.currentTick = 4;
+    const advance = advancePendingMovements(fixture.combat);
+    await moving;
+    fixture.combat.currentTick = 5;
+    const abort = abortMovementPlan(fixture.token, fixture.combat);
+    assert.equal(await abortMovementPlan(fixture.token, fixture.combat), false);
+    fixture.combat.currentTick = 8;
+    assert.equal(await advancePendingMovements(fixture.combat), false);
+    release();
+    await advance;
+    assert.equal(await abort, true);
+    assert.equal(fixture.token.x, 50, "uses the abort tick captured before waiting");
+    assert.equal(fixture.combatant.initiative, 11);
+    assert.equal(fixture.plan(), null);
+});
+
+test("a stale abort never removes a replacement movement plan", async () => {
+    let release;
+    let entered;
+    const moving = new Promise((resolve) => entered = resolve);
+    const blocked = new Promise((resolve) => release = resolve);
+    const fixture = scheduledMovementFixture("sprint", { beforeMove: async () => { entered(); await blocked; } });
+    await performTrackedMovementAction(fixture.context, { id: "sprint", ticks: 10 });
+    fixture.combat.currentTick = 4;
+    const advance = advancePendingMovements(fixture.combat);
+    await moving;
+    const abort = abortMovementPlan(fixture.token, fixture.combat);
+    await fixture.token.setFlag("splittermond-smoother-fight", "movementPlan", { ...fixture.plan(), id: "replacement" });
+    release();
+    await advance;
+    assert.equal(await abort, false);
+    assert.equal(fixture.plan().id, "replacement");
+});
+
+test("the canvas displays stop buttons for all GM tokens but only visible, assigned player tokens", async (t) => {
+    const first = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(first.context, { id: "walk", ticks: 5 });
+    const second = scheduledMovementFixture("sprint", { tokenId: "second", combatantId: "second" });
+    await performTrackedMovementAction(second.context, { id: "sprint", ticks: 10 });
+    second.token.hidden = true;
+    second.combat.combatants.push(first.combatant);
+    installMovementCanvas(t, [first.token, second.token]);
+    syncMovementTokenControls();
+    assert.equal(canvasButtons().length, 2, "all tokens, including hidden NPCs, without selection");
+    const player = { id: "player", isGM: false };
+    globalThis.game.user = player;
+    movementHarness.runtimeController = player;
+    first.token.actor.isOwner = true;
+    second.token.actor.isOwner = true;
+    syncMovementTokenControls();
+    assert.equal(canvasButtons().length, 1);
+    assert.equal(canvasButtons()[0].parent.document.uuid, first.token.uuid);
+    movementHarness.runtimeController = { id: "other-player" };
+    syncMovementTokenControls();
+    assert.equal(canvasButtons().length, 0, "ownership alone does not bypass the assigned controller");
+    globalThis.game.user = { id: "second-gm", isGM: true };
+    syncMovementTokenControls();
+    assert.equal(canvasButtons().length, 2, "every GM can access the buttons");
+    movementHarness.runtimeController = null;
+});
+
+test("changing the assigned player removes the previous player's button without a token movement", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    const frames = installMovementCanvas(t, [fixture.token]);
+    const player = { id: "player", isGM: false };
+    game.user = player;
+    fixture.token.actor.isOwner = true;
+    movementHarness.runtimeController = player;
+    syncMovementTokenControls();
+    assert.equal(canvasButtons().length, 1);
+    const previousSettings = game.settings;
+    const settings = new Map();
+    game.settings = { register: (_scope, key, config) => settings.set(key, config) };
+    t.after(() => { game.settings = previousSettings; });
+    registerSettings();
+    movementHarness.runtimeController = { id: "new-owner" };
+    settings.get("userTokenLinks").onChange({});
+    assert.equal(frames.size, 1);
+    const frame = [...frames.values()][0];
+    frames.clear();
+    frame();
+    assert.equal(canvasButtons().length, 0);
+    assert.notEqual(fixture.plan(), null, "changing the controller does not interrupt the action");
+});
+
+test("native controls follow nested canvas transforms and token animation without rule updates", async (t) => {
+    const fixture = scheduledMovementFixture("sprint");
+    await performTrackedMovementAction(fixture.context, { id: "sprint", ticks: 10 });
+    fixture.combat.currentTick = 5;
+    installMovementCanvas(t, [fixture.token]);
+    syncMovementTokenControls();
+    const button = canvasButtons()[0];
+    const object = button.parent;
+    assert.equal(object, fixture.token.object, "button is attached to the rendered token");
+    assert.equal(canvas.interface.children.length, 0, "no route marker until hovering");
+    button.listeners.get("pointerenter")();
+    const marker = canvas.interface.children[0];
+    assert.equal(marker.position.value.x, 100, "half route (50) plus token center (50)");
+    fixture.combat.currentTick = 8;
+    syncMovementTokenControls();
+    assert.equal(marker.position.value.x, 125, "hover preview updates with combat ticks");
+
+    // Foundry nests tokens below the stage; moving either parent must carry the button.
+    const initial = button.toGlobal({ x: 0, y: 0 });
+    canvas.stage.position.set(300, 200);
+    canvas.tokens.position.set(25, 15);
+    assert.deepEqual(button.toGlobal({ x: 0, y: 0 }), { x: initial.x + 325, y: initial.y + 215 });
+    object.position.set(45, 60); // An in-flight animation, before token.document is updated.
+    assert.deepEqual(button.toGlobal({ x: 0, y: 0 }), { x: 456, y: 289 });
+    canvas.stage.scale.set(2);
+    refreshMovementTokenControlScale();
+    assert.equal(button.scale.value, 0.5);
+    assert.equal(marker.scale.value, 0.5);
+    assert.deepEqual(button.toGlobal({ x: 0, y: 0 }), { x: 626, y: 364 });
+    assert.equal(marker.position.value.x, 125, "marker remains at the scene waypoint");
+    button.listeners.get("pointerleave")();
+    assert.equal(canvas.interface.children.length, 0);
+    assert.equal(marker.destroyed, true);
+    button.listeners.get("mouseover")(); // PIXI accessibility keyboard focus.
+    assert.equal(canvas.interface.children.length, 1);
+    button.listeners.get("mouseout")();
+    assert.equal(canvas.interface.children.length, 0);
+});
+
+test("non-rectangular and very small token hit areas keep the control reachable", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    installMovementCanvas(t, [fixture.token]);
+    fixture.token.object.hitArea = { contains: (x, y) => (x - 50) ** 2 + (y - 50) ** 2 <= 50 ** 2 };
+    syncMovementTokenControls();
+    const button = canvasButtons()[0];
+    assert.equal(button.position.value.x, 50, "round/hex shapes fall back to the upper center");
+    canvas.stage.scale.set(0.1);
+    refreshMovementTokenControlScale();
+    assert.ok(button.position.value.x >= 13 * button.scale.value);
+    assert.ok(button.position.value.y >= 13 * button.scale.value);
+});
+
+test("the canvas button rechecks permission and ignores duplicate or stale clicks", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    fixture.combat.currentTick = 4;
+    installMovementCanvas(t, [fixture.token]);
+    syncMovementTokenControls();
+    const staleButton = canvasButtons()[0];
+    globalThis.game.user = { id: "other-player", isGM: false };
+    const event = { button: 0, stopPropagation() {} };
+    await staleButton.listeners.get("pointertap")(event);
+    assert.notEqual(fixture.plan(), null);
+    assert.equal(canvasButtons().length, 0);
+    globalThis.game.user = fixture.primaryGm;
+    syncMovementTokenControls();
+    const button = canvasButtons()[0];
+    const previousDocument = globalThis.document;
+    let blurred = false;
+    globalThis.document = { activeElement: { displayObject: button, blur() {
+        assert.equal(button.parent, fixture.token.object, "PIXI focusout requires the connected display tree");
+        blurred = true;
+        button.listeners.get("mouseout")();
+    } } };
+    t.after(() => { globalThis.document = previousDocument; });
+    await button.listeners.get("pointertap")({ ...event, button: 2 });
+    assert.notEqual(fixture.plan(), null, "secondary click does not abort");
+    const clicked = button.listeners.get("pointertap")(event);
+    assert.equal(button.alpha, 0.5);
+    await button.listeners.get("pointertap")(event);
+    await clicked;
+    await staleButton.listeners.get("pointertap")(event);
+    assert.equal(fixture.plan(), null);
+    assert.equal(fixture.token.x, 50);
+    assert.equal(fixture.combatant.initiative, 6);
+    assert.equal(canvasButtons().length, 0);
+    assert.equal(button.destroyed, true);
+    assert.equal(blurred, true);
+});
+
+test("panning offscreen never clamps a detached button onto the viewport", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    fixture.token.x = -500;
+    installMovementCanvas(t, [fixture.token]);
+    syncMovementTokenControls();
+    const button = canvasButtons()[0];
+    assert.ok(button.toGlobal({ x: 0, y: 0 }).x < 0);
+    canvas.stage.position.set(600, 0);
+    refreshMovementTokenControlScale();
+    assert.equal(button.toGlobal({ x: 0, y: 0 }).x, 186);
+});
+
+test("animation refreshes and camera pans do not read movement plans; document hooks coalesce", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    const scenery = Array.from({ length: 99 }, (_, i) => ({
+        id: "scenery-" + i, uuid: "scenery-" + i, getFlag: () => null,
+    }));
+    const frames = installMovementCanvas(t, [fixture.token, ...scenery]);
+    let reads = 0;
+    for (const token of [fixture.token, ...scenery]) {
+        const getFlag = token.getFlag.bind(token);
+        token.getFlag = (...args) => { reads++; return getFlag(...args); };
+    }
+    syncMovementTokenControls();
+    const singleSyncReads = reads;
+    assert.ok(singleSyncReads >= 100);
+    reads = 0;
+    for (let frame = 0; frame < 60; frame++) {
+        for (const object of canvas.tokens.placeables) refreshMovementTokenControl(object);
+        refreshMovementTokenControlScale();
+    }
+    assert.equal(reads, 0, "6,000 refresh events cause zero plan/continuous-action reads");
+    for (let i = 0; i < 100; i++) scheduleMovementTokenControls();
+    assert.equal(frames.size, 1);
+    const frame = [...frames.values()][0];
+    frames.clear();
+    frame();
+    assert.equal(reads, singleSyncReads, "100 simultaneous hooks result in one reconciliation");
+
+    const button = canvasButtons()[0];
+    button.listeners.get("pointerenter")();
+    scheduleMovementTokenControls();
+    clearMovementTokenControls();
+    assert.equal(frames.size, 0, "scene teardown cancels queued work");
+    assert.equal(canvasButtons().length, 0);
+    assert.equal(canvas.interface.children.length, 0, "scene teardown removes preview graphics");
+    assert.equal(button.destroyed, true);
+});
+
+test("redrawing a token replaces its destroyed button and cleans the old preview", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    installMovementCanvas(t, [fixture.token]);
+    syncMovementTokenControls();
+    const button = canvasButtons()[0];
+    button.listeners.get("pointerenter")();
+    button.parent.removeChild(button);
+    button.destroy({ children: true });
+    syncMovementTokenControls();
+    assert.notEqual(canvasButtons()[0], button);
+    assert.equal(canvasButtons().length, 1);
+    assert.equal(canvas.interface.children.length, 0);
+});
+
+test("hidden-token abort messages remain private to GMs even with a player assigned", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    fixture.token.hidden = true;
+    const previousChat = globalThis.ChatMessage;
+    const previousUsers = globalThis.game.users;
+    const messages = [];
+    globalThis.ChatMessage = { create: async (message) => messages.push(message) };
+    globalThis.game.users = new Map([
+        ["gm", fixture.primaryGm], ["second-gm", { id: "second-gm", isGM: true }],
+        ["player", { id: "player", isGM: false }],
+    ]);
+    movementHarness.runtimeController = { id: "player", isGM: false };
+    t.after(() => { globalThis.ChatMessage = previousChat; globalThis.game.users = previousUsers; });
+    installMovementCanvas(t, [fixture.token]);
+    syncMovementTokenControls();
+    await canvasButtons()[0].listeners.get("pointertap")({ preventDefault() {}, stopPropagation() {} });
+    assert.equal(messages.length, 1);
+    assert.deepEqual(messages[0].whisper, ["gm", "second-gm"]);
+});
+
+function installMovementCanvas(t, tokens) {
+    const previous = { canvas: globalThis.canvas, PIXI: globalThis.PIXI,
+        requestAnimationFrame: globalThis.requestAnimationFrame, cancelAnimationFrame: globalThis.cancelAnimationFrame };
+    clearMovementTokenControls();
+    const frames = new Map();
+    let nextFrame = 0;
+    globalThis.requestAnimationFrame = (callback) => { frames.set(++nextFrame, callback); return nextFrame; };
+    globalThis.cancelAnimationFrame = (id) => frames.delete(id);
+    globalThis.PIXI = { Container: FakePixiContainer, Graphics: FakePixiGraphics, Text: FakePixiText,
+        Rectangle: class { constructor(x, y, width, height) { Object.assign(this, { x, y, width, height }); } } };
+    const stage = new FakePixiContainer();
+    const layer = new FakePixiContainer();
+    const overlay = new FakePixiContainer();
+    stage.addChild(layer, overlay);
+    layer.placeables = tokens.map((token) => {
+        const object = new FakePixiContainer();
+        Object.assign(object, { document: token, w: 100, h: 100 });
+        object.position.set(token.x ?? 0, token.y ?? 0);
+        token.object = object;
+        layer.addChild(object);
+        return object;
+    });
+    globalThis.canvas = { stage, interface: overlay, grid: { size: 100 }, tokens: layer };
+    t.after(() => {
+        clearMovementTokenControls();
+        Object.assign(globalThis, previous);
+        movementHarness.runtimeController = null;
+    });
+    return frames;
+}
+
+function canvasButtons() {
+    return canvas.tokens.placeables.flatMap((object) => object.children)
+        .filter((element) => element.name === "sf-movement-token-stop" && !element.destroyed);
+}
+
 class FakePixiContainer {
     constructor() {
         this.children = [];
         this.destroyed = false;
         this.listeners = new Map();
         this.parent = null;
-        this.position = { set: (x, y) => this.position.value = { x, y } };
-        this.scale = { set: (value) => this.scale.value = value, value: 1 };
+        this.position = { set: (x, y) => this.position.value = { x, y }, value: { x: 0, y: 0 } };
+        this.scale = { set: (value) => { this.scale.value = value; this.scale.x = value; }, value: 1, x: 1 };
+    }
+
+    toGlobal(point) {
+        const result = {
+            x: point.x * this.scale.value + this.position.value.x,
+            y: point.y * this.scale.value + this.position.value.y,
+        };
+        return this.parent ? this.parent.toGlobal(result) : result;
     }
 
     addChild(...children) {

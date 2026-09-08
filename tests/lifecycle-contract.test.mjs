@@ -27,6 +27,8 @@ const EXPECTED_HOOKS = [
     "sightRefresh",
     "updateToken",
     "drawToken",
+    "refreshToken",
+    "deleteToken",
     "recordToken",
     "canvasReady",
     "preUpdateActor",
@@ -63,6 +65,10 @@ function callsOf(name) {
 
 const serviceStubs = {
     scheduleRender: (...args) => record("scheduleRender", args),
+    scheduleMovementTokenControls: (...args) => record("scheduleMovementTokenControls", args),
+    refreshMovementTokenControl: (...args) => record("refreshMovementTokenControl", args),
+    refreshMovementTokenControlScale: (...args) => record("refreshMovementTokenControlScale", args),
+    clearMovementTokenControls: (...args) => record("clearMovementTokenControls", args),
     advanceContinuousActions: (...args) => record("advanceContinuousActions", args),
     advancePendingMovements: (...args) => record("advancePendingMovements", args),
     cancelMovementPlanAfterManualMove: (...args) => record("cancelMovementPlanAfterManualMove", args),
@@ -312,6 +318,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         assert.deepEqual(callsOf("scheduleRender"), [[]]);
         assert.deepEqual(callsOf("advanceContinuousActions"), [[progressedCombat]]);
         assert.deepEqual(callsOf("advancePendingMovements"), [[progressedCombat]]);
+        assert.deepEqual(callsOf("scheduleMovementTokenControls"), [[]]);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "userConnected")[0]({ id: "player" }, true);
@@ -332,10 +339,25 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         callLog.length = 0;
         handlersFor(hookRegistrations, "canvasTearDown")[0]();
         assert.deepEqual(callsOf("clearMovementRoutePreview"), [[]]);
+        assert.deepEqual(callsOf("clearMovementTokenControls"), [[]]);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "canvasPan")[0]();
         assert.deepEqual(callsOf("refreshMovementRoutePreviewScale"), [[]]);
+        assert.deepEqual(callsOf("refreshMovementTokenControlScale"), [[]]);
+        assert.deepEqual(callsOf("scheduleMovementTokenControls"), []);
+
+        const refreshedToken = { document: { uuid: "token" } };
+        callLog.length = 0;
+        handlersFor(hookRegistrations, "refreshToken")[0](refreshedToken);
+        assert.deepEqual(callsOf("refreshMovementTokenControl"), [[refreshedToken]]);
+        assert.deepEqual(callsOf("scheduleMovementTokenControls"), []);
+
+        for (const event of ["drawToken", "deleteToken", "sightRefresh", "updateUser"]) {
+            callLog.length = 0;
+            handlersFor(hookRegistrations, event)[0]({});
+            assert.deepEqual(callsOf("scheduleMovementTokenControls"), [[]], event);
+        }
 
         callLog.length = 0;
         const movedToken = { id: "token" };

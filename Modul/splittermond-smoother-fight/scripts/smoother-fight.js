@@ -7,6 +7,7 @@ import * as assignmentsApi from "./features/assignments/api.js";
 import { registerSettingsMenu } from "./features/assignments/settings-app.js";
 import * as chatApi from "./features/chat/api.js";
 import * as combatActionsApi from "./features/combat-actions/api.js";
+import { syncMovementTokenControls } from "./features/combat-actions/movement-controls.js";
 import { registerContinuousActionStatusEffect } from "./features/combat-actions/continuous-action.js";
 import { installSystemRollModifierInterceptor } from "./features/combat-actions/system-roll-modifier-interceptor.js";
 import * as combatEventsApi from "./features/combat-events/api.js";
@@ -70,6 +71,7 @@ Hooks.once("ready", async () => {
     void combatActionsApi.advanceContinuousActions(combat);
     void combatActionsApi.advancePendingMovements(combat);
     combatActionsApi.syncDefaultMovementRoutePreviews(combat);
+    syncMovementTokenControls();
     publishOwnTarget();
     hudApi.reconcileControlledCombatTokenSelection(combat);
     setLastTurnCombatantId(combat?.combatant?.id ?? null);

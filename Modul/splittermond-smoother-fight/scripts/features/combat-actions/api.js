@@ -83,6 +83,13 @@ export {
 } from "./movement-abort-requests.js";
 
 export {
+    clearMovementTokenControls,
+    refreshMovementTokenControl,
+    refreshMovementTokenControlScale,
+    scheduleMovementTokenControls,
+} from "./movement-controls.js";
+
+export {
     clearAttackPreparationForCombatant,
     clearAttackPreparationsForCombat,
     dismissAttackPreparation,
