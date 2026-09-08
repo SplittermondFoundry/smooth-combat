@@ -298,6 +298,7 @@ test("crawling remains continuous until its route target at tick 5", async () =>
     assert.deepEqual(fixture.plan().milestones, [
         { fraction: 1, tick: 6, tickOffset: 5 },
     ]);
+    assert.equal(fixture.chatCards[0].options.movementDistance, 1);
     assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction").completionTrigger, "movement");
 
     fixture.combat.currentTick = 5;
@@ -310,6 +311,35 @@ test("crawling remains continuous until its route target at tick 5", async () =>
     assert.equal(fixture.token.x, 100);
     assert.equal(fixture.plan(), null);
     assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+});
+
+test("an overlong crawl route is rejected before moving, storing a plan, or charging ticks", async () => {
+    for (const distance of [1.01, 3, 10]) {
+        const fixture = scheduledMovementFixture("crawl", { movementDistance: distance });
+        const warnings = [];
+        ui.notifications.warn = (message) => warnings.push(message);
+        const history = structuredClone(fixture.token.movementHistory);
+        assert.equal(await performTrackedMovementAction(fixture.context, { id: "crawl", ticks: 5 }), false);
+        assert.equal(fixture.combatant.initiative, 1);
+        assert.equal(fixture.token.x, 100);
+        assert.deepEqual(fixture.token.movementHistory, history);
+        assert.equal(fixture.plan(), null);
+        assert.equal(fixture.chatCards.length, 0);
+        assert.equal(fixture.moveCalls.length, 0);
+        assert.match(warnings[0], /MovementCrawlTooFar/u);
+    }
+});
+
+test("a prone actor cannot book a normal walking or sprint route from a stale action menu", async () => {
+    for (const id of ["walk", "sprint"]) {
+        const fixture = scheduledMovementFixture(id);
+        fixture.token.actor.items = [{ type: "statuseffect", name: "Liegend", system: { level: 1 } }];
+        assert.equal(await performTrackedMovementAction(fixture.context, { id, ticks: 5 }), false);
+        assert.equal(fixture.combatant.initiative, 1);
+        assert.equal(fixture.token.x, 100);
+        assert.equal(fixture.plan(), null);
+        assert.equal(fixture.chatCards.length, 0);
+    }
 });
 
 test("a sprint tick jump visibly traverses every crossed quarter milestone", async () => {
@@ -1487,6 +1517,7 @@ function scheduledMovementFixture(actionId, {
     tokenId = "token-1",
     tokenName = "Arrou",
     moveResults = null,
+    movementDistance = actionId === "crawl" ? 1 : 10,
 } = {}) {
     const moduleId = "splittermond-smoother-fight";
     const primaryGm = { id: "gm", isGM: true, active: true };
@@ -1503,8 +1534,8 @@ function scheduledMovementFixture(actionId, {
         flags,
         movementHistory: [{ x: 0, y: 0, elevation: 0 }, { x: 100, y: 0, elevation: 0 }],
         measureMovementPath: (waypoints) => ({
-            distance: 10,
-            segments: waypoints.slice(1).map(() => ({ distance: 10 })),
+            distance: movementDistance,
+            segments: waypoints.slice(1).map(() => ({ distance: movementDistance })),
         }),
         getFlag(scope, key) {
             return this.flags[scope]?.[key] ?? null;

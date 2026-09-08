@@ -1,4 +1,5 @@
 export const FREE_MOVEMENT_DISTANCE = 2;
+export const CRAWL_MOVEMENT_DISTANCE = 1;
 
 const MOVEMENT_MILESTONES = Object.freeze({
     crawl: Object.freeze([
@@ -139,8 +140,24 @@ export function movementFractionAtPosition(route, segmentLengths, position, {
     return candidates[0]?.fraction ?? null;
 }
 
-export function movementTrackerState(distance, speed) {
+export function movementTrackerState(distance, speed, position = "standing") {
     const moved = nonNegativeNumber(distance);
+    if (position === "prone") {
+        const excess = Math.max(0, moved - CRAWL_MOVEMENT_DISTANCE);
+        return {
+            actionId: "crawl",
+            actionTicks: 5,
+            available: true,
+            excess,
+            freeLimit: null,
+            moved,
+            phase: excess > 0.000_001 ? "excess" : "crawl",
+            sectionProgress: { free: 0, walk: rangeProgress(moved, 0, CRAWL_MOVEMENT_DISTANCE), sprint: 0 },
+            speed: null,
+            sprintLimit: CRAWL_MOVEMENT_DISTANCE,
+            walkLimit: CRAWL_MOVEMENT_DISTANCE,
+        };
+    }
     const movementSpeed = nonNegativeNumber(speed);
     const available = movementSpeed > 0;
     const walkLimit = Math.max(FREE_MOVEMENT_DISTANCE, movementSpeed);

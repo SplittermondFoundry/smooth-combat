@@ -1,4 +1,5 @@
 import { captureMovementRoute, tokenReachedWaypoint } from "./movement-route.js";
+import { requireMovementAction } from "./movement-guard.js";
 import { services } from "../../core/services.js";
 import { combatActionState } from "./state.js";
 
@@ -61,6 +62,7 @@ const movementPlanningLocks = new Set();
 const defaultPreviewPlanKeys = new Map();
 
 export async function performTrackedMovementAction(context, action) {
+    if (!requireMovementAction(context, action)) return false;
     if (!getSetting("movementTracking", true)) return null;
     const token = tokenDocument(context?.token);
     const route = captureMovementRoute(token);

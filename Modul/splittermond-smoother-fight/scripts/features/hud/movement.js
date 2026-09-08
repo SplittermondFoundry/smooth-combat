@@ -9,38 +9,42 @@ import {
 import {
     escapeAttr,
     escapeHtml,
-    getDerivedValue,
-    numericValue,
     t,
 } from "../../shared/values.js";
 
 import {
     formatMovementDistance,
+    readMovementSpeed,
     readTokenMovementDistance,
 } from "../../shared/movement.js";
+import { resolveCombatPosition } from "../../shared/combat-position-state.js";
 
 export {
     readTokenMovementDistance,
 } from "../../shared/movement.js";
 
 export function buildMovementTracker(context) {
-    const speed = numericValue(getDerivedValue(context.actor, "speed"));
-    const state = movementTrackerState(readTokenMovementDistance(context.token), speed);
+    const speed = readMovementSpeed(context.actor);
+    const position = resolveCombatPosition(context.actor);
+    const state = movementTrackerState(readTokenMovementDistance(context.token), speed, position.id);
     const moved = formatMovementDistance(state.moved);
     const freeLimit = formatMovementDistance(state.freeLimit);
     const walkLimit = formatMovementDistance(state.walkLimit);
     const sprintLimit = formatMovementDistance(state.sprintLimit);
     const trackerLabel = t("SMOOTHER_FIGHT.HUD.MovementTracker");
-    const status = movementStatus(state);
+    const status = position.ambiguous ? t("SMOOTHER_FIGHT.HUD.CombatPositionConflict") : movementStatus(state, speed);
     const progressLabel = t("SMOOTHER_FIGHT.HUD.MovementProgress", {
         distance: moved,
         maximum: sprintLimit,
     });
-    const sections = [
+    const sections = position.id === "prone" ? proneMovementSections(state) : [
         movementSection("free", t("SMOOTHER_FIGHT.HUD.FreeMovementShort"), freeLimit, state.sectionProgress.free, state),
         movementSection("walk", t("SMOOTHER_FIGHT.HUD.TickActions.walk.Name"), walkLimit, state.sectionProgress.walk, state),
         movementSection("sprint", t("SMOOTHER_FIGHT.HUD.TickActions.sprint.Name"), sprintLimit, state.sectionProgress.sprint, state),
     ].join("");
+    const standUp = position.id === "kneeling" ? standUpButton("standUpKneeling", 3, state) : "";
+    const postureNote = position.id === "kneeling" ? t("SMOOTHER_FIGHT.HUD.MovementKneelingHint")
+        : position.id === "prone" && state.moved > 0 ? t("SMOOTHER_FIGHT.HUD.MovementStandUpUndoFirst") : "";
     const undoLabel = t("SMOOTHER_FIGHT.HUD.UndoMovement");
     const reversal = services.getMovementReversalApplicationStatus?.(context.token) ?? { state: "idle", record: null };
     const reversalBlocked = reversal.state !== "idle";
@@ -62,7 +66,7 @@ export function buildMovementTracker(context) {
         </div>`
         : "";
 
-    return `<section class="sf-movement-tracker is-${escapeAttr(state.phase)}" aria-label="${escapeAttr(trackerLabel)}">
+    return `<section class="sf-movement-tracker is-${escapeAttr(state.phase)}" data-combat-position="${escapeAttr(position.id ?? "conflict")}" aria-label="${escapeAttr(trackerLabel)}">
         <header class="sf-movement-heading">
             <span><i class="fa-solid fa-route" aria-hidden="true"></i><strong>${escapeHtml(trackerLabel)}</strong><b>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MovementDistance", { distance: moved }))}</b></span>
             <small>${escapeHtml(status)}</small>
@@ -71,8 +75,9 @@ export function buildMovementTracker(context) {
             <div class="sf-movement-bar">
                 <div class="sf-movement-sections" role="group" aria-label="${escapeAttr(progressLabel)}">${sections}</div>
             </div>
-            ${undoButton ? `<div class="sf-movement-actions">${undoButton}</div>` : ""}
+            ${standUp || undoButton ? `<div class="sf-movement-actions">${standUp}${undoButton}</div>` : ""}
         </div>
+        ${postureNote ? `<p class="sf-movement-note">${escapeHtml(postureNote)}</p>` : ""}
         ${reversalRecovery}
     </section>`;
 }
@@ -120,6 +125,32 @@ function movementSection(id, name, distance, progress, state) {
     return `<button type="button" class="${className} sf-movement-section-action" style="${style}" data-sf-action="share-tick-action" data-tick-action-id="${escapeAttr(id)}" data-tick-action-ticks="${escapeAttr(ticks)}" data-tick-action-advance="${escapeAttr(ticks)}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${content}<em class="sf-movement-section-ticks"><i class="fa-solid ${icon}" aria-hidden="true"></i>${escapeHtml(tickLabel)}</em></button>`;
 }
 
+function proneMovementSections(state) {
+    const free = `<span class="sf-movement-section sf-movement-section-free" style="--sf-movement-fill:0%"><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.FreeMovementShort"))}</small><b>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MovementFreeGmDecision"))}</b></span>`;
+    const name = t("SMOOTHER_FIGHT.HUD.TickActions.crawl.Name");
+    const tooFar = state.phase === "excess";
+    const crawl = postureActionButton({
+        actionId: "crawl", ticks: 5, name, slot: "walk", icon: "fa-arrows-left-right",
+        detail: t("SMOOTHER_FIGHT.HUD.MovementMeters", { distance: formatMovementDistance(state.walkLimit) }),
+        progress: state.sectionProgress.walk,
+        disabledReason: tooFar ? t("SMOOTHER_FIGHT.HUD.MovementCrawlTooFar") : "",
+    });
+    return free + crawl + standUpButton("standUpProne", 6, state, "sprint");
+}
+
+function standUpButton(actionId, ticks, state, slot = null) {
+    return postureActionButton({
+        actionId, ticks, slot, name: t("SMOOTHER_FIGHT.HUD.MovementStandUp"), icon: "fa-arrow-up",
+        disabledReason: state.moved > 0 ? t("SMOOTHER_FIGHT.HUD.MovementStandUpUndoFirst") : "",
+    });
+}
+
+function postureActionButton({ actionId, ticks, name, icon, slot, detail = "", progress = 0, disabledReason = "" }) {
+    const className = slot ? `sf-movement-section sf-movement-section-${slot} sf-movement-section-action` : "sf-movement-posture-action";
+    const label = disabledReason || t("SMOOTHER_FIGHT.HUD.MovementAction", { action: name, ticks });
+    return `<button type="button" class="${className}" style="--sf-movement-fill:${progress.toFixed(3)}%" data-sf-action="share-tick-action" data-tick-action-id="${escapeAttr(actionId)}" data-tick-action-ticks="${ticks}" data-tick-action-advance="${ticks}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" ${disabledReason ? 'disabled aria-disabled="true"' : ""}><small>${escapeHtml(name)}</small>${detail ? `<b>${escapeHtml(detail)}</b>` : ""}<em class="sf-movement-section-ticks"><i class="fa-solid ${icon}" aria-hidden="true"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MovementTicks", { ticks }))}</em></button>`;
+}
+
 function movementSectionActionTicks(id, state) {
     if (!state.available || state.moved <= state.freeLimit) return null;
     if (id === "walk") return 5;
@@ -127,8 +158,10 @@ function movementSectionActionTicks(id, state) {
     return null;
 }
 
-function movementStatus(state) {
+function movementStatus(state, speed) {
     switch (state.phase) {
+        case "crawl":
+            return t("SMOOTHER_FIGHT.HUD.MovementCrawlHint");
         case "walk":
             return t("SMOOTHER_FIGHT.HUD.MovementWalkRequired");
         case "sprint":
@@ -136,7 +169,7 @@ function movementStatus(state) {
         case "excess":
             return t("SMOOTHER_FIGHT.HUD.MovementExcess", { distance: formatMovementDistance(state.excess) });
         case "unavailable":
-            return t("SMOOTHER_FIGHT.HUD.MovementSpeedUnavailable");
+            return t(speed === 0 ? "SMOOTHER_FIGHT.HUD.MovementSpeedZero" : "SMOOTHER_FIGHT.HUD.MovementSpeedUnavailable");
         default:
             return t("SMOOTHER_FIGHT.HUD.MovementFree", { distance: formatMovementDistance(state.freeLimit) });
     }

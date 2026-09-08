@@ -44,6 +44,7 @@ import {
     requireOpenCombatFlowForTicks,
 } from "./flow-guard.js";
 import { performSpellIdentification } from "./spell-identification.js";
+import { requireMovementAction, withMovementActionLock } from "./movement-guard.js";
 
 const SELECTABLE_DURATION_ACTIONS = new Set(["aim", "searchOpening"]);
 const SHIELD_BASH_MANEUVERS = Object.freeze([]);
@@ -54,10 +55,15 @@ const TWO_WEAPON_FIGHTING_KEYS = new Set(["kampfmitzweiwaffen", "twoweaponfighti
 export async function performTickAction(context, actionId, requestedTicks = "custom") {
     const action = COMBAT_TICK_ACTIONS.find((candidate) => candidate.id === actionId);
     if (!action || action.actionable === false) return false;
+    return withMovementActionLock(context, action.id, () => performTickActionOnce(context, action, requestedTicks));
+}
+
+async function performTickActionOnce(context, action, requestedTicks) {
     if (!requireOpenCombatFlowForTicks(context)) return false;
     context = liveTickActionContext(context);
     if (!context) return false;
 
+    if (requiredStandUpStartingPosition(action.id) && !requireMovementAction(context, action)) return false;
     const positionCheck = await checkStandUpStartingPosition(context, action);
     if (!positionCheck.confirmed) return false;
 

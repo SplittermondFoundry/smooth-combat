@@ -379,6 +379,53 @@
     padding-inline: 8px;
 }
 
+#splittermond-smoother-fight-hud .sf-movement-tracker[data-combat-position="prone"] .sf-movement-bar {
+    height: 44px;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker[data-combat-position="kneeling"] .sf-movement-controls {
+    flex-wrap: wrap;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker[data-combat-position="kneeling"] .sf-movement-bar {
+    min-width: min(260px, 100%);
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker[data-combat-position="prone"] .sf-movement-sections {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker[data-combat-position="prone"] .sf-movement-section {
+    flex-wrap: wrap;
+    align-content: center;
+    row-gap: 3px;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker[data-combat-position="prone"] .sf-movement-section small {
+    flex-basis: 100%;
+    text-align: center;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-tracker[data-combat-position="prone"] .sf-movement-section-free b {
+    flex: 1;
+    font-size: var(--sf-font-meta);
+    text-align: center;
+}
+
+#splittermond-smoother-fight-hud button.sf-movement-section:disabled {
+    cursor: default;
+    filter: none;
+    box-shadow: none;
+    opacity: 0.65;
+}
+
+#splittermond-smoother-fight-hud .sf-movement-note {
+    margin: 5px 0 0;
+    color: var(--sf-muted);
+    font-size: var(--sf-font-meta);
+    line-height: 1.3;
+}
+
 #splittermond-smoother-fight-hud .sf-movement-section::before {
     content: "";
     position: absolute;

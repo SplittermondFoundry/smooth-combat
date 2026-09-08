@@ -641,6 +641,96 @@ test("route-less movement remains continuous until the token actually moves", as
     assert.equal(isTokenInContinuousAction(fixture.token, fixture.combat), false);
 });
 
+test("posture and crawl limits also guard reference actions with movement tracking disabled", async () => {
+    for (const [actionId, distance] of [["crawl", 3], ["walk", 1], ["sprint", 1], ["standUpProne", 1]]) {
+        const fixture = continuousActionFixture();
+        fixture.actor.items = [combatPositionMarker("prone")];
+        fixture.token.movementHistory = { distance };
+        installGlobals(fixture.user);
+        game.settings = { get: () => false };
+        const warnings = [];
+        ui.notifications.warn = (message) => warnings.push(message);
+        services.getRuntimeController = () => fixture.user;
+        services.getTargetSelectionForUser = () => ({ target: null, targets: [] });
+        services.addCombatTicks = async () => assert.fail("invalid movement must not charge ticks");
+        services.createTickActionChatCard = async () => assert.fail("invalid movement must not create a card");
+        assert.equal(await performTickAction(fixture, actionId, "5"), false);
+        assert.equal(fixture.combatant.initiative, 10);
+        assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+        assert.equal(warnings.length, 1);
+    }
+});
+
+test("stand up is charged once, preserves posture until the own completion turn, and blocks crawling during it", async () => {
+    for (const [position, actionId, ticks] of [["prone", "standUpProne", 6], ["kneeling", "standUpKneeling", 3]]) {
+        const fixture = continuousActionFixture();
+        fixture.actor.items = [combatPositionMarker(position)];
+        installGlobals(fixture.user);
+        game.combat = fixture.combat;
+        fixture.combat.combatant = fixture.combatant;
+        ui.notifications.warn = () => {};
+        let charged = 0;
+        services.getActivePrimaryGm = () => fixture.user;
+        services.getRuntimeController = () => fixture.user;
+        services.getTargetSelectionForUser = () => ({ target: null, targets: [] });
+        services.addCombatTicks = async (context, value) => {
+            charged += Number(value);
+            context.combatant.initiative += Number(value);
+            context.combat.combatant = { id: "other", initiative: 11 };
+            return Number(value);
+        };
+        services.createTickActionChatCard = async () => ({ id: "card" });
+        services.setCombatPosition = async (actor, value) => {
+            assert.equal(value, "standing");
+            actor.items = [];
+        };
+        assert.equal(await performTickAction(fixture, actionId, String(ticks)), true);
+        assert.equal(charged, ticks);
+        const started = getContinuousAction(fixture.token, fixture.combat);
+        assert.equal(started.endTick, 10 + ticks);
+        assert.equal(fixture.actor.items[0].name, position);
+        assert.equal(await performTickAction(fixture, actionId, String(ticks)), false);
+        assert.equal(await performTickAction(fixture, "crawl", "5"), false);
+        assert.equal(charged, ticks);
+        assert.equal(getContinuousAction(fixture.token, fixture.combat).id, started.id);
+        fixture.combat.currentTick = 10 + ticks;
+        assert.equal(await advanceContinuousActions(fixture.combat), false);
+        assert.equal(fixture.actor.items[0].name, position);
+        fixture.combat.combatant = fixture.combatant;
+        assert.equal(await advanceContinuousActions(fixture.combat), true);
+        assert.deepEqual(fixture.actor.items, []);
+        assert.equal(getContinuousAction(fixture.token, fixture.combat), null);
+    }
+});
+
+test("simultaneous stand-up clicks cannot both book ticks before the continuous action is stored", async () => {
+    const fixture = continuousActionFixture();
+    fixture.actor.items = [combatPositionMarker("prone")];
+    installGlobals(fixture.user);
+    services.getRuntimeController = () => fixture.user;
+    services.getTargetSelectionForUser = () => ({ target: null, targets: [] });
+    let release;
+    let entered;
+    const pending = new Promise((resolve) => { release = resolve; });
+    const charging = new Promise((resolve) => { entered = resolve; });
+    let calls = 0;
+    services.addCombatTicks = async (context, ticks) => {
+        calls += 1;
+        entered();
+        await pending;
+        context.combatant.initiative += Number(ticks);
+        return Number(ticks);
+    };
+    services.createTickActionChatCard = async () => ({ id: "card" });
+    const first = performTickAction(fixture, "standUpProne", "6");
+    await charging;
+    assert.equal(await performTickAction(fixture, "standUpProne", "6"), false);
+    release();
+    assert.equal(await first, true);
+    assert.equal(calls, 1);
+    assert.equal(fixture.combatant.initiative, 16);
+});
+
 test("movement already recorded before its action leaves no stale continuous marker", async () => {
     const fixture = continuousActionFixture();
     installGlobals(fixture.user);
