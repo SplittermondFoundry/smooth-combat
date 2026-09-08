@@ -36,7 +36,7 @@ const STAND_UP_STARTING_POSITIONS = Object.freeze({
     standUpProne: "prone",
     standUpKneeling: "kneeling",
 });
-const continuousActionLocks = new Set();
+const continuousActionTasks = new Map();
 
 export function registerContinuousActionStatusEffect() {
     const statusEffects = globalThis.CONFIG?.statusEffects;
@@ -60,8 +60,9 @@ export function normalizeContinuousAction(value) {
     const combatId = optionalString(value.combatId);
     const combatantId = optionalString(value.combatantId);
     const tokenUuid = optionalString(value.tokenUuid);
-    const startTick = Number(value.startTick);
-    const endTick = Number(value.endTick);
+    // Normalize saved records too: initiative fractions express order, not elapsed time.
+    const startTick = Math.round(Number(value.startTick));
+    const endTick = Math.round(Number(value.endTick));
     if (!actionId || !combatId || !combatantId || !tokenUuid
         || !Number.isFinite(startTick) || !Number.isFinite(endTick) || endTick <= startTick) {
         return null;
@@ -103,7 +104,7 @@ export function getContinuousAction(tokenLike, combat = globalThis.game?.combat)
     if (!combatant) return null;
     const currentTick = combatTick(combat);
     const endTick = currentTick < action.endTick
-        ? Math.max(action.endTick, finiteNumber(combatant.initiative, action.endTick))
+        ? Math.max(action.endTick, Math.round(finiteNumber(combatant.initiative, action.endTick)))
         : action.endTick;
     if (continuousActionBecomesReadyAtOwnTurn(action)
         && continuousActionReachedCompletionTick({ ...action, endTick }, combat)) {
@@ -191,12 +192,19 @@ export async function advanceContinuousActions(combat = globalThis.game?.combat)
     if (primaryGm && primaryGm.id !== globalThis.game?.user?.id) return false;
 
     let changed = false;
+    let firstError;
     for (const combatant of combatantsOf(combat)) {
         const token = tokenDocument(combatant?.token);
         if (!token || (!primaryGm && !mayCurrentUserManage(combatant, token))) continue;
-        changed = await syncContinuousAction(token, combatant, combat) || changed;
+        try {
+            changed = await syncContinuousAction(token, combatant, combat) || changed;
+        } catch (error) {
+            console.error(`${MODULE_ID} | Could not advance continuous action for ${token.uuid ?? token.id}`, error);
+            firstError ??= error;
+        }
     }
     if (changed) services.scheduleRender?.(0);
+    if (firstError) throw firstError;
     return changed;
 }
 
@@ -280,7 +288,7 @@ async function syncContinuousAction(token, combatant, combat) {
             return true;
         }
 
-        const initiative = finiteNumber(combatant.initiative, action.endTick);
+        const initiative = Math.round(finiteNumber(combatant.initiative, action.endTick));
         if (continuousActionBecomesReadyAtOwnTurn(action)
             && continuousActionReachedCompletionTick(action, combat)) {
             await applyContinuousActionCompletion(token.actor, action);
@@ -539,7 +547,7 @@ function combatantById(combat, id) {
 function combatTick(combat) {
     for (const value of [combat?.currentTick, combat?.combatant?.initiative, combat?.round]) {
         const tick = Number(value);
-        if (Number.isFinite(tick)) return tick;
+        if (Number.isFinite(tick)) return Math.round(tick);
     }
     return 0;
 }
@@ -554,12 +562,15 @@ function tokenDocument(tokenLike) {
 
 async function withContinuousActionLock(token, operation) {
     const key = token?.uuid ?? token?.id;
-    if (!key || continuousActionLocks.has(key)) return false;
-    continuousActionLocks.add(key);
+    if (!key) return false;
+    // A tick hook or movement completion must wait for an in-flight status write, never be dropped.
+    const previous = continuousActionTasks.get(key) ?? Promise.resolve();
+    const task = previous.catch(() => {}).then(operation);
+    continuousActionTasks.set(key, task);
     try {
-        return await operation();
+        return await task;
     } finally {
-        continuousActionLocks.delete(key);
+        if (continuousActionTasks.get(key) === task) continuousActionTasks.delete(key);
     }
 }
 

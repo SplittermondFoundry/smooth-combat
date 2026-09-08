@@ -181,6 +181,118 @@ test("tick changes extend a continuous action and its tag is removed on completi
     assert.deepEqual(fixture.actor.effects, []);
 });
 
+test("fractional initiative ordering does not keep completed continuous actions active", async () => {
+    for (const actionId of ["coordinate", "aim", "focusMagic", "standUpProne", "useItem"]) {
+        const record = continuousActionRecord({
+            actionId, startTick: 10.01, endTick: 15.01,
+            ...(actionId === "standUpProne" ? { startingCombatPosition: "prone" } : {}),
+        });
+        const fixture = continuousActionFixture(record);
+        installGlobals(fixture.user);
+        services.getActivePrimaryGm = () => fixture.user;
+        services.scheduleRender = () => {};
+        let standing = false;
+        services.setCombatPosition = async (_actor, position) => standing = position === "standing";
+        fixture.combat.currentTick = 15;
+        fixture.combat.combatant = { id: "ahead", initiative: 15 };
+        await advanceContinuousActions(fixture.combat);
+        assert.equal(isTokenInContinuousAction(fixture.token, fixture.combat), true, "wait for the owner's turn");
+
+        fixture.combat.combatant = fixture.combatant;
+        assert.equal(await advanceContinuousActions(fixture.combat), true, actionId);
+        assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+        assert.deepEqual(fixture.actor.effects, []);
+        assert.equal(standing, actionId === "standUpProne");
+    }
+});
+
+test("same-tick initiative sorting does not extend a continuous action's duration", async () => {
+    const fixture = continuousActionFixture(continuousActionRecord());
+    installGlobals(fixture.user);
+    services.getActivePrimaryGm = () => fixture.user;
+    services.scheduleRender = () => {};
+    fixture.combatant.initiative = 15.02;
+    assert.equal(getContinuousAction(fixture.token, fixture.combat).endTick, 15);
+    await advanceContinuousActions(fixture.combat);
+    assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG).endTick, 15);
+    assert.equal(effectRecord(fixture.actor.effects[0]).endTick, 15);
+});
+
+test("a turn change during status persistence is processed after the pending update", async () => {
+    const fixture = continuousActionFixture(continuousActionRecord({ actionId: "coordinate" }));
+    installGlobals(fixture.user);
+    services.getActivePrimaryGm = () => fixture.user;
+    services.scheduleRender = () => {};
+    const entered = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    const createEffects = fixture.actor.createEmbeddedDocuments;
+    fixture.actor.createEmbeddedDocuments = async function (...args) {
+        entered.resolve();
+        await gate.promise;
+        return createEffects.apply(this, args);
+    };
+    const synchronization = advanceContinuousActions(fixture.combat);
+    await entered.promise;
+    fixture.combat.currentTick = 15;
+    fixture.combat.combatant = fixture.combatant;
+    const completion = advanceContinuousActions(fixture.combat);
+    gate.resolve();
+    await Promise.all([synchronization, completion]);
+
+    assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+    assert.deepEqual(fixture.actor.effects, []);
+});
+
+test("a queued completion survives a failed status write and does not leave the token locked", async () => {
+    const fixture = continuousActionFixture(continuousActionRecord({ actionId: "aim" }));
+    installGlobals(fixture.user);
+    services.getActivePrimaryGm = () => fixture.user;
+    services.scheduleRender = () => {};
+    const entered = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    const createEffects = fixture.actor.createEmbeddedDocuments;
+    fixture.actor.createEmbeddedDocuments = async () => {
+        entered.resolve();
+        await gate.promise;
+        throw new Error("status write rejected");
+    };
+    const synchronization = assert.rejects(advanceContinuousActions(fixture.combat), /status write rejected/u);
+    await entered.promise;
+    const completion = completeContinuousAction(fixture, { trigger: "attack" });
+    gate.resolve();
+    await synchronization;
+    assert.equal(await completion, true);
+    assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+
+    fixture.actor.createEmbeddedDocuments = createEffects;
+    const next = await beginContinuousAction(fixture, { actionId: "aim", startTick: 15, endTick: 17 });
+    assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG).id, next.id);
+    assert.equal(await completeContinuousAction(fixture, { expectedId: "continuous-1" }), false);
+    assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG).id, next.id);
+    await clearContinuousAction(fixture.token);
+});
+
+test("a failed status update does not skip another combatant's continuous-action completion", async () => {
+    const first = continuousActionFixture(continuousActionRecord({ actionId: "coordinate" }));
+    const second = continuousActionFixture(continuousActionRecord({
+        actionId: "coordinate", combatantId: "second", tokenUuid: "Token.second",
+    }));
+    second.token.id = "second";
+    second.token.uuid = "Token.second";
+    second.combatant.id = "second";
+    first.combat.combatants.set("second", second.combatant);
+    first.combat.combatant = second.combatant;
+    first.combat.currentTick = 15;
+    installGlobals(first.user);
+    services.getActivePrimaryGm = () => first.user;
+    services.scheduleRender = () => {};
+    first.actor.createEmbeddedDocuments = async () => { throw new Error("status update failed"); };
+
+    await assert.rejects(advanceContinuousActions(first.combat), /status update failed/u);
+    assert.equal(second.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+    assert.notEqual(first.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+});
+
 test("a regular continuous action ends as soon as its combatant becomes active", async () => {
     const record = continuousActionRecord({ actionId: "coordinate" });
     const fixture = continuousActionFixture(record);
@@ -335,6 +447,63 @@ test("explicitly cancelling attack or spell preparation removes its marker", asy
 
     await cancelPreparedSpell(spellFixture);
     assert.equal(isTokenInContinuousAction(spellFixture.token, spellFixture.combat), false);
+});
+
+test("use item books five ticks and removes its status when its own same-tick turn starts", async () => {
+    const fixture = useItemActionFixture();
+    const cards = [];
+    services.createTickActionChatCard = async (_context, actionId, ticks) => {
+        cards.push({ actionId, ticks });
+        return { id: "card" };
+    };
+
+    assert.equal(await performTickAction(fixture, "useItem", "5"), true);
+    const started = fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG);
+    assert.equal(started.actionId, "useItem");
+    assert.equal(started.completionTrigger, "tick");
+    assert.equal(started.startTick, 10);
+    assert.equal(started.endTick, 15);
+    assert.equal(fixture.combatant.initiative, 15.01);
+    assert.deepEqual(cards, [{ actionId: "useItem", ticks: 5 }]);
+    assert.equal(fixture.actor.effects.length, 1);
+    assert.equal(fixture.actor.effects[0].name, "Kontinuierliche Handlung (Gegenstand verwenden)");
+
+    fixture.combat.currentTick = 14;
+    assert.equal(await advanceContinuousActions(fixture.combat), false);
+    assert.equal(isTokenInContinuousAction(fixture.token, fixture.combat), true);
+    fixture.combat.currentTick = 15;
+    fixture.combat.combatant = { id: "ahead", initiative: 15 };
+    assert.equal(await advanceContinuousActions(fixture.combat), false);
+    assert.equal(isTokenInContinuousAction(fixture.token, fixture.combat), true);
+
+    fixture.combat.combatant = fixture.combatant;
+    assert.equal(await advanceContinuousActions(fixture.combat), true);
+    assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+    assert.deepEqual(fixture.actor.effects, []);
+    assert.equal(await advanceContinuousActions(fixture.combat), false);
+    assert.deepEqual(fixture.actor.effects, [], "later hooks do not recreate the completed status");
+});
+
+test("use item completes even when its turn starts before the initial status write finishes", async () => {
+    const fixture = useItemActionFixture();
+    const entered = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    const createEffects = fixture.actor.createEmbeddedDocuments;
+    fixture.actor.createEmbeddedDocuments = async function (...args) {
+        entered.resolve();
+        await gate.promise;
+        return createEffects.apply(this, args);
+    };
+    const action = performTickAction(fixture, "useItem", "5");
+    await entered.promise;
+    fixture.combat.currentTick = 15;
+    fixture.combat.combatant = fixture.combatant;
+    const completion = advanceContinuousActions(fixture.combat);
+    gate.resolve();
+
+    assert.deepEqual(await Promise.all([action, completion]), [true, true]);
+    assert.equal(fixture.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+    assert.deepEqual(fixture.actor.effects, []);
 });
 
 test("an actionable continuous reference action enters the tagged state after advancing ticks", async () => {
@@ -580,6 +749,27 @@ function continuousActionFixture(record = null) {
     return { actor, combat, combatant, token, user };
 }
 
+function useItemActionFixture() {
+    const fixture = continuousActionFixture();
+    installGlobals(fixture.user);
+    installGermanActionTranslations();
+    game.combat = fixture.combat;
+    fixture.combatant.initiative = 10.01;
+    fixture.combat.combatant = fixture.combatant;
+    services.getActivePrimaryGm = () => fixture.user;
+    services.getRuntimeController = () => fixture.user;
+    services.getTargetSelectionForUser = () => ({ target: null, targets: [] });
+    services.scheduleRender = () => {};
+    services.addCombatTicks = async (context, ticks) => {
+        assert.equal(ticks, "5");
+        context.combatant.initiative = 15.01;
+        context.combat.combatant = { id: "ahead", initiative: 14 };
+        return 5;
+    };
+    services.createTickActionChatCard = async () => ({ id: "card" });
+    return fixture;
+}
+
 function combatPositionMarker(position) {
     return {
         id: `position-${position}`,
@@ -650,6 +840,7 @@ function installGermanActionTranslations() {
         "SMOOTHER_FIGHT.HUD.TickActions.crawl.Name": "Kriechen",
         "SMOOTHER_FIGHT.HUD.TickActions.walk.Name": "Laufen",
         "SMOOTHER_FIGHT.HUD.TickActions.sprint.Name": "Sprinten",
+        "SMOOTHER_FIGHT.HUD.TickActions.useItem.Name": "Gegenstand verwenden",
     };
     globalThis.game.i18n.localize = (key) => translations[key] ?? key;
     globalThis.game.i18n.format = (key, data) => (

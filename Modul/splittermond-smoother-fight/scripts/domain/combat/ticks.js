@@ -22,6 +22,7 @@ export const COMBAT_TICK_ACTIONS = Object.freeze([
     { id: "catchBreath", category: "other", kind: "continuous", ticks: 8, special: true, source: { book: "GRW", page: "165–167" } },
     { id: "focusMagic", category: "other", kind: "continuous", ticks: "spell", actionable: false, special: true, source: { book: "GRW", page: "165–167" } },
     { id: "castSpell", category: "other", kind: "immediate", ticks: 3, actionable: false, source: { book: "GRW", page: "165–167" } },
+    { id: "identifySpell", category: "other", kind: "reaction", ticks: 2, special: true, source: { book: "GRW", page: "149–150" } },
     { id: "dropItem", category: "other", kind: "immediate", ticks: 0, source: { book: "GRW", page: "165–167" } },
     { id: "useItem", category: "other", kind: "continuous", ticks: 5, special: true, source: { book: "GRW", page: "165–167" } },
     { id: "simpleCommand", category: "commands", kind: "reaction", ticks: 3, special: true, source: { book: "Die Magie", page: 180 } },

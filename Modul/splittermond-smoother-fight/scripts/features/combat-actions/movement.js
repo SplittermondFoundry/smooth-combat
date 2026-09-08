@@ -137,15 +137,22 @@ export async function advancePendingMovements(combat = globalThis.game?.combat) 
     if (!combat || !isCurrentUserMovementAuthority()) return false;
     const currentTick = combatTick(combat);
     let changed = false;
+    let firstError;
     for (const combatant of combatantsOf(combat)) {
         const token = tokenDocument(combatant?.token);
         const plan = readMovementPlan(token);
         if (!plan || plan.combatId !== combat.id || plan.combatantId !== combatant.id) continue;
         const due = movementDueMilestones(plan, currentTick);
         if (!due.length) continue;
-        changed = await queueTokenMovementAdvance(token, combat) || changed;
+        try {
+            changed = await queueTokenMovementAdvance(token, combat) || changed;
+        } catch (error) {
+            console.error(`${MODULE_ID} | Could not advance movement for ${token.uuid ?? token.id}`, error);
+            firstError ??= error;
+        }
     }
     if (changed) services.scheduleRender(0);
+    if (firstError) throw firstError;
     return changed;
 }
 
@@ -720,14 +727,14 @@ function resolveCombat(combatId) {
 
 function combatantTick(combatant, combat) {
     const initiative = Number(combatant?.initiative);
-    if (Number.isFinite(initiative)) return initiative;
+    if (Number.isFinite(initiative)) return Math.round(initiative);
     return combatTick(combat);
 }
 
 function combatTick(combat) {
     for (const value of [combat?.currentTick, combat?.combatant?.initiative, combat?.round]) {
         const tick = Number(value);
-        if (Number.isFinite(tick)) return tick;
+        if (Number.isFinite(tick)) return Math.round(tick);
     }
     return 0;
 }

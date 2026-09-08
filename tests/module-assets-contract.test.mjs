@@ -21,7 +21,7 @@ test("Foundry manifest entry points remain stable", () => {
     const manifest = readManifest();
     const packageMetadata = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.6.2");
+    assert.equal(manifest.version, "0.6.3");
     assert.equal(packageMetadata.version, manifest.version);
     assert.equal(manifest.download, `${manifest.url}/releases/download/v${manifest.version}/${manifest.id}-v${manifest.version}.zip`);
     const releaseNotes = fs.readFileSync(path.join(projectRoot, "RELEASE_NOTES.md"), "utf8");
@@ -58,7 +58,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "eac7befffcd56387979b597ba96e5bd40977f70e0076f2ba6de5acf84f313033",
+        "9462dc24d22d56fc3a403527bfb083015648e4c1b05de513b5214bb807cdc4fa",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");

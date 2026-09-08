@@ -113,6 +113,8 @@ export async function createTickActionChatCard(context, actionId, selectedTicks 
     return ChatMessage.create({
         speaker,
         content,
+        ...(Array.isArray(options.whisper) ? { whisper: options.whisper } : {}),
+        ...(options.blind === true ? { blind: true } : {}),
         flags: {
             [MODULE_ID]: {
                 tickAction: {

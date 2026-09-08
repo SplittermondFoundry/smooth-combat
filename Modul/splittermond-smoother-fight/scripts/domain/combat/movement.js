@@ -17,7 +17,8 @@ const MOVEMENT_MILESTONES = Object.freeze({
 });
 
 export function movementActionMilestones(actionId, startTick = 0) {
-    const start = finiteNumber(startTick);
+    // Splittermond uses fractional initiatives only to order combatants on the same tick.
+    const start = Math.round(finiteNumber(startTick));
     return (MOVEMENT_MILESTONES[actionId] ?? []).map(({ tickOffset, fraction }) => ({
         fraction,
         tick: start + tickOffset,
@@ -27,22 +28,22 @@ export function movementActionMilestones(actionId, startTick = 0) {
 
 export function movementDueMilestones(plan, currentTick) {
     const completed = clampFraction(plan?.completedFraction);
-    const tick = finiteNumber(currentTick);
+    const tick = Math.round(finiteNumber(currentTick));
     return Array.from(plan?.milestones ?? [])
         .filter((milestone) => (
-            finiteNumber(milestone?.tick) <= tick
+            Math.round(finiteNumber(milestone?.tick)) <= tick
             && clampFraction(milestone?.fraction) > completed
         ))
         .sort((left, right) => left.tick - right.tick || left.fraction - right.fraction);
 }
 
 export function movementInterruptionMilestone(plan, currentTick) {
-    const tick = finiteNumber(currentTick);
+    const tick = Math.round(finiteNumber(currentTick));
     const milestones = [
-        { fraction: 0, tick: finiteNumber(plan?.startTick), tickOffset: 0 },
+        { fraction: 0, tick: Math.round(finiteNumber(plan?.startTick)), tickOffset: 0 },
         ...Array.from(plan?.milestones ?? []).map((milestone) => ({
             fraction: clampFraction(milestone?.fraction),
-            tick: finiteNumber(milestone?.tick),
+            tick: Math.round(finiteNumber(milestone?.tick)),
             tickOffset: finiteNumber(milestone?.tickOffset),
         })),
     ].sort((left, right) => left.tick - right.tick || left.fraction - right.fraction);

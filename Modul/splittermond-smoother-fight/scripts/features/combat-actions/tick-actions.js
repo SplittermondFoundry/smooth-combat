@@ -43,6 +43,7 @@ import {
 import {
     requireOpenCombatFlowForTicks,
 } from "./flow-guard.js";
+import { performSpellIdentification } from "./spell-identification.js";
 
 const SELECTABLE_DURATION_ACTIONS = new Set(["aim", "searchOpening"]);
 const SHIELD_BASH_MANEUVERS = Object.freeze([]);
@@ -93,6 +94,9 @@ export async function performTickAction(context, actionId, requestedTicks = "cus
                 break;
             case "escapeGrapple":
                 completed = await performEscapeGrapple(context, action);
+                break;
+            case "identifySpell":
+                completed = await performSpellIdentification(context);
                 break;
             case "coordinate":
                 completed = await performCoordinate(context, action);

@@ -30,6 +30,7 @@ import {
 import {
     finishRemoteMovementPlanAbort,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement-abort-requests.js";
+import { advanceContinuousActions } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/continuous-action.js";
 import {
     movementRoutePreviewModel,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement-preview.js";
@@ -671,6 +672,102 @@ test("multiple default route previews coexist, identify their tokens, and highli
     await second.token.unsetFlag("splittermond-smoother-fight", "movementPlan");
     assert.equal(syncDefaultMovementRoutePreviews(combat), true, "a completed plan removes its route");
     assert.equal(canvasInterface.children.length, 0);
+});
+
+test("movement timing rounds both initiative ordering directions, including saved abort checkpoints", () => {
+    for (const offset of [-0.02, 0.02]) {
+        assert.deepEqual(movementActionMilestones("walk", 1 + offset).map(({ tick }) => tick), [4, 6]);
+        const plan = {
+            startTick: 1 + offset,
+            completedFraction: 0.5,
+            milestones: [
+                { tick: 4 + offset, tickOffset: 3, fraction: 0.5 },
+                { tick: 6 + offset, tickOffset: 5, fraction: 1 },
+            ],
+        };
+        assert.equal(movementDueMilestones(plan, 5).length, 0);
+        assert.deepEqual(movementDueMilestones(plan, 6).map(({ fraction }) => fraction), [1]);
+        assert.deepEqual(movementInterruptionMilestone(plan, 5), { tick: 6, tickOffset: 5, fraction: 1 });
+    }
+});
+
+test("same-tick initiative ordering does not delay movement checkpoints or completion", async () => {
+    for (const [actionId, ticks] of [["crawl", 5], ["walk", 5], ["sprint", 10]]) {
+        const fixture = scheduledMovementFixture(actionId);
+        fixture.combatant.initiative = 1.01;
+        await performTrackedMovementAction(fixture.context, { id: actionId, ticks });
+
+        for (const milestone of movementActionMilestones(actionId, 1)) {
+            fixture.combat.currentTick = milestone.tick;
+            assert.equal(await advancePendingMovements(fixture.combat), true, `${actionId} at tick ${milestone.tick}`);
+            assert.equal(fixture.token.x, 100 * milestone.fraction);
+        }
+        assert.equal(fixture.plan(), null);
+        assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+    }
+});
+
+test("saved movement plans with fractional initiatives finish together on the displayed final tick", async () => {
+    const first = scheduledMovementFixture("walk", { tokenId: "first", combatantId: "first" });
+    await performTrackedMovementAction(first.context, { id: "walk", ticks: 5 });
+    const second = scheduledMovementFixture("walk", { tokenId: "second", combatantId: "second" });
+    await performTrackedMovementAction(second.context, { id: "walk", ticks: 5 });
+    const stored = second.plan();
+    stored.startTick += 0.01;
+    stored.milestones = stored.milestones.map((milestone) => ({ ...milestone, tick: milestone.tick + 0.01 }));
+    await second.token.setFlag("splittermond-smoother-fight", "movementPlan", stored);
+    first.combat.combatants.push(second.combatant);
+    first.combat.currentTick = 6;
+
+    assert.equal(await advancePendingMovements(first.combat), true);
+    for (const fixture of [first, second]) {
+        assert.equal(fixture.token.x, 100, fixture.token.id);
+        assert.equal(fixture.plan(), null);
+        assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+    }
+});
+
+test("movement completion waits for a concurrent continuous-action status update", async () => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    const entered = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    fixture.token.actor.createEmbeddedDocuments = async () => {
+        entered.resolve();
+        await gate.promise;
+        return [];
+    };
+    const synchronization = advanceContinuousActions(fixture.combat);
+    await entered.promise;
+    fixture.combat.currentTick = 6;
+    const movement = advancePendingMovements(fixture.combat);
+    // Let the animation and its completion reach the occupied status lock.
+    await new Promise((resolve) => setImmediate(resolve));
+    gate.resolve();
+    await Promise.all([synchronization, movement]);
+
+    assert.equal(fixture.token.x, 100);
+    assert.equal(fixture.plan(), null);
+    assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+});
+
+test("a failing token does not prevent another token from reaching its final movement position", async () => {
+    const first = scheduledMovementFixture("walk", { tokenId: "first", combatantId: "first" });
+    await performTrackedMovementAction(first.context, { id: "walk", ticks: 5 });
+    const second = scheduledMovementFixture("walk", { tokenId: "second", combatantId: "second" });
+    await performTrackedMovementAction(second.context, { id: "walk", ticks: 5 });
+    first.combat.combatants.push(second.combatant);
+    first.combat.currentTick = 6;
+    first.token.rejectContinuousActionClear = true;
+
+    await assert.rejects(advancePendingMovements(first.combat), /Could not persist required continuousAction/u);
+    assert.equal(second.token.x, 100);
+    assert.equal(second.plan(), null);
+    assert.notEqual(first.plan(), null, "the failed token keeps its retry state");
+    first.token.rejectContinuousActionClear = false;
+    assert.equal(await advancePendingMovements(first.combat), true);
+    assert.equal(first.plan(), null);
+    assert.equal(second.moveCalls.length, 1, "the completed token is not moved twice");
 });
 
 test("movement progression rechecks ticks crossed during an active animation", async () => {
