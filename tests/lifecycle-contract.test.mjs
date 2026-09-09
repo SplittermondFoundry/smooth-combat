@@ -69,6 +69,11 @@ function callsOf(name) {
 }
 
 const serviceStubs = {
+    scheduleHudCanvasRefresh: (...args) => record("scheduleHudCanvasRefresh", args),
+    clearHudCanvasRefresh: (...args) => record("clearHudCanvasRefresh", args),
+    refreshMovementVisibility: (...args) => record("refreshMovementVisibility", args),
+    scheduleDefaultMovementRoutePreviews: (...args) => record("scheduleDefaultMovementRoutePreviews", args),
+    clearMovementPreviewRefresh: (...args) => record("clearMovementPreviewRefresh", args),
     applyFearRollRequirement,
     isFearRollCompatibilityRequired,
     prepareFearRollDialog,
@@ -349,7 +354,9 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "sightRefresh")[0]({});
-        assert.deepEqual(callsOf("scheduleRender"), [[0]]);
+        assert.deepEqual(callsOf("scheduleRender"), []);
+        assert.deepEqual(callsOf("scheduleHudCanvasRefresh"), [[]]);
+        assert.deepEqual(callsOf("refreshMovementVisibility"), [[]]);
 
         callLog.length = 0;
         const releasedToken = { id: "released-token" };
@@ -359,6 +366,8 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "canvasTearDown")[0]();
+        assert.deepEqual(callsOf("clearHudCanvasRefresh"), [[]]);
+        assert.deepEqual(callsOf("clearMovementPreviewRefresh"), [[]]);
         assert.deepEqual(callsOf("clearMovementRoutePreview"), [[]]);
         assert.deepEqual(callsOf("clearMovementTokenControls"), [[]]);
 
@@ -374,7 +383,7 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         assert.deepEqual(callsOf("refreshMovementTokenControl"), [[refreshedToken]]);
         assert.deepEqual(callsOf("scheduleMovementTokenControls"), []);
 
-        for (const event of ["drawToken", "deleteToken", "sightRefresh", "updateUser"]) {
+        for (const event of ["drawToken", "deleteToken", "updateUser"]) {
             callLog.length = 0;
             handlersFor(hookRegistrations, event)[0]({});
             assert.deepEqual(callsOf("scheduleMovementTokenControls"), [[]], event);
@@ -389,7 +398,8 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         assert.deepEqual(callsOf("scheduleRenderAfterTokenMovement"), [[movedToken]]);
         assert.deepEqual(callsOf("resetCompletedMovementReversalApplication"), []);
         assert.deepEqual(callsOf("cancelMovementPlanAfterManualMove"), [[movedToken, movementOptions, "player"]]);
-        assert.deepEqual(callsOf("syncDefaultMovementRoutePreviews"), [[null]]);
+        assert.deepEqual(callsOf("syncDefaultMovementRoutePreviews"), []);
+        assert.deepEqual(callsOf("scheduleDefaultMovementRoutePreviews"), [[null]]);
         assert.deepEqual(callsOf("refreshCombatPositionOverlay"), [[movedToken]]);
 
         callLog.length = 0;

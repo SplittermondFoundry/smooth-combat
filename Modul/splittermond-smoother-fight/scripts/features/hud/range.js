@@ -26,6 +26,14 @@ export function targetDistancePresentation(context) {
     return { measurement, text: formatTokenDistance(measurement) };
 }
 
+export function targetLinePresentation(context, distanceText = "") {
+    if (!context.target) return t("SMOOTHER_FIGHT.HUD.NoTargetDetail");
+    const user = context.runtimeController?.name ?? t("SMOOTHER_FIGHT.HUD.NoRuntimeController");
+    const target = context.target.name ?? context.target.actor?.name ?? "–";
+    const additional = Math.max(0, context.targets.length - 1);
+    return `${t("SMOOTHER_FIGHT.HUD.PlayerPrimaryTargetName", { user, target })}${distanceText ? ` · ${distanceText}` : ""}${additional ? ` (+${additional})` : ""}`;
+}
+
 export function attackRangePresentation(attack, isRanged, measurement) {
     if (!measurement) return null;
     return presentation(assessAttackRange(

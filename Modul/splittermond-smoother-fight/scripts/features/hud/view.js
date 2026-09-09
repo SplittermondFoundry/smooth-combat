@@ -33,6 +33,7 @@ import {
     rangeStatusMarkup,
     spellRangePresentation,
     targetDistancePresentation,
+    targetLinePresentation,
 } from "./range.js";
 
 import {
@@ -67,19 +68,15 @@ import {
     t,
 } from "../../shared/values.js";
 
-export async function buildHud(context) {
+export async function buildHud(context, { movementDistanceCache } = {}) {
+    if (!getSetting("minimized", false)) context = services.prepareCombatEventContext?.(context) ?? context;
     if (context.concealed) return buildConcealedHud(context);
     const { combat, combatant, actor, token, assignedUser, runtimeController, target, targets } = context;
     const canAct = Boolean(game.user.isGM || (runtimeController?.id === game.user?.id && actor.isOwner));
     const tick = combat.currentTick ?? Math.round(Number(combatant.initiative) || 0);
-    const userName = runtimeController?.name ?? t("SMOOTHER_FIGHT.HUD.NoRuntimeController");
-    const targetName = target?.name ?? target?.actor?.name ?? "–";
-    const additionalTargetCount = Math.max(0, targets.length - 1);
     const targetDistance = targetDistancePresentation(context);
     const targetDistanceSuffix = targetDistance.text ? ` · ${targetDistance.text}` : "";
-    const targetLine = target
-        ? `${t("SMOOTHER_FIGHT.HUD.PlayerPrimaryTargetName", { user: userName, target: targetName })}${targetDistanceSuffix}${additionalTargetCount ? ` (+${additionalTargetCount})` : ""}`
-        : t("SMOOTHER_FIGHT.HUD.NoTargetDetail");
+    const targetLine = targetLinePresentation(context, targetDistance.text);
     const minimized = getSetting("minimized", false);
     const hudToggle = buildHudToggle(minimized);
     const personalTarget = targets.some((candidate) => services.isCurrentUserTarget(candidate));
@@ -141,7 +138,7 @@ export async function buildHud(context) {
                 </header>
                 ${canAct ? buildCombatControls(context) : await buildPersonalControls(context)}
                 ${selectedMovementControl}
-                ${canAct && getSetting("movementTracking", true) ? buildMovementTracker(context) : ""}
+                ${canAct && getSetting("movementTracking", true) ? buildMovementTracker(context, { cache: movementDistanceCache }) : ""}
                 ${canAct ? await buildActionBar(context, targetDistance.measurement) : ""}
                 ${getSetting("showCards", true) ? services.buildCombatEvents(context) : ""}
             </main>
@@ -359,7 +356,7 @@ function buildCombatControls(context) {
 }
 
 function buildAdvanceButtons(context, includeActorName = false) {
-    const blocker = game.user?.isGM ? null : services.getBlockingCombatWorkflow?.(context.combat);
+    const blocker = game.user?.isGM ? null : services.getBlockingCombatWorkflow?.(context);
     const blocked = Boolean(blocker);
     const tickButtons = [1, 2, 3, 4, 5, 6, 7, 8, 10].map((ticks) => buildAdvanceButton(ticks, blocked)).join("");
     const label = includeActorName
@@ -378,7 +375,8 @@ function buildAdvanceButton(ticks, blocked = false) {
 }
 async function buildPersonalControls(activeContext) {
     const candidates = getPersonalHudCandidates(activeContext);
-    const context = getPersonalHudContext(activeContext);
+    const personal = getPersonalHudContext(activeContext);
+    const context = personal ? { ...personal, combatEventPresentation: activeContext.combatEventPresentation } : null;
     const picker = candidates.length > 1 ? buildPersonalCombatantPicker(candidates, context) : "";
     const defenseRequest = services.getPendingActiveDefense(context ?? activeContext);
     const defenseControl = defenseRequest ? activeDefenseResponseControl(defenseRequest) : "";

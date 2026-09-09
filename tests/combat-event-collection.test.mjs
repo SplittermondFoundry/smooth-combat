@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { services } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
-import { collectCombatEventPresentation } from "../Modul/splittermond-smoother-fight/scripts/features/combat-events/service.js";
+import { collectCombatEventPresentation, getBlockingCombatWorkflow, prepareCombatEventContext } from "../Modul/splittermond-smoother-fight/scripts/features/combat-events/service.js";
+import { getPendingActiveDefense } from "../Modul/splittermond-smoother-fight/scripts/features/combat-events/view.js";
 
 function fixture(t, messages, maxCards = messages.length) {
     const previousGame = globalThis.game;
@@ -26,7 +27,7 @@ function fixture(t, messages, maxCards = messages.length) {
     const combat = { id: "combat", combatants: [{ actorId: "attacker" }] };
     globalThis.game = { combat, messages: { contents: messages }, settings: { get: () => maxCards } };
     t.after(() => { globalThis.game = previousGame; Object.assign(services, previousServices); });
-    return { collect: () => collectCombatEventPresentation({ combat }), reads: () => contextReads };
+    return { combat, collect: () => collectCombatEventPresentation({ combat }), reads: () => contextReads };
 }
 
 function attack(id, timestamp, context = {}) {
@@ -82,4 +83,22 @@ test("legacy links, hidden messages and old pending interruptions retain their b
     assert.equal(groups.some((group) => group.primary.id === "hidden"), false);
     assert.equal(groups.some((group) => group.primary.id === "standalone"), true);
     assert.equal(groups.some((group) => group.interruptions.some((message) => message.id === "unrelated")), false);
+});
+
+test("one render shares its event collection while subsequent renders see changed messages", (t) => {
+    const messages = Array.from({ length: 200 }, (_, i) => attack(`attack-${i}`, i));
+    const harness = fixture(t, messages, 3);
+    const context = prepareCombatEventContext({ combat: harness.combat });
+    const readsAfterCollection = harness.reads();
+    assert.equal(getBlockingCombatWorkflow(context), null);
+    assert.equal(getPendingActiveDefense(context), null);
+    assert.equal(harness.reads(), readsAfterCollection + 1, "defense and tick controls reuse the same collection");
+    assert.equal(Object.hasOwn(harness.combat, "combatEventPresentation"), false);
+    messages.push(attack("new", 500));
+    const next = prepareCombatEventContext({ combat: harness.combat });
+    assert.notEqual(next.combatEventPresentation, context.combatEventPresentation);
+    assert.equal(next.combatEventPresentation.groups.at(-1).primary.id, "new");
+    messages.at(-1).visible = false;
+    const hidden = prepareCombatEventContext({ combat: harness.combat });
+    assert.equal(hidden.combatEventPresentation.groups.at(-1).primary.id, "attack-199");
 });

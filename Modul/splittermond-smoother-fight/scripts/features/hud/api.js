@@ -10,6 +10,8 @@ export {
 } from "./view-state.js";
 
 export {
+    clearHudCanvasRefresh,
+    scheduleHudCanvasRefresh,
     scheduleRender,
     scheduleRenderAfterTokenMovement,
 } from "./visibility.js";

@@ -89,6 +89,12 @@ export {
 } from "./movement-abort-requests.js";
 
 export {
+    clearMovementPreviewRefresh,
+    refreshMovementVisibility,
+    scheduleDefaultMovementRoutePreviews,
+} from "./movement-refresh.js";
+
+export {
     clearMovementTokenControls,
     refreshMovementTokenControl,
     refreshMovementTokenControlScale,

@@ -135,6 +135,15 @@ export function refreshMovementRoutePreviewCanvasScale() {
     return true;
 }
 
+export function refreshMovementRoutePreviewCanvasVisibility() {
+    for (const [reference, preview] of routePreviews) {
+        const visible = globalThis.game?.user?.isGM
+            || services.isTokenPerceivableByUser?.(preview.token, globalThis.game?.user) === true;
+        preview.container.visible = visible;
+        if (!visible) clearRouteHighlight(reference);
+    }
+}
+
 export function refreshMovementRoutePreviewCanvas(tokenLike, plan) {
     const token = tokenDocument(tokenLike);
     const reference = tokenReference(token);
@@ -212,6 +221,7 @@ function drawMovementRoutePreview(token, plan) {
     parent.addChild(container);
     return {
         completedFraction: normalizedFraction(plan?.completedFraction),
+        token,
         container,
         highlight,
         labelContainers,

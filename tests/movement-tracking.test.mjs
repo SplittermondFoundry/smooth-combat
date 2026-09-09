@@ -41,6 +41,9 @@ import {
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement-abort-requests.js";
 import { advanceContinuousActions } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/continuous-action.js";
 import {
+    clearMovementPreviewRefresh, refreshMovementVisibility, scheduleDefaultMovementRoutePreviews,
+} from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement-refresh.js";
+import {
     movementRoutePreviewModel,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/movement-preview.js";
 import {
@@ -1188,8 +1191,8 @@ test("the canvas displays stop buttons for all GM tokens but only visible, assig
     first.token.actor.isOwner = true;
     second.token.actor.isOwner = true;
     syncMovementTokenControls();
-    assert.equal(canvasButtons().length, 1);
-    assert.equal(canvasButtons()[0].parent.document.uuid, first.token.uuid);
+    assert.equal(canvasButtons().filter((button) => button.visible).length, 1);
+    assert.equal(canvasButtons().find((button) => button.visible).parent.document.uuid, first.token.uuid);
     movementHarness.runtimeController = { id: "other-player" };
     syncMovementTokenControls();
     assert.equal(canvasButtons().length, 0, "ownership alone does not bypass the assigned controller");
@@ -1379,6 +1382,68 @@ test("redrawing a token replaces its destroyed button and cleans the old preview
     assert.notEqual(canvasButtons()[0], button);
     assert.equal(canvasButtons().length, 1);
     assert.equal(canvas.interface.children.length, 0);
+});
+
+test("sight animation reuses movement controls and batches route document updates", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    const scenery = Array.from({ length: 99 }, (_, i) => ({ id: `scenery-${i}`, uuid: `scenery-${i}`, getFlag: () => null }));
+    fixture.combat.combatants.push(...scenery.map((token) => ({ id: token.id, token })));
+    const frames = installMovementCanvas(t, [fixture.token, ...scenery]);
+    clearMovementPreviewRefresh();
+    t.after(clearMovementPreviewRefresh);
+    const flush = () => { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((fn) => fn()); };
+    syncMovementTokenControls();
+    refreshMovementVisibility();
+    flush();
+    let reads = 0;
+    for (const token of [fixture.token, ...scenery]) {
+        const original = token.getFlag.bind(token);
+        token.getFlag = (...args) => { reads++; return original(...args); };
+    }
+    const button = canvasButtons()[0];
+    for (let i = 0; i < 60; i++) { refreshMovementVisibility(); flush(); }
+    assert.equal(reads, 0, "stable sight across frames reads no movement flags");
+    assert.equal(canvasButtons()[0], button);
+    for (let i = 0; i < 100; i++) scheduleDefaultMovementRoutePreviews(fixture.combat);
+    assert.equal(reads, 0, "document updates no longer scan all routes synchronously");
+    assert.equal(frames.size, 1);
+    flush();
+    assert.equal(reads, 100, "100 document updates perform one scan of 100 combatants");
+    scheduleDefaultMovementRoutePreviews(fixture.combat);
+    clearMovementPreviewRefresh();
+    assert.equal(frames.size, 0);
+});
+
+test("sight changes hide route and button immediately and restore the same eligible button", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    const frames = installMovementCanvas(t, [fixture.token]);
+    clearMovementRoutePreview();
+    t.after(() => clearMovementRoutePreview());
+    clearMovementPreviewRefresh();
+    t.after(clearMovementPreviewRefresh);
+    let perceivable = true;
+    const player = { id: "player", isGM: false };
+    globalThis.game.user = player;
+    movementHarness.runtimeController = player;
+    movementHarness.isTokenPerceivableByUser = () => perceivable;
+    fixture.token.actor.isOwner = true;
+    t.after(() => { movementHarness.isTokenPerceivableByUser = null; });
+    syncMovementTokenControls();
+    syncDefaultMovementRoutePreviews(fixture.combat);
+    const button = canvasButtons()[0];
+    const route = canvas.interface.children[0];
+    perceivable = false;
+    refreshMovementVisibility();
+    assert.equal(button.visible, false);
+    assert.equal(route.visible, false, "a separate PIXI route must not leak a now invisible token");
+    perceivable = true;
+    refreshMovementVisibility();
+    assert.equal(button.visible, true);
+    assert.equal(canvasButtons()[0], button);
+    const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((fn) => fn());
+    assert.equal(isMovementRoutePreviewVisible(fixture.token), true);
 });
 
 test("hidden-token abort messages remain private to GMs even with a player assigned", async (t) => {

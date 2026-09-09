@@ -47,10 +47,25 @@ test("movement uses calculated GSW with modifiers and distinguishes missing valu
     const context = movementContext("standing", 3);
     context.actor.derivedValues = { speed: { value: { display: "(8 - 3)", calculateSync: () => 5 } } };
     assert.match(buildMovementTracker(context), /is-walk/u);
-    context.actor.derivedValues.speed.value = 0;
-    assert.match(buildMovementTracker(context), /MovementSpeedZero/u);
+    for (const speed of [0, -1]) {
+        context.actor.derivedValues.speed.value = speed;
+        const html = buildMovementTracker(context);
+        assert.match(html, /MovementSpeedZero/u);
+        assert.match(html, /MovementSpeedZeroHint/u);
+        assert.equal((html.match(/MovementActionUnavailable/gu) ?? []).length, 2);
+        assert.doesNotMatch(html, /data-tick-action-id="(?:walk|sprint)"/u);
+        for (const action of ["walk", "sprint"]) {
+            const section = html.match(new RegExp(`<span class="sf-movement-section sf-movement-section-${action}[^>]*>[\\s\\S]*?<\\/span>`, "u"))?.[0];
+            assert.ok(section);
+            assert.doesNotMatch(section, /MovementMeters/u, "unavailable actions must not advertise a movement budget");
+        }
+    }
     delete context.actor.derivedValues;
-    assert.match(buildMovementTracker(context), /MovementSpeedUnavailable/u);
+    const unavailable = buildMovementTracker(context);
+    assert.match(unavailable, /MovementSpeedUnavailableHint/u);
+    assert.doesNotMatch(unavailable, /MovementSpeedZero/u, "unknown speed must not be presented as zero");
+    context.actor.derivedValues = { speed: { value: 5 } };
+    assert.doesNotMatch(buildMovementTracker(context), /MovementSpeedZero|MovementActionUnavailable/u);
 });
 
 test("prone HUD replaces walking and sprinting with crawl and stand up, including with missing GSW", () => {

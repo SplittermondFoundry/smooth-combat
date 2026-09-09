@@ -9,4 +9,7 @@ export const combatActionState = {
     movementControls: new Map(),
     movementControlFrame: null,
     movementControlScale: null,
+    movementPreviewFrame: null,
+    movementPreviewCombat: null,
+    movementVisibilitySignature: null,
 };

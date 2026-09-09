@@ -16,6 +16,7 @@ export {
     hasPendingLegacyTickMessage,
     isCombatEventDeletionPending,
     markCombatEventDeletionPending,
+    prepareCombatEventContext,
     recordCompletedDamageApplication,
     removePendingDamageApplication,
     setCombatEventCardsCollapsed,

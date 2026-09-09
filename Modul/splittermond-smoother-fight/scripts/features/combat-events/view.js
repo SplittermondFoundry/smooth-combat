@@ -23,7 +23,7 @@ import {
 } from "../../shared/values.js";
 
 export function buildCombatEvents(context) {
-    const presentation = collectCombatEventPresentation(context);
+    const presentation = context.combatEventPresentation ?? collectCombatEventPresentation(context);
     const { groups, focus } = presentation;
     const title = combatEventState.cardsCollapsed ? t("SMOOTHER_FIGHT.HUD.ExpandCards") : t("SMOOTHER_FIGHT.HUD.CollapseCards");
     const body = !groups.length
@@ -245,7 +245,7 @@ function pendingActiveDefenseParticipant(group, isLatest, hudContext, messageCon
 }
 
 export function getPendingActiveDefense(context) {
-    const presentation = collectCombatEventPresentation(context);
+    const presentation = context.combatEventPresentation ?? collectCombatEventPresentation(context);
     if (presentation.focus && presentation.focus.step !== "defense-decision") return null;
     const focused = presentation.focus?.step === "defense-decision"
         ? presentation.groups.find((group) => group.primary.id === presentation.focus.groupId)

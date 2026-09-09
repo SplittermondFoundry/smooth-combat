@@ -32,10 +32,16 @@ export function collectCombatEventPresentation(context) {
     });
 }
 
+// Explicit, render-local snapshot. Never cached on documents or shared across
+// renders/actions: changed messages and permissions are read on the next build.
+export function prepareCombatEventContext(context) {
+    return { ...context, combatEventPresentation: collectCombatEventPresentation(context) };
+}
+
 function getCombatWorkflowFocus(contextOrCombat = getApplicableCombat()) {
     const combat = contextOrCombat?.combat ?? contextOrCombat;
     if (!combat) return null;
-    return collectCombatEventPresentation({ combat }).focus;
+    return (contextOrCombat?.combatEventPresentation ?? collectCombatEventPresentation({ combat })).focus;
 }
 
 export function getBlockingCombatWorkflow(contextOrCombat = getApplicableCombat()) {

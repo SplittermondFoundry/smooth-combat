@@ -1,4 +1,5 @@
 import { hudState } from "./state.js";
+import { rememberHudCanvas, refreshHudCanvas } from "./canvas-updates.js";
 
 import { services } from "../../core/services.js";
 
@@ -304,6 +305,8 @@ class SmootherFightHud {
     constructor() {
         this.element = null;
         this.renderGeneration = 0;
+        this.renderTask = null;
+        this.renderRequested = false;
         this.draggedFavoriteSkillId = null;
         this.favoriteSkillClickBlockedUntil = 0;
         this.quickTargetViewStateRequest = null;
@@ -333,12 +336,35 @@ class SmootherFightHud {
         this.element.addEventListener("dragend", () => this.onFavoriteSkillDragEnd());
     }
 
-    async render() {
+    invalidate() {
+        this.renderGeneration++;
+    }
+
+    cancelRender() {
+        this.invalidate();
+        this.renderRequested = false;
+    }
+
+    render() {
+        this.invalidate();
+        this.renderRequested = true;
+        if (this.renderTask) return this.renderTask;
+        this.renderTask = Promise.resolve().then(async () => {
+            while (this.renderRequested) {
+                this.renderRequested = false;
+                await this.renderOnce();
+            }
+        }).finally(() => { this.renderTask = null; });
+        return this.renderTask;
+    }
+
+    async renderOnce() {
         if (!this.element) return;
         const generation = ++this.renderGeneration;
         const viewState = captureHudViewState(this.element);
         const forceLatestEvent = services.isCombatEventDeletionPending();
         const context = getHudContext();
+        rememberHudCanvas(context);
         const enabled = getSetting("enabled", true);
         if (!enabled || !context) {
             hudState.hiddenByShortcut = false;
@@ -362,11 +388,12 @@ class SmootherFightHud {
             return;
         }
 
-        const html = await buildHud(context);
+        const html = await buildHud(context, { movementDistanceCache: hudState.movementDistanceCache });
         if (generation !== this.renderGeneration) return;
         services.clearHoveredToken();
         clearActionTooltip();
         this.element.innerHTML = html;
+        this.element.hidden = false;
         this.element.dataset.activeCombatantId = context.combatant.id ?? "";
         this.element.dataset.activeActorId = context.actor?.id ?? "";
         services.enforceChatPermissions(this.element, context);
@@ -383,6 +410,7 @@ class SmootherFightHud {
         applyCombatEventExpansionRequest(this.element);
         applyCombatWorkflowFocus(this.element);
         applyActionMenuExpansionRequest(this.element);
+        refreshHudCanvas(this.element);
     }
 
     onContextMenu(event) {

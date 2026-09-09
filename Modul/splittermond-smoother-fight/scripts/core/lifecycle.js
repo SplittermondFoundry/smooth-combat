@@ -59,6 +59,8 @@ export function registerHooks() {
         services.scheduleRender(0);
     });
     Hooks.on("canvasTearDown", () => {
+        services.clearHudCanvasRefresh();
+        services.clearMovementPreviewRefresh();
         services.clearMovementRoutePreview();
         services.clearMovementTokenControls();
     });
@@ -74,8 +76,8 @@ export function registerHooks() {
         void services.advancePendingMovements(combat);
     });
     Hooks.on("sightRefresh", () => {
-        services.scheduleRender(0);
-        services.scheduleMovementTokenControls();
+        services.scheduleHudCanvasRefresh();
+        services.refreshMovementVisibility();
     });
     Hooks.on("updateToken", (token, changes, options, userId) => {
         if (Object.hasOwn(changes ?? {}, "hidden")) services.scheduleRender(0);
@@ -84,7 +86,7 @@ export function registerHooks() {
             void services.cancelMovementPlanAfterManualMove(token, options, userId);
             services.scheduleRenderAfterTokenMovement(token);
         }
-        services.syncDefaultMovementRoutePreviews(getApplicableCombat());
+        services.scheduleDefaultMovementRoutePreviews(getApplicableCombat());
         services.scheduleMovementTokenControls();
         void services.refreshCombatPositionOverlay(token);
     });

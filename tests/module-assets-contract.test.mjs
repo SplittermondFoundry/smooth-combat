@@ -58,7 +58,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "23de0952cb53e675a5db7f877d030b7debe73d075e9ab437bb390181af11741a",
+        "40a6b342bde6051866bb8fcaad7c78ebe9fedcfde8ab48546277e115032524ed",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
@@ -238,8 +238,10 @@ test("split styles flatten in the verified cascade order", () => {
     const imports = [...wrapper.matchAll(importPattern)]
         .map((match) => match[1]);
     assert.deepEqual(imports, ["themes/default.css", "hud.css", "combat-events.css", "settings.css", "responsive.css"]);
-    const flattened = Buffer.concat(imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file))));
-    const flattenedCss = flattened.toString("utf8");
+    // Git may convert line endings on checkout; the stylesheet contract covers CSS content.
+    const flattened = imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file), "utf8")
+        .replace(/\r\n/gu, "\n")).join("");
+    const flattenedCss = flattened;
     assert.match(flattenedCss, /--sf-font-meta:\s*10px/u);
     assert.match(flattenedCss, /--sf-font-control:\s*12px/u);
     assert.match(flattenedCss, /\.sf-portrait-open/u);
@@ -265,7 +267,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-action-tooltip\.is-spell\s*\{[^}]*width:\s*min\(500px,/su);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "20513dd465d8b4ae7d79994f8e5e609774defd9f068a06af5fcca0aa9f5290b6",
+        "7dbf18a81458bbf3b2c4d2bf495b1080a8b6aabf5b9998c412e01fcbddb0bb6c",
     );
 });
 

@@ -29,7 +29,7 @@ export function syncMovementTokenControls() {
         const reference = token.uuid;
         let control = combatActionState.movementControls.get(reference);
         const state = getMovementAbortState(token, combat, { includeStop: Boolean(control?.hovered) });
-        if (!state?.canManage || !tokenIsVisible(token)) continue;
+        if (!state?.canManage) continue;
         retained.add(reference);
         if (control && (control.id !== state.id || control.object !== object || control.button.destroyed)) {
             removeControl(reference);
@@ -94,7 +94,7 @@ function createControl(object, id) {
     const button = new PIXI.Graphics();
     button.name = button.label = "sf-movement-token-stop";
     button.lineStyle(1.5, colors.outline, 1).beginFill(colors.fill, 1).drawCircle(0, 0, 13).endFill();
-    button.lineStyle(0).beginFill(colors.text, 1).drawRoundedRect(-5, -5, 10, 10, 1).endFill();
+    drawMovementAbortIcon(button, colors);
     button.hitArea = new PIXI.Rectangle(-13, -13, 26, 26);
     button.eventMode = "static";
     button.cursor = "pointer";
@@ -128,6 +128,18 @@ function createControl(object, id) {
     button.on("pointertap", (event) => onClick(control, event));
     object.addChild(button);
     return control;
+}
+
+function drawMovementAbortIcon(button, colors) {
+    // Draw once in token-local coordinates; keep the walking figure readable at 26 px.
+    button.lineStyle(0).beginFill(colors.text, 1).drawCircle(2, -7, 2.2).endFill();
+    button.lineStyle({ width: 2.4, color: colors.text, cap: "round", join: "round" });
+    button.moveTo(0, -3).lineTo(-2, 2).lineTo(1, 5).lineTo(1, 9);
+    button.moveTo(-2, 2).lineTo(-5, 7).lineTo(-8, 9);
+    button.moveTo(-6, 1).lineTo(-4, -2).lineTo(0, -3).lineTo(4, 0).lineTo(7, 0);
+    // A background-colored gap separates the strike-through from the white limbs.
+    button.lineStyle({ width: 4.5, color: colors.fill, cap: "round" }).moveTo(-8, -8).lineTo(8, 8);
+    button.lineStyle({ width: 2.2, color: colors.outline, cap: "round" }).moveTo(-8, -8).lineTo(8, 8);
 }
 
 function controlColors() {
@@ -226,6 +238,13 @@ function updatePreview(control, state) {
     }
     marker.position.set(Number(state.stop.x) + control.object.w / 2, Number(state.stop.y) + control.object.h / 2);
     marker.scale.set(1 / canvasScale());
+}
+
+export function refreshMovementTokenControlVisibility() {
+    for (const control of combatActionState.movementControls.values()) {
+        control.button.visible = tokenIsVisible(control.token);
+        if (!control.button.visible) clearPreview(control);
+    }
 }
 
 function layoutTooltip(control) {

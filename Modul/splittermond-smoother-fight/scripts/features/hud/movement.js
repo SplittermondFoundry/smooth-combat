@@ -23,20 +23,27 @@ export {
     readTokenMovementDistance,
 } from "../../shared/movement.js";
 
-export function buildMovementTracker(context) {
+export function buildMovementTracker(context, { cache } = {}) {
     const speed = readMovementSpeed(context.actor);
     const position = resolveCombatPosition(context.actor);
-    const state = movementTrackerState(readTokenMovementDistance(context.token), speed, position.id);
+    const state = movementTrackerState(readTokenMovementDistance(context.token, {
+        cache,
+    }), speed, position.id);
     const moved = formatMovementDistance(state.moved);
     const freeLimit = formatMovementDistance(state.freeLimit);
     const walkLimit = formatMovementDistance(state.walkLimit);
     const sprintLimit = formatMovementDistance(state.sprintLimit);
     const trackerLabel = t("SMOOTHER_FIGHT.HUD.MovementTracker");
     const status = position.ambiguous ? t("SMOOTHER_FIGHT.HUD.CombatPositionConflict") : movementStatus(state, speed);
-    const progressLabel = t("SMOOTHER_FIGHT.HUD.MovementProgress", {
+    const progressLabel = state.available ? t("SMOOTHER_FIGHT.HUD.MovementProgress", {
         distance: moved,
         maximum: sprintLimit,
-    });
+    }) : t("SMOOTHER_FIGHT.HUD.MovementDistance", { distance: moved });
+    const speedNotice = !state.available ? `<div class="sf-movement-speed-notice" role="note">
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        <div><strong>${escapeHtml(movementStatus(state, speed))}</strong><p>${escapeHtml(t(speed !== null && speed <= 0
+            ? "SMOOTHER_FIGHT.HUD.MovementSpeedZeroHint" : "SMOOTHER_FIGHT.HUD.MovementSpeedUnavailableHint"))}</p></div>
+    </div>` : "";
     const sections = position.id === "prone" ? proneMovementSections(state) : [
         movementSection("free", t("SMOOTHER_FIGHT.HUD.FreeMovementShort"), freeLimit, state.sectionProgress.free, state),
         movementSection("walk", t("SMOOTHER_FIGHT.HUD.TickActions.walk.Name"), walkLimit, state.sectionProgress.walk, state),
@@ -69,8 +76,9 @@ export function buildMovementTracker(context) {
     return `<section class="sf-movement-tracker is-${escapeAttr(state.phase)}" data-combat-position="${escapeAttr(position.id ?? "conflict")}" aria-label="${escapeAttr(trackerLabel)}">
         <header class="sf-movement-heading">
             <span><i class="fa-solid fa-route" aria-hidden="true"></i><strong>${escapeHtml(trackerLabel)}</strong><b>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MovementDistance", { distance: moved }))}</b></span>
-            <small>${escapeHtml(status)}</small>
+            ${state.available || position.ambiguous ? `<small>${escapeHtml(status)}</small>` : ""}
         </header>
+        ${speedNotice}
         <div class="sf-movement-controls">
             <div class="sf-movement-bar">
                 <div class="sf-movement-sections" role="group" aria-label="${escapeAttr(progressLabel)}">${sections}</div>
@@ -114,6 +122,9 @@ export function buildSelectedMovementControl(combat) {
 
 function movementSection(id, name, distance, progress, state) {
     const className = `sf-movement-section sf-movement-section-${id}`;
+    if (id !== "free" && !state.available) {
+        return `<span class="${className} is-unavailable" aria-disabled="true"><small>${escapeHtml(name)}</small><b><i class="fa-solid fa-lock" aria-hidden="true"></i> ${escapeHtml(t("SMOOTHER_FIGHT.HUD.MovementActionUnavailable"))}</b></span>`;
+    }
     const style = `--sf-movement-fill:${progress.toFixed(3)}%`;
     const content = `<small>${escapeHtml(name)}</small><b>${escapeHtml(t("SMOOTHER_FIGHT.HUD.MovementMeters", { distance }))}</b>`;
     const ticks = movementSectionActionTicks(id, state);
@@ -169,7 +180,7 @@ function movementStatus(state, speed) {
         case "excess":
             return t("SMOOTHER_FIGHT.HUD.MovementExcess", { distance: formatMovementDistance(state.excess) });
         case "unavailable":
-            return t(speed === 0 ? "SMOOTHER_FIGHT.HUD.MovementSpeedZero" : "SMOOTHER_FIGHT.HUD.MovementSpeedUnavailable");
+            return t(speed !== null && speed <= 0 ? "SMOOTHER_FIGHT.HUD.MovementSpeedZero" : "SMOOTHER_FIGHT.HUD.MovementSpeedUnavailable");
         default:
             return t("SMOOTHER_FIGHT.HUD.MovementFree", { distance: formatMovementDistance(state.freeLimit) });
     }

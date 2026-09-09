@@ -1,5 +1,7 @@
 # Splittermond Smoother Fight 0.6.3
 
+Die Änderungen für das kommende Update sind im [Changelog unter „Noch nicht veröffentlicht“](CHANGELOG.md#noch-nicht-veröffentlicht) vorbereitet.
+
 Dieses Update ergänzt **Zauber identifizieren** in der Handlungsübersicht und behebt ausbleibende Abschlüsse von Bewegungen und kontinuierlichen Handlungen in Splittermond **14.2.7 und 14.3.x**.
 
 ## Zauber identifizieren

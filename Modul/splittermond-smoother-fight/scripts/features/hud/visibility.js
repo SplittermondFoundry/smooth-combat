@@ -3,6 +3,8 @@ import { hudState } from "./state.js";
 import { services } from "../../core/services.js";
 
 import { getHudContext } from "./context.js";
+import { refreshHudCanvas, refreshHudCanvasVisibility } from "./canvas-updates.js";
+import { clearActionTooltip } from "./action-tooltips.js";
 
 import {
     MODULE_ID,
@@ -13,22 +15,52 @@ import {
 } from "../../shared/values.js";
 
 export function scheduleRender(delay = 40) {
+    hudState.hud?.invalidate?.();
     clearTimeout(hudState.renderTimer);
-    hudState.renderTimer = setTimeout(() => void hudState.hud?.render(), delay);
+    hudState.renderTimer = setTimeout(() => {
+        hudState.renderTimer = null;
+        void Promise.resolve(hudState.hud?.render()).catch((error) => console.error(`${MODULE_ID} | Could not render HUD`, error));
+    }, delay);
+}
+
+export function scheduleHudCanvasRefresh() {
+    const root = hudState.hud?.element;
+    // Hide stale target information synchronously, before an asynchronous rebuild.
+    if (refreshHudCanvasVisibility(root)) scheduleRender(0);
+    if (!root || hudState.canvasFrame !== null) return;
+    hudState.canvasFrame = requestAnimationFrame(() => {
+        hudState.canvasFrame = null;
+        refreshHudCanvas(root);
+    });
+}
+
+export function clearHudCanvasRefresh() {
+    if (hudState.canvasFrame !== null) cancelAnimationFrame(hudState.canvasFrame);
+    clearTimeout(hudState.renderTimer);
+    hudState.canvasFrame = hudState.renderTimer = null;
+    hudState.canvasGeneration++;
+    hudState.canvasSignature = null;
+    hudState.canvasValues.clear();
+    hudState.movementDistanceCache = new WeakMap();
+    hudState.hud?.cancelRender?.();
+    clearActionTooltip();
+    if (hudState.hud?.element) hudState.hud.element.hidden = true;
 }
 
 export function scheduleRenderAfterTokenMovement(token) {
+    const generation = hudState.canvasGeneration;
     queueMicrotask(() => {
+        if (generation !== hudState.canvasGeneration) return;
         const object = token?.object ?? canvas?.tokens?.get?.(token?.id);
         const movement = object?.movementAnimationPromise;
+        const refresh = () => {
+            if (generation === hudState.canvasGeneration) scheduleHudCanvasRefresh();
+        };
         if (!movement || typeof movement.then !== "function") {
-            scheduleRender(0);
+            refresh();
             return;
         }
-        movement.then(
-            () => scheduleRender(0),
-            () => scheduleRender(0),
-        );
+        movement.then(refresh, refresh);
     });
 }
 

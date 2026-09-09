@@ -30,7 +30,7 @@ function movementNumber(value, depth = 0) {
     return null;
 }
 
-export function readTokenMovementDistance(contextToken) {
+export function readTokenMovementDistance(contextToken, { cache } = {}) {
     const token = contextToken?.document ?? contextToken;
     if (!token) return 0;
     const history = token.movementHistory;
@@ -39,9 +39,20 @@ export function readTokenMovementDistance(contextToken) {
     }
 
     let recordedDistance = numericValue(history.at(-1)?.distance);
+    // Only HUD callers opt in. Action validation always measures fresh. The HUD
+    // discards its cache on document renders; detect in-place history edits too.
+    const grid = token.parent?.grid ?? globalThis.canvas?.grid;
+    const key = cache ? JSON.stringify([history, token.width, token.height, token.elevation,
+        grid?.size, grid?.distance, grid?.type, grid?.diagonals]) : null;
+    const cached = cache?.get(token);
     if (typeof token.measureMovementPath === "function") {
         try {
-            recordedDistance = numericValue(token.measureMovementPath(history)?.distance);
+            if (cached?.key === key && cached.measure === token.measureMovementPath && cached.grid === grid) {
+                recordedDistance = cached.distance;
+            } else {
+                recordedDistance = numericValue(token.measureMovementPath(history)?.distance);
+                cache?.set(token, { key, grid, measure: token.measureMovementPath, distance: recordedDistance });
+            }
         } catch {
             // Retain the cumulative distance exposed by the last measured waypoint.
         }
