@@ -1,6 +1,6 @@
 # Changelog
 
-## Noch nicht veröffentlicht
+## 0.6.4 – 9. September 2026
 
 Änderungen seit **0.6.3**. Dieses Update verbessert die Tokenbewegung, macht Bewegungseinschränkungen deutlicher und reduziert die Arbeit des HUDs während Animationen.
 
@@ -34,4 +34,4 @@
 
 ## 0.6.3
 
-Zauberidentifikation mit Arkane-Kunde-Probe, Gradbuttons und passenden Ergebnishinweisen; zuverlässige Abschlüsse von Bewegungen und kontinuierlichen Handlungen in Splittermond 14.2.7 und 14.3.x. Die vollständigen Hinweise stehen in [RELEASE_NOTES.md](RELEASE_NOTES.md).
+Zauberidentifikation mit Arkane-Kunde-Probe, Gradbuttons und passenden Ergebnishinweisen; zuverlässige Abschlüsse von Bewegungen und kontinuierlichen Handlungen in Splittermond 14.2.7 und 14.3.x. Die vollständigen Hinweise stehen im [Release 0.6.3](https://github.com/SplittermondFoundry/smooth-combat/releases/tag/v0.6.3).

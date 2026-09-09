@@ -2,6 +2,8 @@
 
 Smoother Fight ist ein Foundry-VTT-Modul für Splittermond. Es ergänzt laufende Kämpfe um ein kompaktes HUD für den aktiven Kämpfer, dessen Ziele, häufige Systemaktionen, Chatkarten und die Aktive Abwehr.
 
+Versionshinweise stehen im [Changelog](https://github.com/SplittermondFoundry/smooth-combat/blob/v0.6.4/CHANGELOG.md).
+
 ## Voraussetzungen
 
 - Foundry Virtual Tabletop ab Version 14.359 (verifiziert bis 14.363)
@@ -27,15 +29,19 @@ Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github
 
 - kompaktes Kampf-HUD mit aktivem Combatant, ausgewählten Zielen, VTD/KW/GW sowie Lebens- und Fokusleiste
 - persönliche Zuganzeige, Zielwarnungen und ein- oder ausblendbare Standard-Aktionsleiste
-- Foundry-basierte Bewegungsverfolgung mit freier Bewegung, Kriechen, Laufen, Sprinten, Überziehungswarnung, eigenem Token-Status **In Bewegung**, regelgerechter Bewegung entlang der gewählten Route bei Tick 5, 3/5 beziehungsweise 3/5/7/10 sowie parallel und standardmäßig dauerhaft eingeblendeten, tokenfarbigen Routen mit ganzzahligen Meilensteinen, Hover-Hervorhebung und Abbruch am nächstgelegenen Segment direkt im Kampf-HUD; die automatische Daueranzeige lässt sich pro Client abschalten
-- Kleiner Stopp-Button direkt am bewegten Token, auch außerhalb seines Zuges: für jede SL an allen Tokens und für den zuständigen Spieler an seinen sichtbaren Tokens. Der Button ist im Canvas am Token befestigt und folgt Kartenverschiebung, Zoom und Tokenanimationen. Hover oder Tastaturfokus zeigt den berechneten Stoppunkt. Der Abbruch erhält den vorgesehenen Zugtick einschließlich zusätzlicher Tickkosten; die Figur ist dort regulär dran und wechselt nicht automatisch auf Abwarten. Ohne gespeicherte Route wird die Stopp-Position manuell festgelegt.
+- Foundry-basierte Bewegungsverfolgung mit freier Bewegung, Kriechen, Laufen, Sprinten, Überziehungswarnung, eigenem Token-Status **In Bewegung**, regelgerechter Bewegung entlang der gewählten Route bei Tick 5, 3/5 beziehungsweise 3/5/7/10 sowie parallel, für alle Spieler und standardmäßig dauerhaft eingeblendeten, tokenfarbigen Routen mit ganzzahligen Meilensteinen, Hover-Hervorhebung und Abbruch am nächstgelegenen Segment direkt im Kampf-HUD; die automatische Daueranzeige lässt sich pro Client abschalten und über eine Welteinstellung auf den betroffenen Spieler und die SL beschränken
+- Für **Liegend** ersetzt die Bewegungsleiste Laufen durch **Kriechen (höchstens 1 m, 5 Ticks)** und Sprinten durch **Aufstehen (6 Ticks)**. Freie Bewegung bleibt eine SL-Entscheidung. Zu lange Kriechrouten müssen vor der Buchung rückgängig gemacht und neu gewählt werden; Aufstehen übernimmt keine gewählte Bewegungsstrecke. **Kniend** bietet Aufstehen für 3 Ticks und einen Hinweis zur SL-Entscheidung über Bewegung in dieser Haltung. Der Positionswechsel erfolgt erst beim Abschluss der Aufstehen-Handlung im eigenen Zug.
+- Ausschließlich unter **Splittermond 14.2.7** gibt ein aktiver Zustand **Angsterfüllt** automatisch Sicherheitswürfe vor. Standard- und Risikowürfe erfordern wie in 14.3 eine zusätzliche Bestätigung; Ablehnen erhält den offenen Dialog samt Eingaben. Die Vorgabe gilt für Fertigkeiten, Angriffe, Zauber und Aktive Abwehr aus HUD, Charakterbogen und Makros. Dialoglose Proben verwenden Sicherheitswürfe. Andere Systemversionen verwenden ihre eigene Behandlung.
+- Kleiner Abbruch-Button mit durchgestrichener laufender Figur direkt am bewegten Token, auch außerhalb seines Zuges: für jede SL an allen Tokens und für den zuständigen Spieler an seinen sichtbaren Tokens. Der Button ist im Canvas am Token befestigt und folgt Kartenverschiebung, Zoom und Tokenanimationen. Hover oder Tastaturfokus zeigt den berechneten Stoppunkt. Der Abbruch erhält den vorgesehenen Zugtick einschließlich zusätzlicher Tickkosten; die Figur ist dort regulär dran und wechselt nicht automatisch auf Abwarten. Ohne gespeicherte Route wird die Stopp-Position manuell festgelegt.
+- Deutlich hervorgehobener Hinweis bei **GSW 0**: Die Bewegung berücksichtigt Abzüge und Modifikatoren. Laufen und Sprinten zeigen **Nicht verfügbar** statt einer scheinbaren Reichweite von 2 m.
 - Fertigkeiten, Favoriten, Zauber, Angriffe, Ausrüstung und Aktive Abwehr direkt im HUD
 - **Zauber identifizieren** unter Handlungen: Arkane-Kunde-Probe mit Gradbuttons 0–5, wählbaren Umständen, zwei Ticks und passenden Ergebnishinweisen im Chat
 - Splitterpunkte für +3 VTD und Splitterpunkt-Resonanz für weitere +2 VTD direkt an der Angriffskarte
 - korrekte Vorbereitung und Auslösung von Fernkampfangriffen und Zaubern
-- übersichtliche Kampfereignisse für Angriff, Abwehr, Schaden und Patzer mit weiter nutzbaren Splittermond-Aktionen
+- vorgangsbezogene Kampfereignisse für Angriff, Abwehr, Schaden und Patzer: Das HUD öffnet automatisch nur den nächsten noch ausstehenden Schritt, hält laufende Aktive Abwehren bis zur Tickzahlung im Fokus und erfasst auch Gelegenheitsangriffe außerhalb des aktiven Combatants
 - Unterstützung der Meisterschaft **Verteidiger** einschließlich Reichweiten- und Abwehrprüfung
 - Ziel-Quickmenü, Mehrfachziele und zwischen Clients synchronisiertes Primärziel
+- Ein-Klick-Markierung für Kampfziele, deren Lebenspunkte auf 0 gesunken sind
 - durchsuchbare Handlungsübersicht, Tickbuttons, freie Tickeingabe, Abwartend, Bereithalten und Reaktivieren, fortgeführte Angriffsboni aus **Zielen** und **Lücke suchen** sowie eine automatisch gepflegte, am Token sichtbare Markierung für laufende kontinuierliche Handlungen
 - dauerhafte Zuordnung von Charakteren, NSCs und einzelnen Tokens zu Benutzern
 - Rechteprüfung für Ressourcen, Verteidigungswerte und ausführbare Chatkarten-Aktionen
