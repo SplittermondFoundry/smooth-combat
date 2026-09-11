@@ -29,7 +29,7 @@ function primaryTargetTokenUuid(context) {
     return context?.primaryTargetTokenUuid ?? context?.targetTokenUuid ?? null;
 }
 
-export async function withTrackedDamageApplication(message, callback, action = "applyDamageToUserTargets") {
+export async function withTrackedDamageApplication(message, callback, action = "applyDamageToUserTargets", actors = null) {
     if (!isDamageApplicationAction(action)) return callback();
     if (damageApplicationLocks.has(message.id) || isDamageApplicationBlocked(message)) return;
     damageApplicationLocks.add(message.id);
@@ -37,15 +37,16 @@ export async function withTrackedDamageApplication(message, callback, action = "
     let callbackResult;
     let callbackError = null;
     try {
+        actors ??= damageApplicationActors(message, action);
         await setDamageApplicationState(message, "applying");
         application = {
             messageId: message.id,
-            actorUuids: damageApplicationActorUuids(message, action),
+            actorUuids: new Set(actors.map((actor) => actor.uuid).filter(Boolean)),
             completionPromises: [],
         };
         services.addPendingDamageApplication(application);
         try {
-            callbackResult = await callback();
+            callbackResult = await services.withTrackedHealthCosts(application, actors, callback);
         } catch (error) {
             callbackError = error;
         }
@@ -132,23 +133,23 @@ async function persistUncertainDamageState(message, originalError) {
     }
 }
 
-function damageApplicationActorUuids(message, action) {
-    const actorUuids = new Set();
+function damageApplicationActors(message, action) {
+    const actors = new Set();
     const normalized = String(action ?? "").trim().toLocaleLowerCase();
     if (normalized === "applydamagetoself") {
-        const speakerActorUuid = services.resolveSpeakerActor(message)?.uuid;
-        if (speakerActorUuid) actorUuids.add(speakerActorUuid);
-        return actorUuids;
+        const speakerActor = services.resolveSpeakerActor(message);
+        return speakerActor ? [speakerActor] : [];
     }
     if (normalized === "applydamagetotargets") {
         for (const target of game.user?.targets ?? []) {
-            const actorUuid = target?.document?.actor?.uuid ?? target?.actor?.uuid;
-            if (actorUuid) actorUuids.add(actorUuid);
+            const actor = target?.document?.actor ?? target?.actor;
+            if (actor) actors.add(actor);
         }
+        return [...actors];
     }
     const linkedTarget = resolveDamageApplicationTarget(message);
-    if (linkedTarget?.actor?.uuid) actorUuids.add(linkedTarget.actor.uuid);
-    return actorUuids;
+    if (linkedTarget?.actor) actors.add(linkedTarget.actor);
+    return [...actors];
 }
 
 export function isDamageApplicationAction(action) {
@@ -410,8 +411,10 @@ export async function applyOwnedSelfDamage(message, actionData, target) {
     let callbackError = null;
     try {
         try {
-            callbackResult = await services.withTemporarySystemTargets([target], () =>
-                message.system.handleGenericAction({ ...actionData, action: "applyDamageToTargets" })
+            callbackResult = await services.withTrackedHealthCosts(application, [target.actor], () =>
+                services.withTemporarySystemTargets([target], () =>
+                    message.system.handleGenericAction({ ...actionData, action: "applyDamageToTargets" })
+                )
             );
         } catch (error) {
             callbackError = error;

@@ -2,6 +2,7 @@
 
 ## Noch nicht veröffentlicht
 
+- Schadensanwendungen aus dem HUD beobachten den Lebenspunkte-Verbrauch direkt am tatsächlichen Ziel, sowohl über `consumeCost` (Splittermond 14.2.7) als auch über `applyCost` (14.3.0-beta3). Der neue Systemaufruf sowie fehlende oder ersetzte globale Schadensfeedback-Hooks lassen die Schadenskarte dadurch nicht mehr offen: Nach bestätigter Buchung (auch bei null Schaden) kehrt der Ablauf zur Angriffskarte mit den offenen Ticks zurück. Abgebrochene Dialoge bleiben offen; wiederholtes Anwenden abgeschlossener Schäden bleibt gesperrt.
 - Manuell aufgeklappte Kampfereignisse bleiben beim Buchen einer Bewegung und beim Charakterwechsel offen. Die Angriffskarte klappt nicht mehr kurz ein und verschiebt dadurch das gesamte HUD.
 - Kartenwechsel werden unmittelbar verarbeitet; verzögerte Aufklapp-Ereignisse können die wiederhergestellte Ansicht nicht mehr zurücksetzen. Während eines langsamen HUD-Aufbaus vorgenommene Änderungen am Aufklappzustand bleiben erhalten.
 - Das Speichern und Zurücksetzen von Tokenbewegungen aktualisiert nur den Bewegungstracker. Bewegungen anderer Tokens lösen dafür keine HUD-Aktualisierung aus.

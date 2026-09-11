@@ -28,7 +28,7 @@ import {
     setOptionalFlag,
     setRequiredFlag,
 } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
-import { installHealthCostFeedbackInterceptor } from "../Modul/splittermond-smoother-fight/scripts/features/feedback/feedback.js";
+import { installHealthCostFeedbackInterceptor, withTrackedHealthCosts } from "../Modul/splittermond-smoother-fight/scripts/features/feedback/feedback.js";
 import {
     applyRemoteFumbleAction,
     enforceFumbleActionState,
@@ -176,6 +176,7 @@ class TestActor {
 }
 
 configureServices({
+    withTrackedHealthCosts,
     addPendingDamageApplication: (application) => harness.pendingDamageApplications.push(application),
     addPendingLegacyTickMessage: (messageId) => harness.legacyLocks.add(messageId),
     canAdvanceCombatWorkflowTicks: (...args) => harness.canAdvanceCombatWorkflowTicks(...args),

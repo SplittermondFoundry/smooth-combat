@@ -183,7 +183,7 @@ async function handleChatMessageAction(event, button, message) {
                 services.scheduleRender();
                 return;
             }
-            await withTrackedDamageApplication(message, () => applyDamageToLinkedTarget(message, actionData, target));
+            await withTrackedDamageApplication(message, () => applyDamageToLinkedTarget(message, actionData, target), action, [target.actor]);
             services.scheduleRender();
             return;
         }

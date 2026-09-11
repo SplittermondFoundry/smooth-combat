@@ -26,6 +26,10 @@ import {
     getSetting,
 } from "../../shared/values.js";
 
+const healthCostInvocations = new WeakSet();
+const scopedHealthCostObservers = new WeakMap();
+const HEALTH_COST_METHODS = ["consumeCost", "applyCost"];
+
 export function announceMessageFeedback(message) {
     if (!message?.id || feedbackState.heardMessageIds.has(message.id)) return;
     let kind = null;
@@ -91,51 +95,110 @@ export function announceAppliedDamageFeedback(actor) {
 
 export function installHealthCostFeedbackInterceptor() {
     const prototype = CONFIG?.Actor?.documentClass?.prototype;
-    if (!prototype || typeof prototype.consumeCost !== "function") return;
+    if (!prototype) return;
     const marker = Symbol.for(`${MODULE_ID}.healthCostFeedbackInterceptor`);
-    if (prototype[marker]) return;
+    for (const method of HEALTH_COST_METHODS) {
+        const original = prototype[method];
+        if (typeof original !== "function" || original[marker]) continue;
+        const intercepted = function smootherFightHealthCost(...args) {
+            return observeHealthCost(this, original, args);
+        };
+        Object.defineProperty(intercepted, marker, { value: true });
+        prototype[method] = intercepted;
+    }
+}
 
-    const original = prototype.consumeCost;
-    prototype.consumeCost = function smootherFightConsumeCost(resource, cost, ...args) {
-        const tracksHealth = String(resource ?? "").toLocaleLowerCase() === "health";
-        const previous = tracksHealth ? healthCostTotal(this.system?.health) : null;
-        const damageApplication = tracksHealth
-            ? services.findPendingDamageApplicationForActor(this.uuid)
-            : null;
-        let result;
-        try {
-            result = original.call(this, resource, cost, ...args);
-        } catch (error) {
-            if (tracksHealth) {
-                const current = healthCostTotal(this.system?.health);
-                const outcome = healthCostOutcome(this, previous, current, "failed", error);
-                if (damageApplication) damageApplication.completionPromises?.push(Promise.resolve(outcome));
-                else if (outcome.damage > 0) requestDamageInterruption(outcome);
+// Track the method actually called on each target, including instance overrides
+// and replacements made after ready. Restore its exact descriptor afterwards.
+export async function withTrackedHealthCosts(application, actors, callback) {
+    const restorations = [];
+    try {
+        for (const actor of new Set(actors)) {
+            for (const method of HEALTH_COST_METHODS) {
+                const restore = observeActorHealthCost(application, actor, method);
+                if (restore) restorations.push(restore);
             }
-            throw error;
         }
-        if (tracksHealth) {
-            const completion = Promise.resolve(result).then(() => {
-                const current = healthCostTotal(this.system?.health);
-                if (healthCostFeedbackKind(previous, current, true) === "damageBlocked") {
-                    publishFeedback("damageBlocked", feedbackReferenceForActor(this));
-                }
-                return healthCostOutcome(this, previous, current, "completed", null);
-            }, (error) => healthCostOutcome(
-                this,
-                previous,
-                healthCostTotal(this.system?.health),
-                "failed",
-                error
-            ));
-            if (damageApplication) damageApplication.completionPromises?.push(completion);
-            else void completion.then((outcome) => {
-                if (outcome.damage > 0) requestDamageInterruption(outcome);
-            });
-        }
-        return result;
+        return await callback();
+    } finally {
+        for (const restore of restorations.reverse()) restore();
+    }
+}
+
+function observeActorHealthCost(application, actor, method) {
+    if (typeof actor?.[method] !== "function") return null;
+    const observers = scopedHealthCostObservers.get(actor) ?? new Map();
+    let observer = observers.get(method);
+    if (!observer || actor[method] !== observer.intercepted) {
+        observer = {
+            descriptor: Object.getOwnPropertyDescriptor(actor, method),
+            original: actor[method],
+            applications: [],
+        };
+        observer.intercepted = function smootherFightTrackedHealthCost(...args) {
+            return observeHealthCost(this, observer.original, args, observer.applications.at(-1));
+        };
+        Object.defineProperty(actor, method, { configurable: true, writable: true, value: observer.intercepted });
+        observers.set(method, observer);
+        scopedHealthCostObservers.set(actor, observers);
+    }
+    observer.applications.push(application);
+    return () => {
+        observer.applications.splice(observer.applications.lastIndexOf(application), 1);
+        if (observer.applications.length) return;
+        if (observers.get(method) === observer) observers.delete(method);
+        if (!observers.size) scopedHealthCostObservers.delete(actor);
+        if (actor[method] !== observer.intercepted) return;
+        if (observer.descriptor) Object.defineProperty(actor, method, observer.descriptor);
+        else delete actor[method];
     };
-    Object.defineProperty(prototype, marker, { value: true });
+}
+
+function observeHealthCost(actor, original, args, application = null) {
+    const [resource] = args;
+    // A scoped observer can wrap the ready interceptor (or another scoped
+    // observer). Only the outer invocation owns completion and feedback.
+    if (healthCostInvocations.has(actor)) return original.apply(actor, args);
+    const tracksHealth = String(resource ?? "").toLocaleLowerCase() === "health";
+    const previous = tracksHealth ? healthCostTotal(actor.system?.health) : null;
+    const damageApplication = tracksHealth
+        ? application ?? services.findPendingDamageApplicationForActor(actor.uuid)
+        : null;
+    let result;
+    try {
+        healthCostInvocations.add(actor);
+        result = original.apply(actor, args);
+    } catch (error) {
+        if (tracksHealth) {
+            const current = healthCostTotal(actor.system?.health);
+            const outcome = healthCostOutcome(actor, previous, current, "failed", error);
+            if (damageApplication) damageApplication.completionPromises?.push(Promise.resolve(outcome));
+            else if (outcome.damage > 0) requestDamageInterruption(outcome);
+        }
+        throw error;
+    } finally {
+        healthCostInvocations.delete(actor);
+    }
+    if (tracksHealth) {
+        const completion = Promise.resolve(result).then(() => {
+            const current = healthCostTotal(actor.system?.health);
+            if (healthCostFeedbackKind(previous, current, true) === "damageBlocked") {
+                publishFeedback("damageBlocked", feedbackReferenceForActor(actor));
+            }
+            return healthCostOutcome(actor, previous, current, "completed", null);
+        }, (error) => healthCostOutcome(
+            actor,
+            previous,
+            healthCostTotal(actor.system?.health),
+            "failed",
+            error
+        ));
+        if (damageApplication) damageApplication.completionPromises?.push(completion);
+        else void completion.then((outcome) => {
+            if (outcome.damage > 0) requestDamageInterruption(outcome);
+        });
+    }
+    return result;
 }
 
 function healthCostOutcome(actor, previous, current, status, error) {
