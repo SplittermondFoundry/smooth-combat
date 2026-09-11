@@ -26,6 +26,30 @@ import { services } from "../Modul/splittermond-smoother-fight/scripts/core/serv
 
 const MODULE_ID = "splittermond-smoother-fight";
 
+test("movement status maintenance refreshes HUD parts while ordinary completion retains a document render", async (t) => {
+    const previous = { ...services };
+    t.after(() => { for (const key of Object.keys(services)) delete services[key]; Object.assign(services, previous); });
+    const full = [], partial = [];
+    const movement = continuousActionFixture(continuousActionRecord({ actionId: "walk" }));
+    installGlobals(movement.user);
+    services.getActivePrimaryGm = () => movement.user;
+    services.scheduleRender = (...args) => full.push(args);
+    services.scheduleHudCanvasRefresh = (...args) => partial.push(args);
+    assert.equal(await advanceContinuousActions(movement.combat), true, "restore movement status effects");
+    movement.combatant.initiative++;
+    assert.equal(await advanceContinuousActions(movement.combat), true, "extend movement timing");
+    assert.deepEqual(full, []);
+    assert.deepEqual(partial, [[null, { movementComplete: true }], [null, { movementComplete: true }]]);
+    assert.equal(movement.actor.effects.length, 2);
+
+    const ordinary = continuousActionFixture(continuousActionRecord({ actionId: "useItem" }));
+    ordinary.combat.combatant = ordinary.combatant;
+    ordinary.combat.currentTick = 15;
+    assert.equal(await advanceContinuousActions(ordinary.combat), true);
+    assert.equal(ordinary.token.getFlag(MODULE_ID, CONTINUOUS_ACTION_FLAG), null);
+    assert.deepEqual(full, [[0]]);
+});
+
 test("continuous-action records are strict token- and combat-bound tags", () => {
     const record = continuousActionRecord();
     const fixture = continuousActionFixture(record);

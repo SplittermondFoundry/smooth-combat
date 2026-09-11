@@ -922,6 +922,21 @@ test("flow-managed cards open only for a pending step while manual history expan
     );
 });
 
+test("manually opened history in a flow-managed HUD survives movement updates and actor changes", () => {
+    for (const currentCombatantId of ["Farruk", "Kor", "Pranke"]) {
+        const turn = {
+            flowManaged: true, currentCombatantId, currentActorId: currentCombatantId,
+            eventCombatantIds: new Map([["bow", "Taur-na-Fuin"]]),
+            eventActorIds: new Map([["bow", "Taur-na-Fuin"]]),
+        };
+        assert.deepEqual([...resolveCombatEventOpenIds(["bow"], ["bow"], ["bow"], turn)], ["bow"]);
+        assert.deepEqual([...resolveCombatEventOpenIds(["bow"], [], ["bow"], turn)], [], "manual collapse also survives");
+        assert.deepEqual([...resolveCombatEventOpenIds(["bow"], ["bow"], ["bow"], {
+            ...turn, previousFocusedEventId: "bow", focusedEventId: null,
+        })], [], "completed automatic focus still closes");
+    }
+});
+
 test("all events close when the latest event does not belong to the active combatant", () => {
     const turn = {
         currentCombatantId: "combatant-2",

@@ -52,9 +52,11 @@ import {
 } from "../Modul/splittermond-smoother-fight/scripts/features/hud/movement.js";
 
 const renderCalls = [];
+const canvasCalls = [];
 const movementHarness = {};
 configureServices({
     scheduleRender: (...args) => renderCalls.push(args),
+    scheduleHudCanvasRefresh: (...args) => canvasCalls.push(args),
     scheduleMovementTokenControls,
     addCombatTicks: (...args) => movementHarness.addCombatTicks(...args),
     createTickActionChatCard: (...args) => movementHarness.createTickActionChatCard(...args),
@@ -280,18 +282,51 @@ test("walking stores the selected route, returns to the start, and advances at t
     ]);
     assert.equal(fixture.chatCards[0].options.movementDistance, 10);
 
+    renderCalls.length = canvasCalls.length = 0;
+
     fixture.combat.currentTick = 4;
     assert.equal(await advancePendingMovements(fixture.combat), true);
     assert.equal(fixture.token.x, 50);
     assert.equal(fixture.plan().completedFraction, 0.5);
     assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction").actionId, "walk");
 
+    await fixture.token.setFlag("splittermond-smoother-fight", "continuousActionInterruptions", [{
+        version: 1, id: "pending-interruption", actionId: "walk",
+        actionRecordId: fixture.token.getFlag("splittermond-smoother-fight", "continuousAction").id,
+        combatId: fixture.combat.id, combatantId: fixture.combatant.id,
+        tokenUuid: fixture.token.uuid, actorUuid: "Actor.test", damage: 3, difficulty: 18,
+    }]);
+
     fixture.combat.currentTick = 6;
     assert.equal(await advancePendingMovements(fixture.combat), true);
     assert.equal(fixture.token.x, 100);
     assert.equal(fixture.plan(), null);
     assert.equal(fixture.token.getFlag("splittermond-smoother-fight", "continuousAction"), null);
+    assert.deepEqual(fixture.token.getFlag("splittermond-smoother-fight", "continuousActionInterruptions"), []);
     assert.deepEqual(fixture.moveCalls.map((call) => call.waypoints.at(-1).x), [50, 100]);
+    assert.deepEqual(renderCalls, [], "automatic milestones never rebuild the HUD");
+    assert.deepEqual(canvasCalls, Array.from({ length: 3 }, () => [null, { movementComplete: true }]));
+});
+
+test("default route creation, progress and completion only request partial HUD updates", async (t) => {
+    const fixture = scheduledMovementFixture("walk");
+    await performTrackedMovementAction(fixture.context, { id: "walk", ticks: 5 });
+    installMovementCanvas(t, [fixture.token]);
+    const settings = game.settings;
+    game.settings = { get: (_scope, key) => key === "showMovementRoutesByDefault" ? true : undefined };
+    t.after(() => { clearMovementRoutePreview(); game.settings = settings; });
+    renderCalls.length = canvasCalls.length = 0;
+    assert.equal(syncDefaultMovementRoutePreviews(fixture.combat), true);
+    assert.equal(isMovementRoutePreviewVisible(fixture.token), true);
+    assert.equal(syncDefaultMovementRoutePreviews(fixture.combat), false);
+    fixture.combat.currentTick = 4;
+    await advancePendingMovements(fixture.combat);
+    assert.equal(syncDefaultMovementRoutePreviews(fixture.combat), true);
+    fixture.combat.currentTick = 6;
+    await advancePendingMovements(fixture.combat);
+    assert.equal(isMovementRoutePreviewVisible(fixture.token), false);
+    assert.deepEqual(renderCalls, []);
+    assert.deepEqual(canvasCalls, [[], [null, { movementComplete: true }], [], [null, { movementComplete: true }]]);
 });
 
 test("crawling remains continuous until its route target at tick 5", async () => {

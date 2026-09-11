@@ -3,7 +3,8 @@ import { hudState } from "./state.js";
 import { services } from "../../core/services.js";
 
 import { getHudContext } from "./context.js";
-import { refreshHudCanvas, refreshHudCanvasVisibility } from "./canvas-updates.js";
+import { isHudCanvasContextCurrent, refreshHudCanvas, refreshHudCanvasVisibility } from "./canvas-updates.js";
+import { refreshHudVisibilityParts } from "./canvas-parts.js";
 import { clearActionTooltip } from "./action-tooltips.js";
 
 import {
@@ -23,13 +24,29 @@ export function scheduleRender(delay = 40) {
     }, delay);
 }
 
-export function scheduleHudCanvasRefresh() {
+export function scheduleHudCanvasRefresh(recordedToken = null, { movementComplete = false, documentChanges = null } = {}) {
     const root = hudState.hud?.element;
-    // Hide stale target information synchronously, before an asynchronous rebuild.
+    // Recorded paths only affect the active movement tracker. Other token
+    // positions and sight are handled separately by updateToken/sightRefresh.
+    if (recordedToken && recordedToken.uuid !== getHudContext()?.token?.uuid) return;
+    // Token flags include completed plans and cleared interruption requests,
+    // including changes received by clients that do not execute the movement.
+    const flagsChanged = Object.keys(documentChanges ?? {}).some((key) => key === "flags" || key.startsWith("flags."));
+    hudState.canvasMovementComplete ||= movementComplete || flagsChanged;
     if (refreshHudCanvasVisibility(root)) scheduleRender(0);
     if (!root || hudState.canvasFrame !== null) return;
     hudState.canvasFrame = requestAnimationFrame(() => {
         hudState.canvasFrame = null;
+        if (hudState.canvasMovementComplete) {
+            hudState.canvasMovementComplete = false;
+            const context = getHudContext();
+            hudState.canvasPartsPending ||= Boolean(hudState.hud?.renderTask) || !isHudCanvasContextCurrent(context);
+            if (context && isHudCanvasContextCurrent(context) && !root.hidden && !root.classList.contains("is-hidden")) {
+                // Defender eligibility depends on distances to other tokens.
+                // Re-evaluate once after movement, never on every sight frame.
+                refreshHudVisibilityParts(root, context);
+            }
+        }
         refreshHudCanvas(root);
     });
 }
@@ -38,10 +55,14 @@ export function clearHudCanvasRefresh() {
     if (hudState.canvasFrame !== null) cancelAnimationFrame(hudState.canvasFrame);
     clearTimeout(hudState.renderTimer);
     hudState.canvasFrame = hudState.renderTimer = null;
+    hudState.canvasMovementComplete = false;
     hudState.canvasGeneration++;
     hudState.canvasSignature = null;
+    hudState.canvasPendingContext = null;
+    hudState.canvasPartsPending = false;
     hudState.canvasValues.clear();
     hudState.movementDistanceCache = new WeakMap();
+    hudState.canvasMarkup = new WeakMap();
     hudState.hud?.cancelRender?.();
     clearActionTooltip();
     if (hudState.hud?.element) hudState.hud.element.hidden = true;
@@ -54,7 +75,7 @@ export function scheduleRenderAfterTokenMovement(token) {
         const object = token?.object ?? canvas?.tokens?.get?.(token?.id);
         const movement = object?.movementAnimationPromise;
         const refresh = () => {
-            if (generation === hudState.canvasGeneration) scheduleHudCanvasRefresh();
+            if (generation === hudState.canvasGeneration) scheduleHudCanvasRefresh(null, { movementComplete: true });
         };
         if (!movement || typeof movement.then !== "function") {
             refresh();

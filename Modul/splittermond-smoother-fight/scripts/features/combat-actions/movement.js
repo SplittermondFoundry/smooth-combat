@@ -156,7 +156,7 @@ export async function advancePendingMovements(combat = globalThis.game?.combat) 
             firstError ??= error;
         }
     }
-    if (changed) services.scheduleRender(0);
+    if (changed) services.scheduleHudCanvasRefresh(null, { movementComplete: true });
     if (firstError) throw firstError;
     return changed;
 }
@@ -384,7 +384,7 @@ export function syncDefaultMovementRoutePreviews(combat = globalThis.game?.comba
             defaultPreviewPlanKeys.delete(reference);
         }
     }
-    if (changed) services.scheduleRender(0);
+    if (changed) services.scheduleHudCanvasRefresh();
     return changed;
 }
 

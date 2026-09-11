@@ -62,7 +62,7 @@ export async function clearContinuousActionInterruptionRequests(token, { actionR
             : [];
         if (retained.length === requests.length) return false;
         await setRequiredDocumentFlag(token, INTERRUPTION_FLAG, retained);
-        services.scheduleRender?.(0);
+        services.scheduleHudCanvasRefresh?.(null, { movementComplete: true });
         return true;
     });
 }

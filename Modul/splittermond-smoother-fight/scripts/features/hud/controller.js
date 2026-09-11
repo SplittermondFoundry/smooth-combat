@@ -1,5 +1,6 @@
 import { hudState } from "./state.js";
-import { rememberHudCanvas, refreshHudCanvas } from "./canvas-updates.js";
+import { hudCanvasContextKey, rememberHudCanvas, refreshHudCanvas, refreshHudCanvasVisibility } from "./canvas-updates.js";
+import { rememberHudMarkup, refreshHudVisibilityParts } from "./canvas-parts.js";
 
 import { services } from "../../core/services.js";
 
@@ -16,7 +17,7 @@ import {
     applyCombatEventExpansionRequest,
     applyCombatWorkflowFocus,
     captureHudViewState,
-    enforceCombatEventAccordion,
+    toggleCombatEventDisclosure,
     requestActionMenuExpansion,
     restoreHudViewState,
 } from "./view-state.js";
@@ -327,7 +328,6 @@ class SmootherFightHud {
         });
         this.element.addEventListener("toggle", (event) => {
             fitTickActionReferencePanel(event.target);
-            enforceCombatEventAccordion(this.element, event.target);
         }, true);
         this.element.addEventListener("contextmenu", (event) => this.onContextMenu(event));
         this.element.addEventListener("dragstart", (event) => this.onFavoriteSkillDragStart(event));
@@ -361,10 +361,9 @@ class SmootherFightHud {
     async renderOnce() {
         if (!this.element) return;
         const generation = ++this.renderGeneration;
-        const viewState = captureHudViewState(this.element);
         const forceLatestEvent = services.isCombatEventDeletionPending();
         const context = getHudContext();
-        rememberHudCanvas(context);
+        const contextKey = hudCanvasContextKey(context);
         const enabled = getSetting("enabled", true);
         if (!enabled || !context) {
             hudState.hiddenByShortcut = false;
@@ -379,6 +378,8 @@ class SmootherFightHud {
         syncSystemActionBar(visible, minimized);
         syncMinimizedHudPosition(this.element, minimized);
         if (!visible) {
+            rememberHudCanvas(context);
+            this.element.inert = false;
             services.clearCombatEventDeletionPending();
             delete this.element.dataset.activeCombatantId;
             delete this.element.dataset.activeActorId;
@@ -388,12 +389,24 @@ class SmootherFightHud {
             return;
         }
 
-        const html = await buildHud(context, { movementDistanceCache: hudState.movementDistanceCache });
+        refreshHudCanvasVisibility(this.element, { rendering: true });
+        const html = await buildHud(context, { movementDistanceCache: new WeakMap() });
         if (generation !== this.renderGeneration) return;
+        const liveContext = getHudContext();
+        if (hudCanvasContextKey(liveContext) !== contextKey) {
+            this.renderRequested = true;
+            return;
+        }
+        // The current DOM remains interactive during same-character builds.
+        // Preserve the user's latest expansion choice, not the pre-await one.
+        const viewState = captureHudViewState(this.element);
         services.clearHoveredToken();
         clearActionTooltip();
         this.element.innerHTML = html;
+        rememberHudMarkup(this.element);
+        rememberHudCanvas(context);
         this.element.hidden = false;
+        this.element.inert = false;
         this.element.dataset.activeCombatantId = context.combatant.id ?? "";
         this.element.dataset.activeActorId = context.actor?.id ?? "";
         services.enforceChatPermissions(this.element, context);
@@ -410,6 +423,11 @@ class SmootherFightHud {
         applyCombatEventExpansionRequest(this.element);
         applyCombatWorkflowFocus(this.element);
         applyActionMenuExpansionRequest(this.element);
+        if (hudState.canvasPartsPending) {
+            hudState.canvasPartsPending = false;
+            refreshHudVisibilityParts(this.element, liveContext);
+            rememberHudCanvas(liveContext);
+        }
         refreshHudCanvas(this.element);
     }
 
@@ -435,6 +453,7 @@ class SmootherFightHud {
     }
 
     async onClick(event) {
+        if (toggleCombatEventDisclosure(this.element, event)) return;
         const target = event.target.closest("[data-sf-action], [data-sf-roll-toggle], .sf-chat-message .splittermond-chat-action, .sf-chat-message button, .sf-chat-message [role=button]");
         if (!target || !this.element.contains(target)) return;
         if (target.closest(".sf-skill-favorites") && Date.now() < this.favoriteSkillClickBlockedUntil) {

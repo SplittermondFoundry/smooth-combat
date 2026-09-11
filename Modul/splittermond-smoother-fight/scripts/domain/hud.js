@@ -91,6 +91,10 @@ export function resolveCombatEventOpenIds(previousEventIds, previousOpenEventIds
         const previousFocusedEventId = turn.previousFocusedEventId ?? null;
         if (previousFocusedEventId) open.delete(previousFocusedEventId);
         for (const eventId of newEventIds) open.delete(eventId);
+        // A manually opened history card is independent of the active actor.
+        // Unrelated updates and turn changes must not undo that choice. Actual
+        // workflow completion above and changed event lists keep their rules.
+        if (!structureChanged) return open;
     }
 
     const currentCombatantId = turn.currentCombatantId ?? null;

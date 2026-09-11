@@ -192,18 +192,25 @@ export async function advanceContinuousActions(combat = globalThis.game?.combat)
     if (primaryGm && primaryGm.id !== globalThis.game?.user?.id) return false;
 
     let changed = false;
+    let documentChanged = false;
     let firstError;
     for (const combatant of combatantsOf(combat)) {
         const token = tokenDocument(combatant?.token);
         if (!token || (!primaryGm && !mayCurrentUserManage(combatant, token))) continue;
         try {
-            changed = await syncContinuousAction(token, combatant, combat) || changed;
+            const action = readContinuousAction(token);
+            const updated = await syncContinuousAction(token, combatant, combat);
+            changed ||= updated;
+            // Movement timing/status maintenance only affects synchronous HUD
+            // parts. Other completions can change posture, resources or actions.
+            documentChanged ||= updated && continuousActionCompletionTrigger(action) !== "movement";
         } catch (error) {
             console.error(`${MODULE_ID} | Could not advance continuous action for ${token.uuid ?? token.id}`, error);
             firstError ??= error;
         }
     }
-    if (changed) services.scheduleRender?.(0);
+    if (documentChanged) services.scheduleRender?.(0);
+    else if (changed) services.scheduleHudCanvasRefresh?.(null, { movementComplete: true });
     if (firstError) throw firstError;
     return changed;
 }

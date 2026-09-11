@@ -1,5 +1,16 @@
 # Changelog
 
+## Noch nicht veröffentlicht
+
+- Manuell aufgeklappte Kampfereignisse bleiben beim Buchen einer Bewegung und beim Charakterwechsel offen. Die Angriffskarte klappt nicht mehr kurz ein und verschiebt dadurch das gesamte HUD.
+- Kartenwechsel werden unmittelbar verarbeitet; verzögerte Aufklapp-Ereignisse können die wiederhergestellte Ansicht nicht mehr zurücksetzen. Während eines langsamen HUD-Aufbaus vorgenommene Änderungen am Aufklappzustand bleiben erhalten.
+- Das Speichern und Zurücksetzen von Tokenbewegungen aktualisiert nur den Bewegungstracker. Bewegungen anderer Tokens lösen dafür keine HUD-Aktualisierung aus.
+- Sichtwechsel entfernen oder ergänzen Zielinformationen und betroffene Kampfereignisse unmittelbar, ohne das gesamte HUD auszublenden oder neu aufzubauen. Unveränderte Porträts, Chatkarten, geöffnete Menüs und Suchfelder bleiben erhalten.
+- Zielabhängige Abwehrmöglichkeiten und Tick-Sperren bleiben bei Sichtwechseln aktuell. Ein bereits laufender HUD-Aufbau kann anschließend keine veralteten Zielinformationen wieder einblenden.
+- Automatische Bewegungen beim Charakterwechsel, Routenfortschritt und die Pflege von Bewegungsstatus lösen keine zusätzlichen vollständigen HUD-Aufbauten mehr aus. Abgeschlossene Bewegungen entfernen ihre Routen-, Abbruch- und Unterbrechungsanzeigen auch auf den anderen Clients.
+- Beim gewöhnlichen Zugwechsel bleibt das bisherige HUD bis zum fertigen Nachfolger sichtbar und ist währenddessen nicht bedienbar. Sicht- und Bewegungsaktualisierungen unterbrechen den laufenden Charakteraufbau nicht mehr; aktuelle Teilanzeigen werden vor der Darstellung übernommen.
+- Die Korrektur gilt gleichermaßen für Splittermond 14.2.7 und 14.3.x; Bewegungsregeln und Weltdaten bleiben unverändert.
+
 ## 0.6.4 – 9. September 2026
 
 Änderungen seit **0.6.3**. Dieses Update verbessert die Tokenbewegung, macht Bewegungseinschränkungen deutlicher und reduziert die Arbeit des HUDs während Animationen.

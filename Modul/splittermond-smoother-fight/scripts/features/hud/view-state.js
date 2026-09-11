@@ -181,7 +181,21 @@ export function applyCombatWorkflowFocus(root) {
     return true;
 }
 
-export function enforceCombatEventAccordion(root, disclosure) {
+export function toggleCombatEventDisclosure(root, event) {
+    const summary = event.target?.closest?.("summary");
+    const disclosure = summary?.parentElement;
+    if (event.defaultPrevented || !root?.contains?.(summary)
+        || !disclosure?.matches?.(".sf-event-group, .sf-event-card")) return false;
+    // Handle native summary activation (including keyboard-generated clicks)
+    // synchronously. Programmatic open restoration also emits delayed toggle
+    // events; those must never be mistaken for another user selection.
+    event.preventDefault();
+    disclosure.open = !disclosure.open;
+    enforceCombatEventAccordion(root, disclosure);
+    return true;
+}
+
+function enforceCombatEventAccordion(root, disclosure) {
     if (!disclosure?.open || !root?.contains?.(disclosure)) return false;
     if (disclosure.matches?.(".sf-event-card")) {
         const group = disclosure.closest(".sf-event-group");
@@ -199,7 +213,11 @@ export function enforceCombatEventAccordion(root, disclosure) {
         if (candidate !== disclosure) candidate.open = false;
     });
     const cards = Array.from(disclosure.querySelectorAll(":scope > .sf-event-body > .sf-event-card"));
-    if (!cards.some((card) => card.open)) cards.at(-1)?.setAttribute("open", "");
+    const selected = cards.find((card) => card.open) ?? cards.at(-1);
+    root.querySelectorAll(".sf-event-card[open]").forEach((card) => {
+        card.open = card === selected;
+    });
+    if (selected) selected.open = true;
     return true;
 }
 

@@ -1,0 +1,218 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>HUD Performance Regression</title>
+<link rel="stylesheet" href="/Modul/splittermond-smoother-fight/styles/smoother-fight-0.6.4.css">
+<style>body{background:#142029;color:#eee;font:16px system-ui;padding:24px}#results{white-space:pre-wrap;max-width:1000px}</style>
+<h1>HUD Performance Regression</h1><pre id="results">Tests laufen …</pre>
+<script type="module">
+import {services} from '/Modul/splittermond-smoother-fight/scripts/core/services.js';
+import {hudState} from '/Modul/splittermond-smoother-fight/scripts/features/hud/state.js';
+import {mountHud} from '/Modul/splittermond-smoother-fight/scripts/features/hud/controller.js';
+import {scheduleRender,scheduleHudCanvasRefresh,scheduleRenderAfterTokenMovement,clearHudCanvasRefresh} from '/Modul/splittermond-smoother-fight/scripts/features/hud/visibility.js';
+import {prepareCombatEventContext,getBlockingCombatWorkflow} from '/Modul/splittermond-smoother-fight/scripts/features/combat-events/service.js';
+import {buildCombatEvents,getPendingActiveDefense} from '/Modul/splittermond-smoother-fight/scripts/features/combat-events/view.js';
+import {registerHooks} from '/Modul/splittermond-smoother-fight/scripts/core/lifecycle.js';
+import {isFearRollCompatibilityRequired} from '/Modul/splittermond-smoother-fight/scripts/features/combat-actions/fear-roll-compatibility.js';
+import {bindQuickTargetHover} from '/Modul/splittermond-smoother-fight/scripts/features/targeting/targeting.js';
+import {runTurnMovementRegression} from './hud-turn-movement-regression.js';
+import {runEventStateRegression} from './hud-event-state-regression.js';
+const results=document.querySelector('#results');
+const passed=[];
+function check(value,label){if(!value)throw Error(label);passed.push('PASS '+label);results.textContent=passed.join('\n');}
+const frame=()=>new Promise(requestAnimationFrame);
+const turn=()=>new Promise(resolve=>setTimeout(resolve,0));
+// This page uses real DOM/layout with synthetic Foundry documents. System
+// versions select module compatibility hooks; they do not load either system.
+try {
+const lang=await (await fetch('/Modul/splittermond-smoother-fight/lang/de.json')).json();
+const localize=key=>key.split('.').reduce((value,part)=>value?.[part],lang)??key;
+const icon='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="64" height="64"%3E%3Crect width="64" height="64" fill="teal"/%3E%3C/svg%3E';
+let speedCalls=0, fullBuilds=0, measuredPaths=0, eventCollections=0, holdSpeed=null;
+const user={id:'gm',name:'Test user',isGM:true,targets:new Set()};
+const actor={id:'actor',name:'Test actor',isOwner:true,img:icon,skills:{},items:[],
+ derivedValues:{speed:{value:8}},getFlag:()=>null,testUserPermission:()=>true,
+ attacks:[{id:'sword',name:'Sword',img:icon,weaponSpeed:5,skill:{label:'Sword',value:10},damage:'1W6'}],
+ spells:[{id:'bolt',name:'Bolt',img:icon,range:'10 m',enoughFocus:true,costs:'1',skill:{label:'Fire',value:10}}]};
+const token={id:'active',uuid:'Scene.test.Token.active',actor,name:'Active',x:0,y:0,width:1,height:1,
+ movementHistory:[{x:0,y:0},{x:100,y:0}],measureMovementPath(){measuredPaths++;return {distance:(this.movementHistory.at(-1)?.x??0)/100}}};
+const target={id:'target',uuid:'Scene.test.Token.target',actor,name:'Target',x:100,y:0,width:1,height:1,visible:true};
+const combatant={id:'combatant',token,actor,initiative:0};
+const combat={id:'combat',started:true,combatant,combatants:[combatant]};
+const settings={enabled:true,minimized:false,showCards:true,maxCards:3,movementTracking:true,meleeRange:2,showMovementRoutesByDefault:true};
+globalThis.game={user,combat,messages:{contents:[]},i18n:{lang:'de',localize,format:(key,values)=>localize(key).replace(/\{([^}]+)\}/g,(_,name)=>values[name]??name)},settings:{get:(_,key)=>settings[key]}};
+globalThis.canvas={scene:{id:'test'},grid:{size:100,distance:1,units:'m',type:1}};
+Object.assign(services,{
+ tokenUuid:token=>token?.uuid,resolveCombatantToken:entry=>entry.token,
+ getAssignedUser:()=>user,getRuntimeController:()=>user,
+ getTargetSelectionForUser:()=>({target:target.visible?target:null,targets:target.visible?[target]:[]}),
+ canChooseTarget:()=>true,getTargetSceneTokens:()=>target.visible?[token,target]:[token],
+ getAbortableControlledTokenMovement:()=>null,getGmCheatRollPreset:()=>null,getAttackPreparation:()=>null,
+ isPreparingSpell:()=>false,isCurrentUserTarget:()=>false,isRangedAttack:()=>false,
+ getAttackSpeed:async()=>{speedCalls++;const pending=holdSpeed;holdSpeed=null;if(pending)await pending;return 5},
+ prepareCombatEventContext:(context)=>{eventCollections++;return prepareCombatEventContext(context)},
+ getPendingActiveDefense,getBlockingCombatWorkflow,buildCombatEvents,
+ isDiceAnimationPending:()=>false,getRunningActiveDefense:()=>null,
+ getPendingContinuousActionInterruptionsForCurrentUser:()=>[],feedbackMarkup:()=>'',
+ isCombatEventDeletionPending:()=>false,clearCombatEventDeletionPending(){},clearCombatEventExpansionRequest(){},
+ getCombatEventExpansionRequest:()=>null,clearHoveredToken(){},enforceChatPermissions(){},enforceFumbleActionState(){},bindQuickTargetHover,
+ scheduleRender,scheduleHudCanvasRefresh,isFearRollCompatibilityRequired,
+ prepareFearRollDialog(){},applyFearRollRequirement(){},prepareExistingRenderedChatMessages(){},
+});
+mountHud();
+const hud=hudState.hud;
+const renderOnce=hud.renderOnce.bind(hud);
+let activeBuilds=0,maxActiveBuilds=0;
+hud.renderOnce=async()=>{fullBuilds++;maxActiveBuilds=Math.max(maxActiveBuilds,++activeBuilds);try{return await renderOnce()}finally{activeBuilds--}};
+await hud.render();
+check(!hud.element.hidden && hud.element.querySelector('.sf-actions'),'real HUD mounted');
+await runEventStateRegression({actor,token,target,combat,combatant,user,hud,check,frame,turn,
+ counts:()=>({fullBuilds,speedCalls}),holdBuild:promise=>{holdSpeed=promise}});
+const shell=hud.element.querySelector('.sf-shell');
+const events=hud.element.querySelector('.sf-events');
+const quick=hud.element.querySelector('.sf-quick-targets');quick.open=true;
+const attack=hud.element.querySelector('[data-sf-action="attack"]');
+const spell=hud.element.querySelector('[data-sf-action="spell"]');
+check(attack.classList.contains('is-range-within') && spell.classList.contains('is-range-within'),'initial ranges are within');
+const before={fullBuilds,speedCalls,eventCollections,measuredPaths};
+for(let i=0;i<60;i++){target.x+=25;scheduleHudCanvasRefresh();await frame()}
+check(fullBuilds===before.fullBuilds && speedCalls===before.speedCalls && eventCollections===before.eventCollections,'60 frames: no full builds, speed calculations or chat collections');
+check(measuredPaths===before.measuredPaths,'unchanged movement history is not measured again');
+check(hud.element.querySelector('.sf-shell')===shell && hud.element.querySelector('.sf-events')===events,'shell and chat DOM retained');
+check(hud.element.querySelector('.sf-quick-targets')===quick && quick.open,'open target menu retained');
+check(attack.classList.contains('is-range-outside') && spell.classList.contains('is-range-outside'),'existing attack and spell buttons update to outside');
+check(hud.element.querySelector('.sf-turn-target').textContent.includes('16 m'),'live distance reads 16 m');
+check(hud.element.querySelector('.sf-primary-target-panel .sf-eyebrow').textContent.includes('16 m'),'portrait distance updated');
+target.x=100;scheduleHudCanvasRefresh();await frame();
+check(attack.classList.contains('is-range-within') && spell.classList.contains('is-range-within'),'ranges return within');
+const visibilityBefore={fullBuilds,speedCalls};
+const actorPortrait=hud.element.querySelector('.sf-actor');
+target.visible=false;scheduleHudCanvasRefresh();
+check(!hud.element.hidden && !hud.element.querySelector('.sf-primary-target-panel'),'target loss removes stale target synchronously without hiding HUD');
+target.visible=true;scheduleHudCanvasRefresh();await frame();
+check(Boolean(hud.element.querySelector('.sf-primary-target-panel')),'target restored synchronously after regaining sight');
+check(fullBuilds===visibilityBefore.fullBuilds && speedCalls===visibilityBefore.speedCalls,'sight changes: no full HUD builds or attack speed calculations');
+check(hud.element.querySelector('.sf-shell')===shell && hud.element.querySelector('.sf-actor')===actorPortrait && hud.element.querySelector('[data-sf-action="attack"]')===attack,'sight changes retain shell, actor portrait and attack controls');
+check(hud.element.querySelector('.sf-quick-targets')===quick && quick.open && hud.element.querySelector('.sf-events')===events,'sight changes retain open target menu and event container');
+for(const version of ['14.2.7','14.3.0-beta3']){
+ game.system={id:'splittermond',version};
+ const hooks=new Map();globalThis.Hooks={on(name,callback){if(!hooks.has(name))hooks.set(name,[]);hooks.get(name).push(callback)}};
+ registerHooks();
+ const prior={fullBuilds,eventCollections,speedCalls};
+ for(let i=0;i<4;i++){
+  token.movementHistory.push({x:200+i*100,y:0});
+  for(const callback of hooks.get('recordToken'))callback(token);
+  await frame();await turn();
+ }
+ check(fullBuilds===prior.fullBuilds && eventCollections===prior.eventCollections && speedCalls===prior.speedCalls,version+': four recorded movement updates retain HUD and chat');
+ check(hud.element.querySelector('.sf-movement-heading').textContent.includes('5 m'),version+': movement distance reaches 5 m');
+ token.movementHistory=[];for(const callback of hooks.get('recordToken'))callback(token);await frame();
+ check(hud.element.querySelector('.sf-movement-heading').textContent.includes('0 m'),version+': clearing history updates distance to 0 m');
+ const tracker=hud.element.querySelector('.sf-movement-tracker');
+ for(const callback of hooks.get('recordToken'))callback(target);await frame();
+ check(hud.element.querySelector('.sf-movement-tracker')===tracker && fullBuilds===prior.fullBuilds,version+': unrelated recorded token leaves tracker and HUD untouched');
+}
+
+// A visible historical target can change independently of the selected target.
+let historicalVisible=true;
+const historical={...target,id:'historical',uuid:'Scene.test.Token.historical',name:'Historical'};
+services.getTargetSceneTokens=()=>[token,target,...(historicalVisible?[historical]:[])];
+services.buildCombatEvents=()=>`<section class="sf-events"><div class="sf-event-scroller"><details class="sf-event-group" data-event-id="history"><summary>Attack ${historicalVisible?'<span class="sf-event-target">Historical</span>':''}</summary><div class="sf-event-body"><div class="sf-chat-message" data-message-id="history"><button id="historical-control">Result</button></div></div></details></div></section>`;
+await hud.render();
+const historyGroup=hud.element.querySelector('[data-event-id="history"]');historyGroup.open=true;
+const historyButton=hud.element.querySelector('#historical-control');
+let clicks=0;historyButton.addEventListener('click',()=>clicks++);
+const historyBefore=fullBuilds;
+for(let i=0;i<4;i++){
+ historicalVisible=false;scheduleHudCanvasRefresh();
+ check(!hud.element.querySelector('.sf-event-target') && !hud.element.hidden,'historical target loss '+i+': name removed synchronously');
+ historicalVisible=true;scheduleHudCanvasRefresh();
+ check(hud.element.querySelector('.sf-event-target')?.textContent==='Historical','historical target return '+i+': name restored');
+}
+check(fullBuilds===historyBefore && hud.element.querySelector('#historical-control')===historyButton && historyGroup.open,'historical visibility retains chat node, open event and full build count');
+historyButton.click();check(clicks===1,'retained event handler fires exactly once');
+services.buildCombatEvents=buildCombatEvents;
+services.getTargetSceneTokens=()=>target.visible?[token,target]:[token];
+
+let candidateVisible=true;
+const candidates=Array.from({length:12},(_,i)=>({...target,id:'extra-'+i,uuid:'Scene.test.Token.extra-'+i,name:'Extra '+i}));
+services.getTargetSceneTokens=()=>[token,target,...candidates.filter((_,i)=>candidateVisible||i!==0)];
+await hud.render();
+const structured=hud.element.querySelector('.sf-quick-targets');structured.open=true;
+const search=structured.querySelector('[data-sf-quick-target-search]');
+search.value='Extra';search.dispatchEvent(new Event('input'));search.focus();
+const stablePortrait=hud.element.querySelector('.sf-primary-target-panel .sf-portrait');
+candidateVisible=false;scheduleHudCanvasRefresh();
+check(hud.element.querySelector('[data-sf-quick-target-search]')===search && document.activeElement===search && search.value==='Extra' && structured.open,'structured picker retains input, focus, filter and expansion');
+check(hud.element.querySelector('.sf-primary-target-panel .sf-portrait')===stablePortrait,'an unrelated visibility change retains primary target portrait');
+check(!structured.querySelector('[data-token-uuid="Scene.test.Token.extra-0"]'),'hidden candidate removed from structured picker');
+candidateVisible=true;scheduleHudCanvasRefresh();
+check(Boolean(structured.querySelector('[data-token-uuid="Scene.test.Token.extra-0"]')),'visible candidate returns to structured picker');
+services.getTargetSceneTokens=()=>target.visible?[token,target]:[token];
+services.getPendingActiveDefense=()=>target.visible?{message:{id:'pending'},target,defender:token,role:'defender'}:null;
+await hud.render();
+check(hud.element.querySelector('.sf-defense-response-control')?.textContent.includes('Target'),'defender response names current target');
+target.visible=false;scheduleHudCanvasRefresh();
+check(!hud.element.querySelector('.sf-defense-response-control') && Boolean(hud.element.querySelector('.sf-defense-menu')),'lost target removes defender response and restores ordinary defense');
+target.visible=true;scheduleHudCanvasRefresh();
+check(Boolean(hud.element.querySelector('.sf-defense-response-control')),'defender response returns with visibility');
+services.getPendingActiveDefense=()=>target.x<200?{message:{id:'pending'},target,defender:token,role:'defender'}:null;
+const distanceBefore=fullBuilds;
+target.x=300;scheduleRenderAfterTokenMovement(target);await turn();await frame();
+check(!hud.element.querySelector('.sf-defense-response-control') && fullBuilds===distanceBefore,'movement completion removes out-of-range defender response without full rebuild');
+target.x=100;scheduleRenderAfterTokenMovement(target);await turn();await frame();
+check(Boolean(hud.element.querySelector('.sf-defense-response-control')) && fullBuilds===distanceBefore,'movement completion restores in-range defender response without full rebuild');
+services.getPendingActiveDefense=getPendingActiveDefense;
+let interruptRequests=[{request:{id:'interrupt-a',actionId:'walk',difficulty:15,tokenUuid:token.uuid},token},
+ {request:{id:'interrupt-b',actionId:'sprint',difficulty:20,tokenUuid:target.uuid},token:target}];
+services.getPendingContinuousActionInterruptionsForCurrentUser=()=>interruptRequests;
+await hud.render();
+const retainedInterrupt=hud.element.querySelector('[data-request-id="interrupt-b"]');
+const interruptsBefore=fullBuilds;
+interruptRequests=interruptRequests.slice(1);
+scheduleHudCanvasRefresh(null,{movementComplete:true});await frame();
+check(hud.element.querySelectorAll('.sf-continuous-interruption-control').length===1
+ && hud.element.querySelector('[data-request-id="interrupt-b"]')===retainedInterrupt,'completed action removes only its interruption control and retains other request');
+interruptRequests=[];scheduleHudCanvasRefresh(null,{movementComplete:true});await frame();
+check(!hud.element.querySelector('.sf-continuous-interruption-control') && fullBuilds===interruptsBefore,'all completed interruption requests disappear without full rebuild');
+services.getPendingContinuousActionInterruptionsForCurrentUser=()=>[];
+settings.minimized=true;await hud.render();
+const minimizedBefore={fullBuilds,eventCollections};
+target.visible=false;scheduleHudCanvasRefresh();await frame();
+check(!hud.element.hidden && fullBuilds===minimizedBefore.fullBuilds && eventCollections===minimizedBefore.eventCollections,'minimized sight updates retain HUD without collecting chat');
+target.visible=true;settings.minimized=false;await hud.render();
+let release;holdSpeed=new Promise(resolve=>release=resolve);
+const startSlow=fullBuilds;
+const slow=hud.render();await Promise.resolve();await Promise.resolve();
+for(let i=0;i<10;i++){scheduleRender(0);await turn()}
+check(fullBuilds===startSlow+1,'new document updates wait for the active build');
+target.visible=false;scheduleHudCanvasRefresh();
+check(!hud.element.hidden && !hud.element.querySelector('.sf-primary-target-panel'),'target loss during pending document build is redacted synchronously');
+await turn();
+release();await slow;
+check(fullBuilds===startSlow+2 && maxActiveBuilds===1,'one follow-up and at most one concurrent build');
+check(!hud.element.querySelector('.sf-primary-target-panel'),'stale pending build cannot restore invisible target');
+target.visible=true;scheduleHudCanvasRefresh();
+await runTurnMovementRegression({actor,token,target,combat,combatant,user,hud,check,frame,turn,
+ counts:()=>({fullBuilds,speedCalls}),holdBuild:promise=>{holdSpeed=promise}});
+user.isGM=false;
+const otherUser={id:'other',name:'Other'};
+const personalToken={...token,id:'personal',uuid:'Scene.test.Token.personal',x:5000};
+const personalCombatant={id:'personal-combatant',actor,token:personalToken,initiative:10};
+combat.combatants.push(personalCombatant);
+services.getAssignedUser=entry=>entry.id===combatant.id?otherUser:user;
+services.getRuntimeController=services.getAssignedUser;
+services.getControlledTokenDocument=()=>personalToken;
+await hud.render();
+const personalAttack=hud.element.querySelector('.sf-personal-controls [data-sf-action="attack"]');
+check(personalAttack?.classList.contains('is-range-outside'),'personal combatant uses its own range despite sharing an actor');
+target.x=5100;scheduleHudCanvasRefresh();await frame();
+check(personalAttack.classList.contains('is-range-within'),'personal range updates independently of active combatant');
+check(hud.element.querySelector('.sf-turn-target').textContent.includes('51 m'),'active distance retains active token context');
+combatant.hidden=true;await hud.render();
+const concealedPersonal=hud.element.querySelector('.sf-personal-controls [data-sf-action="attack"]');
+check(concealedPersonal?.classList.contains('is-range-within'),'concealed turn retains personal controls');
+target.x=6000;scheduleHudCanvasRefresh();await frame();
+check(concealedPersonal.classList.contains('is-range-outside'),'personal range stays live during concealed turn');
+clearHudCanvasRefresh();
+check(hud.element.hidden,'scene teardown hides HUD');
+results.textContent=passed.join('\n')+'\n\nALL '+passed.length+' CHECKS PASSED\n'+JSON.stringify({fullBuilds,speedCalls,eventCollections,measuredPaths,maxActiveBuilds},null,2);
+}catch(error){results.textContent=passed.join('\n')+'\nFAIL '+error.stack;document.title='FAILED HUD regression';}
+</script></html>

@@ -71,11 +71,10 @@ import {
 export async function buildHud(context, { movementDistanceCache } = {}) {
     if (!getSetting("minimized", false)) context = services.prepareCombatEventContext?.(context) ?? context;
     if (context.concealed) return buildConcealedHud(context);
-    const { combat, combatant, actor, token, assignedUser, runtimeController, target, targets } = context;
+    const { combat, combatant, actor, token, assignedUser, runtimeController, targets } = context;
     const canAct = Boolean(game.user.isGM || (runtimeController?.id === game.user?.id && actor.isOwner));
     const tick = combat.currentTick ?? Math.round(Number(combatant.initiative) || 0);
     const targetDistance = targetDistancePresentation(context);
-    const targetDistanceSuffix = targetDistance.text ? ` · ${targetDistance.text}` : "";
     const targetLine = targetLinePresentation(context, targetDistance.text);
     const minimized = getSetting("minimized", false);
     const hudToggle = buildHudToggle(minimized);
@@ -142,23 +141,25 @@ export async function buildHud(context, { movementDistanceCache } = {}) {
                 ${canAct ? await buildActionBar(context, targetDistance.measurement) : ""}
                 ${getSetting("showCards", true) ? services.buildCombatEvents(context) : ""}
             </main>
-            <div class="sf-target-column">
-                ${services.canChooseTarget(context) ? buildQuickTargets(context) : ""}
-                ${target ? `<div class="sf-target-list">${buildSecondaryTargets(context)}<div class="sf-primary-target-panel">${portraitPanel({
-                    side: "target",
-                    token: target,
-                    actor: target.actor,
-                    eyebrow: `${t("SMOOTHER_FIGHT.HUD.PrimaryTarget")}${targetDistanceSuffix}`,
-                    headerActions: buildTargetHeaderActions(context),
-                    action: "open-token-sheet",
-                    highlighted: services.isCurrentUserTarget(target),
-                    primary: true,
-                    defeated: isTargetDefeated(context),
-                    showDefenses: canViewDefenseValues(target.actor),
-                })}</div></div>` : noTargetPanel()}
-            </div>
+            ${buildTargetColumn(context)}
         </div>
     `;
+}
+
+export function buildTargetColumn(context) {
+    if (context.concealed) return '<div class="sf-target-column sf-concealed-target-column" aria-hidden="true"></div>';
+    const { target } = context;
+    const distance = targetDistancePresentation(context).text;
+    return `<div class="sf-target-column">
+        ${services.canChooseTarget(context) ? buildQuickTargets(context) : ""}
+        ${target ? `<div class="sf-target-list">${buildSecondaryTargets(context)}<div class="sf-primary-target-panel">${portraitPanel({
+            side: "target", token: target, actor: target.actor,
+            eyebrow: `${t("SMOOTHER_FIGHT.HUD.PrimaryTarget")}${distance ? ` · ${distance}` : ""}`,
+            headerActions: buildTargetHeaderActions(context), action: "open-token-sheet",
+            highlighted: services.isCurrentUserTarget(target), primary: true,
+            defeated: isTargetDefeated(context), showDefenses: canViewDefenseValues(target.actor),
+        })}</div></div>` : noTargetPanel()}
+    </div>`;
 }
 
 async function buildConcealedHud(context) {
@@ -355,7 +356,7 @@ function buildCombatControls(context) {
     </section>`;
 }
 
-function buildAdvanceButtons(context, includeActorName = false) {
+export function buildAdvanceButtons(context, includeActorName = false) {
     const blocker = game.user?.isGM ? null : services.getBlockingCombatWorkflow?.(context);
     const blocked = Boolean(blocker);
     const tickButtons = [1, 2, 3, 4, 5, 6, 7, 8, 10].map((ticks) => buildAdvanceButton(ticks, blocked)).join("");
@@ -378,8 +379,7 @@ async function buildPersonalControls(activeContext) {
     const personal = getPersonalHudContext(activeContext);
     const context = personal ? { ...personal, combatEventPresentation: activeContext.combatEventPresentation } : null;
     const picker = candidates.length > 1 ? buildPersonalCombatantPicker(candidates, context) : "";
-    const defenseRequest = services.getPendingActiveDefense(context ?? activeContext);
-    const defenseControl = defenseRequest ? activeDefenseResponseControl(defenseRequest) : "";
+    const defenseControl = buildDefenseControl(context ?? activeContext, true);
     if (!context) {
         const note = activeContext.runtimeController
             ? t("SMOOTHER_FIGHT.HUD.SelectOwnedToken")
@@ -465,7 +465,6 @@ function buildPersonalActionBar(actor, leadingControl = "", meleeAttackControl =
 
 async function buildActionBar(context, rangeMeasurement = null) {
     const actor = context.actor;
-    const defenseRequest = services.getPendingActiveDefense(context);
     const interruptionControls = continuousActionInterruptionControls(context);
     const preparationStatus = services.getPreparationApplicationStatus?.(actor) ?? { state: "idle", record: null };
     const preparedSpellId = actor.getFlag?.("splittermond", "preparedSpell");
@@ -490,16 +489,23 @@ async function buildActionBar(context, rangeMeasurement = null) {
         ${skillControlMarkup}
         ${attackControlMarkup}
         ${spellControlMarkup}
-        ${defenseRequest ? activeDefenseResponseControl(defenseRequest) : actionMenu("fa-solid fa-shield-halved", t("SMOOTHER_FIGHT.HUD.Defense"), [
-            defenseButton(actor, "defense", "VTD"),
-            defenseButton(actor, "bodyresist", "KW"),
-            defenseButton(actor, "mindresist", "GW"),
-        ].join(""), "sf-defense-menu")}
+        ${buildDefenseControl(context)}
         ${favoriteSkills.length > 1 ? buildFavoriteSkillBar(favoriteSkills) : ""}
     </nav>`;
 }
 
-function continuousActionInterruptionControls(context) {
+export function buildDefenseControl(context, personal = false) {
+    const request = services.getPendingActiveDefense(context);
+    if (request) return activeDefenseResponseControl(request);
+    if (personal) return "";
+    return actionMenu("fa-solid fa-shield-halved", t("SMOOTHER_FIGHT.HUD.Defense"), [
+        defenseButton(context.actor, "defense", "VTD"),
+        defenseButton(context.actor, "bodyresist", "KW"),
+        defenseButton(context.actor, "mindresist", "GW"),
+    ].join(""), "sf-defense-menu");
+}
+
+export function continuousActionInterruptionControls(context) {
     const pendingForUser = services.getPendingContinuousActionInterruptionsForCurrentUser?.(context.combat);
     if (Array.isArray(pendingForUser)) {
         return pendingForUser.map(({ request, token }) => continuousActionInterruptionControl(request, token)).join("");

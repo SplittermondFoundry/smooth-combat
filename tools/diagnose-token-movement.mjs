@@ -104,6 +104,17 @@ for (let frame = 0; frame < 60; frame++) {
 }
 const tokenRefresh = { events: 6000, tokenFlagReads: flagReads, hudRenderCalls: renderCalls };
 
+renderCalls = 0;
+for (let i = 0; i < 60; i++) {
+    emit("recordToken", tokens[0]);
+    flush(frames);
+    flush(timers);
+}
+const recordedMovement = { events: 60, hudRenderCalls: renderCalls };
+for (const token of tokens.slice(1)) emit("recordToken", token);
+recordedMovement.unrelatedTokens = tokens.length - 1;
+recordedMovement.unrelatedScheduledFrames = frames.size;
+
 flagReads = 0;
 for (let i = 0; i < 100; i++) emit("updateToken", tokens[0], { rotation: i }, {}, "gm");
 const tokenUpdates = {
@@ -148,5 +159,5 @@ const distanceReads = { reads: 60, unchangedWaypoints: 101, pathMeasurements };
 
 console.log(JSON.stringify({
     note: "Synthetic operation counts only; mock renderer and measurement API; no live CPU/GPU/FPS data.",
-    sightRefresh, tokenRefresh, tokenUpdates, chatCollections, distanceReads,
+    sightRefresh, tokenRefresh, recordedMovement, tokenUpdates, chatCollections, distanceReads,
 }, null, 2));

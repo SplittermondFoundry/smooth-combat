@@ -87,6 +87,7 @@ export function registerHooks() {
             services.scheduleRenderAfterTokenMovement(token);
         }
         services.scheduleDefaultMovementRoutePreviews(getApplicableCombat());
+        services.scheduleHudCanvasRefresh(null, { documentChanges: changes });
         services.scheduleMovementTokenControls();
         void services.refreshCombatPositionOverlay(token);
     });
@@ -96,8 +97,8 @@ export function registerHooks() {
     });
     Hooks.on("refreshToken", (token) => services.refreshMovementTokenControl(token));
     Hooks.on("deleteToken", () => services.scheduleMovementTokenControls());
-    Hooks.on("recordToken", () => {
-        if (getSetting("movementTracking", true)) services.scheduleRender(0);
+    Hooks.on("recordToken", (token) => {
+        if (getSetting("movementTracking", true)) services.scheduleHudCanvasRefresh(token);
     });
 
     Hooks.on("canvasReady", (...args) => {

@@ -406,6 +406,13 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         gameStub.user = { id: "primary-gm", isGM: true };
         handlersFor(hookRegistrations, "updateToken")[0](movedToken, { y: 80 }, movementOptions, "player");
         assert.deepEqual(callsOf("resetCompletedMovementReversalApplication"), [[movedToken]]);
+        assert.deepEqual(callsOf("scheduleRender"), []);
+        assert.deepEqual(callsOf("scheduleHudCanvasRefresh"), [[null, { documentChanges: { y: 80 } }]]);
+
+        callLog.length = 0;
+        handlersFor(hookRegistrations, "updateToken")[0](movedToken, { flags: { "splittermond-smoother-fight": { movementPlan: null } } }, {}, "primary-gm");
+        assert.deepEqual(callsOf("scheduleRender"), []);
+        assert.deepEqual(callsOf("scheduleHudCanvasRefresh"), [[null, { documentChanges: { flags: { "splittermond-smoother-fight": { movementPlan: null } } } }]], "remote plan completion also removes stale movement controls");
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "drawToken")[0](movedToken);
@@ -420,7 +427,8 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "recordToken")[0](movedToken);
-        assert.deepEqual(callsOf("scheduleRender"), [[0]]);
+        assert.deepEqual(callsOf("scheduleRender"), []);
+        assert.deepEqual(callsOf("scheduleHudCanvasRefresh"), [[movedToken]]);
 
         callLog.length = 0;
         const canvasCombat = { id: "canvas-combat" };
