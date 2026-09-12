@@ -42,9 +42,12 @@ export function registerHooks() {
         "deleteItem",
         "updateUser",
     ];
-    rerenderHooks.forEach((hook) => Hooks.on(hook, (document) => {
+    rerenderHooks.forEach((hook) => Hooks.on(hook, (document, changes) => {
         services.scheduleRender();
         services.scheduleMovementTokenControls();
+        if (hook === "updateActor") {
+            void services.reconcileReleasedPreparedActions(document, changes);
+        }
         if (combatPositionItemHooks.has(hook)) {
             void services.refreshCombatPositionOverlaysForActor(document?.parent ?? document?.actor);
         }

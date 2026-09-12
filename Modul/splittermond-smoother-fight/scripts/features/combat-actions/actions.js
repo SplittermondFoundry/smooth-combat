@@ -27,6 +27,11 @@ import {
 } from "../../shared/values.js";
 
 import {
+    preparedActionId,
+    setPreparedActionId,
+} from "../../shared/prepared-action-compatibility.js";
+
+import {
     clearPreparationApplication,
     prepareCombatAction,
     revertTokenMovementApplication,
@@ -73,7 +78,7 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
     const attack = context.actor.attacks?.find((candidate) => candidate.id === attackId);
     if (!attack) return false;
     const ranged = isRangedAttack(attack);
-    const preparedAttackId = context.actor.getFlag?.("splittermond", "preparedAttack");
+    const preparedAttackId = preparedActionId(context.actor, "attack");
     const readiness = attackReadiness(ranged, attack.id, preparedAttackId);
     if (actionRequiresTarget(readiness.ready) && !context.target) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
@@ -131,11 +136,11 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
                     )
             );
             if (success) await completeContinuousAction(context, { trigger: "attack" }).catch(() => false);
-            if (success && context.actor.getFlag?.("splittermond", "preparedSpell")) {
+            if (success && preparedActionId(context.actor, "spell")) {
                 await cancelPreparedSpell(context);
             }
             if (success && readiness.prepared) await clearPreparationApplication(context.actor, "attack");
-            else if (success) await context.actor.setFlag("splittermond", "preparedAttack", null);
+            else if (success) await setPreparedActionId(context.actor, "attack", null);
             if (success && preparationUse.consumeOnSuccess) {
                 await consumeAttackPreparation(context.actor, preparation).catch(() => false);
             }
@@ -226,7 +231,7 @@ export async function performSpell(context, spellId) {
     if (!context) return;
     const spell = context.actor.spells?.find((candidate) => candidate.id === spellId);
     if (!spell) return;
-    const prepared = context.actor.getFlag("splittermond", "preparedSpell") === spellId;
+    const prepared = preparedActionId(context.actor, "spell") === spellId;
     const targetDependent = isTargetDependentDifficulty(spell.difficulty ?? spell.system?.difficulty);
     if (actionRequiresTarget(prepared, targetDependent) && !context.target) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));

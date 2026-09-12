@@ -1,5 +1,18 @@
 # Changelog
 
+## Unveröffentlicht
+
+## 0.6.6 – 12. September 2026
+
+Kompatibilitätsupdate für vorbereitete Angriffe und Zauber unter **Splittermond 14.3.0-beta4**, weiterhin vollständig kompatibel mit **14.2.7**.
+
+### Splittermond 14.3.0-beta4
+
+- Vorbereitete Angriffe und Zauber verwenden unter **Splittermond 14.3.0-beta4** das neue Datenmodell `system.preparedAction`; unter **14.2.7** bleiben die bisherigen Systemflags vollständig unterstützt. Vorbereitung, Anzeige, Auslösen, Abbruch, Unterbrechung und Wiederherstellung laufen über denselben fähigkeitsbasierten Adapter.
+- Das Schreiben in beta4 ruft bewusst nicht `PreparedAction.set(...)` auf, damit Smoother Fight die bereits gebuchten Vorbereitungsticks nicht ein zweites Mal berechnet.
+- Kurze und lange Rasten löschen in beta4 vorbereitete Aktionen. Smoother Fight entfernt daraufhin auch seine zugehörige kontinuierliche Handlung und deren Status, sodass kein veralteter Sperrzustand bestehen bleibt.
+- Die Actor-Rollmethoden, Zielermittlung, vorausgewählten temporären Modifikatoren und der synchrone Dialog-Snapshot wurden gegen **14.2.7** und **14.3.0-beta4** erneut geprüft; ihre bisherigen Kompatibilitätswege bleiben unverändert.
+
 ## 0.6.5 – 12. September 2026
 
 Änderungen seit **0.6.4**. Dieses Fehlerkorrektur-Update erkennt abgeschlossene Schadensanwendungen wieder zuverlässig und stabilisiert die HUD-Anzeige bei Bewegung, Sicht- und Charakterwechseln.

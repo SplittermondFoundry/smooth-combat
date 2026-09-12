@@ -129,7 +129,7 @@ try {
 }
 ```
 
-In der gegenwärtigen Splittermond-Version liest `prepareRollDialog` die Collection `skill.selectableModifier` und baut daraus vor dem ersten asynchron relevanten Dialogwartepunkt eine separate Liste. Nach Rückkehr von `originalRoll` kann der globale Eintrag deshalb sofort verschwinden, während der Dialog seine eigene Kopie weiterhin anzeigt.
+In der gegenwärtigen, zuletzt mit Splittermond 14.3.0-beta4 geprüften Version liest `prepareRollDialog` die Collection `skill.selectableModifier` und baut daraus vor dem ersten asynchron relevanten Dialogwartepunkt eine separate Liste. Nach Rückkehr von `originalRoll` kann der globale Eintrag deshalb sofort verschwinden, während der Dialog seine eigene Kopie weiterhin anzeigt.
 
 Würde der Wrapper stattdessen `await originalRoll(...)` verwenden, bliebe der Modifier bis zum Bestätigen oder Abbrechen des Dialogs global installiert. Währenddessen könnte eine zweite Probe gegen ein anderes Ziel denselben Eintrag sehen. Diese Form ist daher verboten.
 

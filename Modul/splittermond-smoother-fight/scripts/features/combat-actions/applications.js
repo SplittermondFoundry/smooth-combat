@@ -19,6 +19,11 @@ import {
 } from "../../shared/document-flags.js";
 
 import {
+    preparedActionId,
+    setPreparedActionId,
+} from "../../shared/prepared-action-compatibility.js";
+
+import {
     t,
 } from "../../shared/values.js";
 
@@ -66,13 +71,13 @@ export async function prepareCombatAction(context, { kind, itemId, ticks, label 
         }
 
         try {
-            await actor.setFlag("splittermond", preparedFlag(kind), itemId);
+            await setPreparedActionId(actor, kind, itemId);
         } catch (error) {
             if (preparedItemId(actor, kind) !== itemId) {
                 await persistPreparationFailureState(actor, "uncertain", applying);
                 throw error;
             }
-            console.debug(`${MODULE_ID} | Prepared ${kind} flag rejected after a matching read-back`, error);
+            console.debug(`${MODULE_ID} | Prepared ${kind} state rejected after a matching read-back`, error);
         }
 
         try {
@@ -100,7 +105,7 @@ export async function prepareCombatAction(context, { kind, itemId, ticks, label 
 }
 
 export async function clearPreparationApplication(actor, kind) {
-    await actor.setFlag("splittermond", preparedFlag(kind), null);
+    await setPreparedActionId(actor, kind, null);
     const existing = actor.getFlag?.(MODULE_ID, "preparationApplication")
         ?? actor.flags?.[MODULE_ID]?.preparationApplication;
     if (existing && typeof existing === "object") {
@@ -113,7 +118,7 @@ export async function recoverPreparationApplication(actor, decision) {
     const { state, record } = getPreparationApplicationStatus(actor);
     if (state !== "uncertain" || !record?.itemId || !["attack", "spell"].includes(record.kind)) return false;
     if (decision === "complete") {
-        await actor.setFlag("splittermond", preparedFlag(record.kind), record.itemId);
+        await setPreparedActionId(actor, record.kind, record.itemId);
         await setPreparationApplicationState(actor, "completed", { recoveredBy: game.user.id });
     } else {
         await setPreparationApplicationState(actor, "idle", { recoveredBy: game.user.id });
@@ -259,12 +264,8 @@ async function persistMovementFailureState(token, state, fallback) {
     }
 }
 
-function preparedFlag(kind) {
-    return kind === "attack" ? "preparedAttack" : "preparedSpell";
-}
-
 function preparedItemId(actor, kind) {
-    return actor?.getFlag?.("splittermond", preparedFlag(kind));
+    return preparedActionId(actor, kind);
 }
 
 function combatantInitiative(combatant) {

@@ -81,6 +81,8 @@ Splittermond 14.3 wertet zielabhängige Würfe über das erste Element von `game
 
 Die Schreibzugriffe für zeitgesteuerte Status-Items laufen über `shared/status-effect-compatibility.js`: Splittermond 14.2.x verwendet `startTick`, `interval` und `times`; neuere 14.3-Versionen verwenden `combatEvent`. Das registrierte `CONFIG.Item.dataModels.statuseffect.schema` entscheidet über das Format, weil frühe 14.3-Vorabversionen noch das alte Schema besitzen. Die Versionsnummer ist nur ein Fallback bei fehlendem Schema. Patzerfolgen und Kampfpositionsmarker verwenden denselben Adapter. Fachliche Dauer, Stufe, Modifier und bestehende Dokumente werden nicht migriert oder umgeschrieben.
 
+Vorbereitete Angriffe und Zauber laufen über `shared/prepared-action-compatibility.js`. Splittermond 14.2.7 speichert sie in `flags.splittermond.preparedAttack` und `flags.splittermond.preparedSpell`; seit 14.3.0-beta4 liegen sie in `system.preparedAction.attack` und `system.preparedAction.spell`. Der Adapter entscheidet anhand des tatsächlich vorhandenen Actor-Datenmodells beziehungsweise der neuen PreparedAction-Controller und nicht anhand einer fest codierten Versionsnummer. Smoother Fight schreibt im neuen Modell direkt über `Actor.update`, weil `PreparedAction.set(...)` zusätzlich Ticks bucht, die das Modul bereits transaktional berechnet hat. Ein explizites externes Löschen – insbesondere durch kurze oder lange Rast in beta4 – räumt auch die zugehörige kontinuierliche Handlung auf.
+
 Folgende Strukturen sind persistierte oder externe Verträge und dürfen nicht beiläufig umbenannt oder umgeformt werden:
 
 - Setting-Schlüssel und ihre Scopes, Typen und Defaults

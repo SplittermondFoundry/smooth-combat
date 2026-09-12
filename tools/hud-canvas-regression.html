@@ -1,5 +1,5 @@
 <!doctype html><html lang="de"><meta charset="utf-8"><title>HUD Performance Regression</title>
-<link rel="stylesheet" href="/Modul/splittermond-smoother-fight/styles/smoother-fight-0.6.5.css">
+<link rel="stylesheet" href="/Modul/splittermond-smoother-fight/styles/smoother-fight-0.6.6.css">
 <style>body{background:#142029;color:#eee;font:16px system-ui;padding:24px}#results{white-space:pre-wrap;max-width:1000px}</style>
 <h1>HUD Performance Regression</h1><pre id="results">Tests laufen …</pre>
 <script type="module">
@@ -91,7 +91,7 @@ check(Boolean(hud.element.querySelector('.sf-primary-target-panel')),'target res
 check(fullBuilds===visibilityBefore.fullBuilds && speedCalls===visibilityBefore.speedCalls,'sight changes: no full HUD builds or attack speed calculations');
 check(hud.element.querySelector('.sf-shell')===shell && hud.element.querySelector('.sf-actor')===actorPortrait && hud.element.querySelector('[data-sf-action="attack"]')===attack,'sight changes retain shell, actor portrait and attack controls');
 check(hud.element.querySelector('.sf-quick-targets')===quick && quick.open && hud.element.querySelector('.sf-events')===events,'sight changes retain open target menu and event container');
-for(const version of ['14.2.7','14.3.0-beta3']){
+for(const version of ['14.2.7','14.3.0-beta4']){
  game.system={id:'splittermond',version};
  const hooks=new Map();globalThis.Hooks={on(name,callback){if(!hooks.has(name))hooks.set(name,[]);hooks.get(name).push(callback)}};
  registerHooks();

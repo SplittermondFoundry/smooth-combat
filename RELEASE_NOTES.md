@@ -1,29 +1,26 @@
-# Splittermond Smoother Fight 0.6.5
+# Splittermond Smoother Fight 0.6.6
 
-Änderungen seit **0.6.4**. Dieses Fehlerkorrektur-Update erkennt abgeschlossene Schadensanwendungen wieder zuverlässig und stabilisiert die HUD-Anzeige bei Bewegung, Sicht- und Charakterwechseln.
+Änderungen seit **0.6.5**. Dieses Kompatibilitätsupdate erhält vorbereitete Angriffe und Zauber unter **Splittermond 14.3.0-beta4** und bleibt mit **14.2.7** kompatibel.
 
-## Schaden und Angriffsablauf
+## Vorbereitete Angriffe und Zauber
 
-- Nach dem Anwenden von Schaden im HUD wird die Schadenskarte als abgeschlossen erkannt. Der Ablauf kehrt zur Angriffskarte mit den noch offenen Ticks zurück. Das gilt auch für den SL-Button zum Anwenden auf die Ziele des Angreifers.
-- Die Erkennung unterstützt sowohl die bisherige Schadensbuchung unter **Splittermond 14.2.7** als auch die neue Schnittstelle der **14.3-Betaversionen**, geprüft mit **14.3.0-beta3**. Fehlende oder nachträglich ersetzte globale Schadensfeedback-Hooks verhindern den Abschluss nicht mehr.
-- Bestätigte Anwendungen mit **0 Schaden** schließen den Schadensschritt ebenfalls ab. Abgebrochene Dialoge bleiben offen. Bereits abgeschlossene Anwendungen sind gegen erneutes Anwenden gesperrt; bei einer fehlgeschlagenen Buchung mit unklarem Ergebnis bleibt die Wiederholung zur Sicherheit gesperrt.
+- Splittermond 14.3.0-beta4 speichert vorbereitete Aktionen im neuen Actor-Datenmodell `system.preparedAction`. Smoother Fight erkennt dieses Modell und verwendet unter 14.2.7 weiterhin die bisherigen Systemflags.
+- Vorbereitung, Anzeige, Auslösen, Abbruch, Unterbrechung und Wiederherstellung verwenden nun einen gemeinsamen, strukturprüfenden Kompatibilitätsadapter.
+- Vorbereitungsticks werden weiterhin genau einmal gebucht. Smoother Fight schreibt den vorbereiteten Zustand unter beta4 direkt, da die neue Systemmethode `PreparedAction.set(...)` zusätzlich selbst Ticks berechnet.
+- Kurze und lange Rasten entfernen nun auch die zugehörige kontinuierliche Handlung und deren Status aus dem HUD, nachdem beta4 die vorbereitete Aktion gelöscht hat.
 
-## Stabile HUD-Anzeige
+## Rollmodifikatoren und allgemeine Kompatibilität
 
-- Manuell aufgeklappte Kampfereignisse bleiben beim Buchen einer Bewegung und beim Charakterwechsel offen. Angriffskarten klappen dabei nicht mehr kurz ein und verschieben das HUD.
-- Öffnen und Schließen von Karten wird unmittelbar übernommen. Auch Eingaben während eines langsamen HUD-Aufbaus bleiben erhalten.
-- Das Speichern oder Zurücksetzen von Bewegungen aktualisiert gezielt den Bewegungstracker. Automatische Bewegungen beim Charakterwechsel sowie Routenfortschritt und Bewegungsstatus erzeugen keine zusätzlichen vollständigen HUD-Aufbauten. Abgeschlossene Bewegungen entfernen ihre Routen-, Abbruch- und Unterbrechungsanzeigen auch auf den anderen Clients.
-- Sichtwechsel aktualisieren betroffene Ziele, Kampfereignisse, Abwehrmöglichkeiten und Tick-Sperren unmittelbar. Unveränderte Porträts, Chatkarten, geöffnete Menüs und Suchfelder bleiben erhalten; veraltete Zielinformationen werden nach einem laufenden Aufbau nicht wieder eingeblendet.
-- Beim gewöhnlichen Zugwechsel bleibt das bisherige HUD sichtbar, bis der nächste Charakter fertig aufgebaut ist. Während des Wechsels ist die alte Anzeige nicht bedienbar.
+- Die Actor-Rollmethoden, Zielermittlung, vorausgewählten temporären Modifikatoren und der synchrone Dialog-Snapshot wurden gegen **14.2.7** und **14.3.0-beta4** geprüft. Das bestehende Konzept für zielabhängige Modifikatoren bleibt unverändert funktionsfähig.
+- Bei der Prüfung der Änderungen von beta3 auf beta4 wurden keine weiteren inkompatiblen, von Smoother Fight verwendeten System-Schnittstellen gefunden.
+- Die Voraussetzungen bleiben **Foundry VTT 14 ab Build 14.359** und **Splittermond ab 14.2.0**. Einstellungen und Weltdaten benötigen keine Migration.
 
-## Kompatibilität und Aktualisierung
+## Aktualisierung
 
-- Die Voraussetzungen bleiben unverändert: **Foundry VTT 14 ab Build 14.359** und **Splittermond ab 14.2.0**. Die versionsübergreifende Schadenskorrektur erweitert die Unterstützung nicht auf Foundry V13.
-- Einstellungen und Weltdaten benötigen keine Migration. Nach der Installation Foundry beziehungsweise die Welt und anschließend die Browserseiten aller Beteiligten neu laden, bei Bedarf mit **Strg+F5**.
-- Bereits vor dem Update abgezogenen Schaden nicht erneut anwenden. Den korrigierten Ablauf mit einem neuen Angriff prüfen.
+- Nach der Installation Foundry beziehungsweise die Welt und anschließend die Browserseiten aller Beteiligten neu laden, bei Bedarf mit **Strg+F5**.
+- Bereits vorbereitete Aktionen aus einer laufenden 14.2.7-Sitzung sollten vor einem gleichzeitigen Systemwechsel auf beta4 abgeschlossen oder abgebrochen werden.
 
 ## Prüfung
 
-- `npm run check`: **802 Tests** erfolgreich; zusätzlich **80 Regeltests** mit den vorgegebenen Coverage-Grenzen.
-- Die Schadensregressionen prüfen den Rücksprung zu offenen Angriffsticks, verzögerte Buchungen, beide Schadensschnittstellen, abgebrochene Dialoge, null Schaden und den Schutz vor doppelter Anwendung.
-- Die bereits durchgeführten **114 Browserprüfungen** zur HUD-Stabilität verwenden kontrollierte Foundry-Dokumente. Einzelheiten: [Prüfung der HUD-Anzeige und Tokenbewegung](https://github.com/SplittermondFoundry/smooth-combat/blob/v0.6.5/docs/token-movement-performance.md).
+- `npm run check`: **808 Tests** erfolgreich; zusätzlich **80 Regeltests** mit den vorgegebenen Coverage-Grenzen.
+- Regressionstests decken beide Speichermodelle, einfache Tickbuchung, Abbruch und erfolgreiche Ausführung sowie die Bereinigung durch kurze und lange Rasten ab.

@@ -68,6 +68,10 @@ import {
     t,
 } from "../../shared/values.js";
 
+import {
+    preparedActionId,
+} from "../../shared/prepared-action-compatibility.js";
+
 export async function buildHud(context, { movementDistanceCache } = {}) {
     if (!getSetting("minimized", false)) context = services.prepareCombatEventContext?.(context) ?? context;
     if (context.concealed) return buildConcealedHud(context);
@@ -467,7 +471,7 @@ async function buildActionBar(context, rangeMeasurement = null) {
     const actor = context.actor;
     const interruptionControls = continuousActionInterruptionControls(context);
     const preparationStatus = services.getPreparationApplicationStatus?.(actor) ?? { state: "idle", record: null };
-    const preparedSpellId = actor.getFlag?.("splittermond", "preparedSpell");
+    const preparedSpellId = preparedActionId(actor, "spell");
     const { favoriteSkills, skillControlMarkup } = getSkillActionData(actor);
     const spells = [...(actor.spells ?? [])].sort((a, b) =>
         Number(b.id === preparedSpellId) - Number(a.id === preparedSpellId) || sortByName(a, b)
@@ -605,7 +609,7 @@ function preparationApplicationMarkup({ state, record }) {
 }
 
 async function buildAttackControlMarkup(actor, { meleeOnly = false, rangeMeasurement = null } = {}) {
-    const preparedAttackId = actor.getFlag?.("splittermond", "preparedAttack");
+    const preparedAttackId = preparedActionId(actor, "attack");
     const storedDefaultAttackId = actor.getFlag?.(MODULE_ID, "defaultAttackId");
     const availableAttacks = [...(actor.attacks ?? [])]
         .filter((attack) => !meleeOnly || !services.isRangedAttack(attack));

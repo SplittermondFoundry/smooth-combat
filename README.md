@@ -7,7 +7,7 @@ Versionshinweise stehen im [Changelog](CHANGELOG.md).
 ## Voraussetzungen
 
 - Foundry Virtual Tabletop ab Version 14.359 (verifiziert bis 14.363)
-- Splittermond-System ab Version 14.2.0 (14.2.x einschließlich 14.2.7 sowie 14.3.x)
+- Splittermond-System ab Version 14.2.0 (geprüft mit 14.2.7 und 14.3.0-beta4)
 
 ## Installation
 

@@ -89,7 +89,7 @@ export async function runTurnMovementRegression({ actor, token, target, combat, 
     });
     registerHooks();
     try {
-        for (const version of ['14.2.7', '14.3.0-beta3']) {
+        for (const version of ['14.2.7', '14.3.0-beta4']) {
             game.system = { id: 'splittermond', version };
             const label = version + ': automatic turn movement ';
             combat.combatant = combatant; combat.currentTick = combatant.initiative = 0; controlled = token;

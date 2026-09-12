@@ -48,6 +48,7 @@ export {
     advanceContinuousActions,
     clearContinuousActionForCombatant,
     clearContinuousActionsForCombat,
+    reconcileReleasedPreparedActions,
 } from "./continuous-action.js";
 
 export {

@@ -41,6 +41,10 @@ import {
 } from "../../shared/combat-position-state.js";
 
 import {
+    preparedActionId,
+} from "../../shared/prepared-action-compatibility.js";
+
+import {
     requireOpenCombatFlowForTicks,
 } from "./flow-guard.js";
 import { performSpellIdentification } from "./spell-identification.js";
@@ -214,8 +218,7 @@ async function performTimedPreparation(context, action) {
 }
 
 function preparedRangedAttack(actor) {
-    const preparedAttackId = actor?.getFlag?.("splittermond", "preparedAttack")
-        ?? actor?.flags?.splittermond?.preparedAttack;
+    const preparedAttackId = preparedActionId(actor, "attack");
     return Array.from(actor?.attacks ?? []).find((attack) => (
         attack?.id === preparedAttackId
         && (services.isRangedAttack?.(attack) ?? Boolean(attack?.isRanged))

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { configureServices } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
 import {
+    clearPreparationApplication,
     getMovementReversalApplicationStatus,
     getPreparationApplicationStatus,
     prepareCombatAction,
@@ -113,6 +114,23 @@ class TestToken {
     }
 }
 
+class Beta4TestActor extends TestActor {
+    constructor(combatant) {
+        super(combatant);
+        this.system = { preparedAction: { attack: null, spell: null } };
+        this.updateCalls = [];
+    }
+
+    async update(change) {
+        this.updateCalls.push(structuredClone(change));
+        for (const [path, value] of Object.entries(change)) {
+            const kind = path.split(".").at(-1);
+            this.system.preparedAction[kind] = value;
+        }
+        return this;
+    }
+}
+
 test("a preparation failure without consumed ticks returns to idle and remains retryable", async () => {
     const combatant = { id: "combatant", initiative: 10 };
     installGlobals(combatant);
@@ -197,6 +215,33 @@ test("successful spell preparation enters the focus-magic continuous action", as
     assert.equal(continuousAction.actionId, "focusMagic");
     assert.equal(continuousAction.startTick, 20);
     assert.equal(continuousAction.endTick, 28);
+});
+
+test("Splittermond 14.3.0-beta4 preparation uses actor system data and keeps tick accounting singular", async () => {
+    const combatant = { id: "combatant", initiative: 10 };
+    installGlobals(combatant);
+    const actor = new Beta4TestActor(combatant);
+    const token = new TestToken();
+    token.actor = actor;
+    combatant.token = token;
+
+    assert.equal(await prepareCombatAction({ actor, combatant, token }, {
+        kind: "attack",
+        itemId: "bow",
+        ticks: 5,
+        label: "Bow",
+    }), true);
+
+    assert.equal(combatant.initiative, 15);
+    assert.equal(actor.tickCalls, 1, "the module must not call beta4 PreparedAction.set and charge twice");
+    assert.equal(actor.system.preparedAction.attack, "bow");
+    assert.equal(actor.getFlag("splittermond", "preparedAttack"), undefined);
+    assert.deepEqual(actor.updateCalls, [{ "system.preparedAction.attack": "bow" }]);
+    assert.equal(getPreparationApplicationStatus(actor).state, "completed");
+
+    await clearPreparationApplication(actor, "attack");
+    assert.equal(actor.system.preparedAction.attack, null);
+    assert.equal(getPreparationApplicationStatus(actor).state, "idle");
 });
 
 test("a rejected preparation write prevents tick consumption", async (t) => {

@@ -11,6 +11,11 @@ import {
 } from "../../shared/document-flags.js";
 
 import {
+    preparedActionId,
+    setPreparedActionId,
+} from "../../shared/prepared-action-compatibility.js";
+
+import {
     escapeAttr,
     escapeHtml,
     t,
@@ -460,8 +465,8 @@ function captureInterruptionRecovery(token, request, combat, reason) {
         interruptedAt: Date.now(),
     };
     if (action?.actionId === "readyRangedAttack" || action?.actionId === "focusMagic") {
-        const preparedFlag = action.actionId === "readyRangedAttack" ? "preparedAttack" : "preparedSpell";
-        recovery.preparedItemId = documentFlag(actor, "splittermond", preparedFlag);
+        const preparedKind = action.actionId === "readyRangedAttack" ? "attack" : "spell";
+        recovery.preparedItemId = preparedActionId(actor, preparedKind);
         recovery.preparationApplication = documentFlag(actor, MODULE_ID, "preparationApplication");
     } else if (["aim", "searchOpening"].includes(action?.actionId)) {
         recovery.attackPreparation = documentFlag(actor, MODULE_ID, "attackPreparation");
@@ -476,8 +481,8 @@ async function restoreInterruptedActionResources(token, recovery, combat) {
     const actionId = recovery.action.actionId;
     if (actionId === "readyRangedAttack" || actionId === "focusMagic") {
         if (!actor || !recovery.preparedItemId) return false;
-        const preparedFlag = actionId === "readyRangedAttack" ? "preparedAttack" : "preparedSpell";
-        await actor.setFlag("splittermond", preparedFlag, recovery.preparedItemId);
+        const preparedKind = actionId === "readyRangedAttack" ? "attack" : "spell";
+        await setPreparedActionId(actor, preparedKind, recovery.preparedItemId);
         if (recovery.preparationApplication && typeof recovery.preparationApplication === "object") {
             await setRequiredDocumentFlag(actor, "preparationApplication", recovery.preparationApplication);
         }

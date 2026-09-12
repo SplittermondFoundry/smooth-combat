@@ -17,6 +17,10 @@ import {
     t,
 } from "../../shared/values.js";
 
+import {
+    preparedActionId,
+} from "../../shared/prepared-action-compatibility.js";
+
 export function spellFocusCosts(spell) {
     return displayLabel(spell?.costs ?? spell?.system?.costs, "–");
 }
@@ -68,7 +72,7 @@ export function buildAttackTooltipModel(actor, attack, speed, isRanged = false, 
     ).defaultAttackId;
     const statuses = [];
     if (attack?.id === defaultAttackId) statuses.push(t("SMOOTHER_FIGHT.HUD.DefaultAttack"));
-    if (isRanged && actor?.getFlag?.("splittermond", "preparedAttack") === attack?.id) {
+    if (isRanged && preparedActionId(actor, "attack") === attack?.id) {
         statuses.push(t("SMOOTHER_FIGHT.HUD.PreparedAttack"));
     }
 

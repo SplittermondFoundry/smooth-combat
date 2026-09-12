@@ -83,6 +83,7 @@ const serviceStubs = {
     refreshMovementTokenControlScale: (...args) => record("refreshMovementTokenControlScale", args),
     clearMovementTokenControls: (...args) => record("clearMovementTokenControls", args),
     advanceContinuousActions: (...args) => record("advanceContinuousActions", args),
+    reconcileReleasedPreparedActions: (...args) => record("reconcileReleasedPreparedActions", args),
     advancePendingMovements: (...args) => record("advancePendingMovements", args),
     cancelMovementPlanAfterManualMove: (...args) => record("cancelMovementPlanAfterManualMove", args),
     clearMovementRoutePreview: (...args) => record("clearMovementRoutePreview", args),
@@ -388,6 +389,12 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
             handlersFor(hookRegistrations, event)[0]({});
             assert.deepEqual(callsOf("scheduleMovementTokenControls"), [[]], event);
         }
+
+        callLog.length = 0;
+        const restedActor = { id: "rested-actor" };
+        const preparedActionChanges = { system: { preparedAction: { attack: null, spell: null } } };
+        handlersFor(hookRegistrations, "updateActor")[0](restedActor, preparedActionChanges);
+        assert.deepEqual(callsOf("reconcileReleasedPreparedActions"), [[restedActor, preparedActionChanges]]);
 
         callLog.length = 0;
         const movedToken = { id: "token" };

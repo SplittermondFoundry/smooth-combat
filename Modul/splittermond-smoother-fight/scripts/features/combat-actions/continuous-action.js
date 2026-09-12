@@ -12,6 +12,10 @@ import {
 } from "../../shared/document-flags.js";
 
 import {
+    preparedActionId,
+} from "../../shared/prepared-action-compatibility.js";
+
+import {
     t,
 } from "../../shared/values.js";
 
@@ -215,6 +219,25 @@ export async function advanceContinuousActions(combat = globalThis.game?.combat)
     return changed;
 }
 
+export async function reconcileReleasedPreparedActions(actor, changes, combat = globalThis.game?.combat) {
+    const releasedKinds = releasedPreparedActionKinds(changes);
+    if (!actor || !combat || releasedKinds.size === 0) return false;
+
+    const primaryGm = services.getActivePrimaryGm?.() ?? null;
+    if (primaryGm ? primaryGm.id !== globalThis.game?.user?.id : actor.isOwner !== true) return false;
+
+    let changed = false;
+    for (const combatant of combatantsOf(combat)) {
+        if (!combatantActorMatches(combatant, actor)) continue;
+        const token = tokenDocument(combatant?.token);
+        const action = readContinuousAction(token);
+        const kind = preparedActionKindForContinuousAction(action);
+        if (!kind || !releasedKinds.has(kind) || preparedActionId(actor, kind)) continue;
+        changed = await clearContinuousAction(token, { expectedId: action.id }) || changed;
+    }
+    return changed;
+}
+
 export async function clearContinuousActionsForCombat(combat) {
     if (!combat) return false;
     let changed = false;
@@ -330,6 +353,35 @@ async function applyContinuousActionCompletion(actor, action) {
     }
     await services.setCombatPosition(actor, "standing");
     return true;
+}
+
+function releasedPreparedActionKinds(changes) {
+    const released = new Set();
+    const modern = changes?.system?.preparedAction;
+    const legacy = changes?.flags?.splittermond;
+    for (const [kind, legacyKey] of [["attack", "preparedAttack"], ["spell", "preparedSpell"]]) {
+        let modernValue = ownValue(modern, kind);
+        let legacyValue = ownValue(legacy, legacyKey);
+        if (modernValue === undefined) modernValue = ownValue(changes, `system.preparedAction.${kind}`);
+        if (legacyValue === undefined) legacyValue = ownValue(changes, `flags.splittermond.${legacyKey}`);
+        if (modernValue === null || legacyValue === null) released.add(kind);
+    }
+    return released;
+}
+
+function ownValue(object, key) {
+    return object && typeof object === "object" && Object.hasOwn(object, key) ? object[key] : undefined;
+}
+
+function combatantActorMatches(combatant, actor) {
+    return combatant?.actor === actor
+        || (optionalString(combatant?.actorId ?? combatant?.actor?.id) === optionalString(actor?.id));
+}
+
+function preparedActionKindForContinuousAction(action) {
+    if (action?.actionId === "readyRangedAttack") return "attack";
+    if (action?.actionId === "focusMagic") return "spell";
+    return null;
 }
 
 async function ensureContinuousActionEffects(actor, action) {

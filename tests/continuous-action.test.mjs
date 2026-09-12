@@ -12,6 +12,7 @@ import {
     isTokenInContinuousAction,
     MOVEMENT_ACTION_STATUS_ID,
     normalizeContinuousAction,
+    reconcileReleasedPreparedActions,
     registerContinuousActionStatusEffect,
 } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/continuous-action.js";
 import {
@@ -402,7 +403,7 @@ test("cancelled rolls retain preparatory actions and submitted rolls complete th
     services.withTemporarySystemTargets = async (_targets, operation) => operation();
     services.scheduleRender = () => {};
     attackFixture.actor.attacks = [{ id: "bow", name: "Bow", isRanged: true }];
-    installSystemFlags(attackFixture.actor, { preparedAttack: "bow" });
+    installBeta4PreparedActions(attackFixture.actor, { attack: "bow" });
     let submitted = false;
 
     assert.equal(await performAttack(attackFixture, "bow", {}, async () => submitted), false);
@@ -410,6 +411,7 @@ test("cancelled rolls retain preparatory actions and submitted rolls complete th
     submitted = true;
     assert.equal(await performAttack(attackFixture, "bow", {}, async () => submitted), true);
     assert.equal(isTokenInContinuousAction(attackFixture.token, attackFixture.combat), false);
+    assert.equal(attackFixture.actor.system.preparedAction.attack, null);
 
     const spellFixture = continuousActionFixture(continuousActionRecord({ actionId: "focusMagic" }));
     installGlobals(spellFixture.user);
@@ -417,7 +419,7 @@ test("cancelled rolls retain preparatory actions and submitted rolls complete th
     services.getRuntimeController = () => spellFixture.user;
     services.getTargetSelectionForUser = () => ({ target, targets: [target] });
     spellFixture.actor.spells = [{ id: "spell", name: "Spell", difficulty: 15 }];
-    installSystemFlags(spellFixture.actor, { preparedSpell: "spell" });
+    installBeta4PreparedActions(spellFixture.actor, { spell: "spell" });
     submitted = false;
     spellFixture.actor.rollSpell = async () => submitted;
 
@@ -426,6 +428,41 @@ test("cancelled rolls retain preparatory actions and submitted rolls complete th
     submitted = true;
     await performSpell(spellFixture, "spell");
     assert.equal(isTokenInContinuousAction(spellFixture.token, spellFixture.combat), false);
+    assert.equal(spellFixture.actor.system.preparedAction.spell, null);
+});
+
+test("Splittermond 14.3.0-beta4 rest cleanup removes the module's matching continuous action", async () => {
+    const record = continuousActionRecord({ actionId: "focusMagic" });
+    const fixture = continuousActionFixture(record);
+    installGlobals(fixture.user);
+    game.combat = fixture.combat;
+    services.getActivePrimaryGm = () => fixture.user;
+    fixture.actor.system = { preparedAction: { attack: null, spell: null } };
+
+    assert.equal(await reconcileReleasedPreparedActions(fixture.actor, {
+        system: { preparedAction: { attack: null, spell: null } },
+    }, fixture.combat), true);
+    assert.equal(getContinuousAction(fixture.token, fixture.combat), null);
+});
+
+test("prepared-action cleanup ignores unrelated actor updates and still recognizes legacy 14.2.7 flags", async () => {
+    const record = continuousActionRecord({ actionId: "readyRangedAttack" });
+    const fixture = continuousActionFixture(record);
+    installGlobals(fixture.user);
+    game.combat = fixture.combat;
+    services.getActivePrimaryGm = () => fixture.user;
+    installSystemFlags(fixture.actor, { preparedAttack: "bow" });
+
+    assert.equal(await reconcileReleasedPreparedActions(fixture.actor, {
+        system: { health: { consumed: { value: 2 } } },
+    }, fixture.combat), false);
+    assert.equal(getContinuousAction(fixture.token, fixture.combat)?.actionId, "readyRangedAttack");
+
+    fixture.actor.flags.splittermond.preparedAttack = null;
+    assert.equal(await reconcileReleasedPreparedActions(fixture.actor, {
+        flags: { splittermond: { preparedAttack: null } },
+    }, fixture.combat), true);
+    assert.equal(getContinuousAction(fixture.token, fixture.combat), null);
 });
 
 test("a submitted attack cancels a prepared spell while a cancelled attack roll retains it", async () => {
@@ -931,6 +968,24 @@ function installSystemFlags(actor, splittermondFlags) {
     actor.setFlag = async (scope, key, value) => {
         actor.flags[scope] ??= {};
         actor.flags[scope][key] = structuredClone(value);
+        return actor;
+    };
+}
+
+function installBeta4PreparedActions(actor, preparedAction) {
+    actor.system = { preparedAction: { attack: null, spell: null, ...structuredClone(preparedAction) } };
+    actor.flags = { splittermond: {}, [MODULE_ID]: {} };
+    actor.getFlag = (scope, key) => actor.flags[scope]?.[key] ?? null;
+    actor.setFlag = async (scope, key, value) => {
+        actor.flags[scope] ??= {};
+        actor.flags[scope][key] = structuredClone(value);
+        return actor;
+    };
+    actor.update = async (change) => {
+        for (const [path, value] of Object.entries(change)) {
+            const kind = path.split(".").at(-1);
+            actor.system.preparedAction[kind] = value;
+        }
         return actor;
     };
 }
