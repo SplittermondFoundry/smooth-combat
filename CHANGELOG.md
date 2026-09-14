@@ -4,26 +4,38 @@
 
 ## 0.7.0 – 14. September 2026
 
-Die geprüfte Charakterwahl aus Vorschau 14 ist Teil des regulären Builds und standardmäßig aktiv. Eine bereits gespeicherte Abschaltung bleibt erhalten.
+Änderungen seit **0.6.6**. Version **0.7.0** ergänzt das bestehende Kampf-HUD um eine eigene Charakterwahl. Spieler können ihre Figuren bedienen, die Spielleitung kann zwischen Szenentokens wechseln – während der aktive Kämpfer und der Kampfverlauf sichtbar bleiben.
 
-### Charakterwahl und Ziele
+### Charakterwahl und persönliche Ziele
 
-- Eigene Szenentokens für Spieler und beliebige Szenentokens für die SL sind über eine durchsuchbare Auswahl oder direkt auf der Karte erreichbar. Kampfereignisse und gerade aktiver Kämpfer bleiben sichtbar. Persönliche Karten stehen oben, aktive Karten darunter; gleiche Tokens werden zusammengefasst.
-- Ziele werden je Benutzer und Token getrennt geführt und nennen die zugehörige Figur. Kompakte Karten zeigen Ressourcen nur mit entsprechender Berechtigung. Ein wiederholter Porträtklick zeigt den Token auf der Karte.
-- Wer am Zug ist, aber gerade eine andere Figur bedient, erhält einen blinkenden Hinweis am aktiven Porträt. Die Bewegungsreichweite erscheint bei Spielern nur für den aktiven Token und nicht für besiegte Figuren.
-- Vorbereitung und Auslösung von Zaubern und Fernkampfangriffen prüfen den exakten Token-Zug. Derselbe Spieler oder Actor mit einer anderen Token-UUID genügt nicht. Schloss und Tooltip erklären die Sperre; Rechtsklick und Abbrechen bleiben nutzbar.
+- **Charaktere direkt auswählen:** Die Auswahl enthält ausschließlich Tokens der aktuellen Szene. Spieler sehen ihre berechtigten Figuren, die SL alle Szenentokens. Suche und Filter erleichtern die Auswahl. Ein berechtigtes Token lässt sich auch direkt auf der Kampfkarte auswählen; eine offene Charakterauswahl schließt sich dabei.
+- **Aktiven Kampf im Blick behalten:** Eigene Figur bzw. SL-Auswahl und eigenes Ziel stehen oben, gerade aktiver Kämpfer und sein Primärziel darunter. Der bediente Charakter erhält die große Karte. Identische Tokens oder Ziele erscheinen nur einmal; verschiedene Tokens desselben Actors bleiben getrennt.
+- **Ziele eindeutig zuordnen:** Eigene Ziele bleiben beim Wechsel zwischen Figuren innerhalb der Sitzung erhalten. Jede Zielkarte nennt, für welchen Charakter das Ziel ausgewählt ist. Die Kampfereignisse folgen weiterhin dem aktiven Kämpfer.
+- **Ressourcen auch kompakt anzeigen:** Kleine Karten zeigen Porträt, Name sowie Lebens- und Fokusleisten, sofern die nötige Sichtberechtigung besteht.
+- **Handlungsbedarf erkennen:** Ist die eigene Figur am Zug, während eine andere Figur bedient wird, blinkt das aktive Porträt für den zuständigen Spieler bzw. die SL. Die Bewegungsreichweite erscheint bei Spielern nur für den gerade aktiven Token und nicht für besiegte Figuren.
+- **Schnell zur Figur zurückfinden:** Der erste Klick auf eine kompakte Charakterkarte übernimmt die Bedienung. Ein weiterer Klick auf das bereits geöffnete Porträt zeigt den Token auf der Kampfkarte.
 
-### Bedienung und Korrekturen
+Die Charakterwahl ist **standardmäßig aktiv**. Unter **Moduleinstellungen → Charakterwahl im HUD** lässt sich die klassische Ansicht wiederherstellen. Eine bereits gespeicherte Abschaltung wird respektiert.
 
-- Fertigkeiten, Angriffe, Zauber und Aktive Abwehr bleiben als vollständige aufklappbare Menüs erhalten und schließen einander beim Öffnen.
-- Tooltips stehen über der Aktionsleiste bzw. neben der Angriffszeile und lassen den Favoritenstern frei. Freie Bereiche über und zwischen den Portraitspalten geben Mausereignisse an die Kampfkarte weiter.
-- Einblendungs-Icons verwenden korrekt aufgelöste Pfade. HUD-Aktualisierungen setzen laufende Aktionseinblendungen fort, statt sie erneut zu starten.
-- Lange Modifikatorlisten in Wurfdialogen bleiben scrollbar. Die Korrektur gilt weiterhin ausdrücklich für Splittermond 14.2.7 und wird auch bei neueren Systemversionen geladen.
-- Die bisherigen CSS-Adressen aus 0.6.4 und 0.6.6 leiten auf den aktuellen Einstieg weiter. Einstellungen und Weltdaten benötigen keine Migration.
+### Aktionen und Bedienung
 
-### Aktualisierung
+- **Zugsperre für Zauber und Fernkampf:** Vorbereiten und Auslösen sind im laufenden Kampf nur im Zug des ausgewählten Tokens möglich – auch für die SL und für bereits vorbereitete Aktionen. Dass eine andere Figur desselben Spielers oder ein anderer Token desselben Actors am Zug ist, reicht nicht aus. Gesperrte Buttons zeigen ein Schloss mit Begründung im Tooltip. Die Vorbereitung bleibt erhalten; Abbrechen und Item-Rechtsklick bleiben erreichbar.
+- **Vollständige Aktionsmenüs:** Fertigkeiten, Angriffe, Zauber und Aktive Abwehr bleiben in ihren aufklappbaren, scrollbaren Listen. Das Öffnen eines Menüs schließt das zuvor geöffnete. Favoriten und die bisherigen Ausrüstungsschalter bleiben verfügbar.
+- **Freie Wege zu Buttons und Karte:** Tooltips stehen über der Aktionsleiste bzw. neben der gesamten Angriffszeile einschließlich Favoritenstern. Freie Flächen über den Portraitspalten und zwischen den HUD-Bereichen lassen Klicks, Ziehen und Mausrad zur Kampfkarte durch.
+- **Zuverlässige Aktionseinblendungen:** Die Icon-Pfade sind korrigiert. HUD-Aktualisierungen setzen eine laufende Einblendung fort, statt dieselbe Animation erneut zu starten.
+- **Scrollbare Wurfdialoge:** Bei langen Modifikatorlisten bleiben die Wurfbuttons erreichbar. Die Korrektur bleibt ausdrücklich für **Splittermond 14.2.7** enthalten und wird auch bei neueren Systemversionen geladen.
 
-Das reguläre ZIP wird in `Data/modules/splittermond-smoother-fight` entpackt. Danach Foundry und die Browserseiten aller Beteiligten neu laden. Die klassische Ansicht bleibt über **Charakterwahl im HUD** abschaltbar. Der frühere Code-Stand und die Vorschaupakete bleiben lokal als Rückkehrmöglichkeit erhalten.
+### Aktualisierung und Kompatibilität
+
+Die Mindestanforderungen bleiben unverändert: **Foundry VTT 14 ab Build 14.359** und **Splittermond ab 14.2.0**. Die Vorbereitungsdaten von **14.2.7** und **14.3.0-beta4** werden unterstützt. Einstellungen und Weltdaten benötigen keine Migration.
+
+Nach Veröffentlichung kann das Modul über Foundrys Modulverwaltung aktualisiert werden. Bei manueller Installation enthält das reguläre ZIP die Moduldateien direkt auf der obersten Ebene: Bei beendetem Foundry in **Data/modules/splittermond-smoother-fight** entpacken. Anschließend Foundry bzw. die Welt und die Browserseiten aller Beteiligten neu laden, bei Bedarf mit **Strg+F5**. Die bisherigen CSS-Adressen aus 0.6.4 und 0.6.6 bleiben als Weiterleitungen erhalten.
+
+### Prüfung
+
+- **706 automatisierte Tests** und zusätzlich **80 Regeltests** mit den vorgegebenen Coverage-Grenzen erfolgreich.
+- Lokale Browserprüfungen in **Chromium und Firefox** bei **1920 × 1080** und **1280 × 720** prüfen unter anderem Auswahl, Ziele, Berechtigungen, Zugsperren, Rechtsklick, Tooltips, Mausdurchleitung und Einblendungen.
+- Die Zugsperren wurden mit den Vorbereitungsdaten aus **14.2.7** und **14.3.0-beta4** geprüft. Die Browserprüfungen verwenden echte HUD-Komponenten mit Testdaten; sie sind kein vollständiger Integrationstest in einer Foundry-Spielwelt.
 
 ## 0.6.6 – 12. September 2026
 

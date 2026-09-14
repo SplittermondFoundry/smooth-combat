@@ -4,7 +4,7 @@ Smoother Fight ist ein Foundry-VTT-Modul für Splittermond. Es ergänzt laufende
 
 Versionshinweise stehen im [Changelog](CHANGELOG.md).
 
-Version **0.7.0** übernimmt die geprüfte Charakterwahl und alle Korrekturen aus Vorschau 14 in den regulären Build.
+Version **0.7.0** ergänzt die Charakterwahl und persönliche Ziele im laufenden Kampf und verbessert die Bedienung des HUDs.
 
 ## Voraussetzungen
 

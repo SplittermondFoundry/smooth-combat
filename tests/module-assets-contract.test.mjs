@@ -214,7 +214,7 @@ test("periodically updated chat timestamps cannot change message height", () => 
 test("the legacy stylesheet URL remains a compatible entry point", () => {
     const manifest = readManifest();
     const versionedWrapper = path.posix.basename(manifest.styles[0]);
-    const compatibilityWrapper = fs.readFileSync(path.join(stylesRoot, "smoother-fight.css"), "utf8");
+    const compatibilityWrapper = fs.readFileSync(path.join(stylesRoot, "smoother-fight.css"), "utf8").replace(/\r\n/gu, "\n");
     assert.equal(compatibilityWrapper, `@import url("./${versionedWrapper}?module=${manifest.version}");\n`);
 });
 
