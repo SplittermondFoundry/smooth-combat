@@ -246,7 +246,9 @@
       "PrimaryGmAssignment": "primary GM",
       "OwnerAssignment": "Foundry OWNER",
       "TokenAssigned": "{token} was directly assigned to {user}.",
-      "TokenAssignmentCleared": "The direct assignment for {token} was removed; the sheet assignment or Foundry OWNER fallback applies again."
+      "TokenAssignmentCleared": "The direct assignment for {token} was removed; the sheet assignment or Foundry OWNER fallback applies again.",
+      "CharacterFocusName": "Character selection in HUD (preview)",
+      "CharacterFocusHint": "Control owned characters or any character as GM alongside the ongoing combat. Disable to restore the classic HUD."
     },
     "HUD": {
       "Active": "Currently active",
@@ -745,7 +747,23 @@
       "CheatRollInvalid": "Every result must be an integer within that die's range.",
       "CheatRollUnavailable": "The roll could not be intercepted safely and will be rolled normally.",
       "UseLightMode": "Use light mode",
-      "UseDarkMode": "Use dark mode"
+      "UseDarkMode": "Use dark mode",
+      "CharacterFocus": {
+        "YourActor": "Your actor",
+        "GmActor": "GM selection",
+        "YourTarget": "Your target",
+        "HiddenActive": "Hidden combatant is active",
+        "ChooseCharacter": "Choose character",
+        "SearchCharacter": "Search characters",
+        "SceneToken": "Scene token",
+        "WithoutToken": "No token in this scene",
+        "NotInCombat": "Not in the current combat",
+        "Inspect": "Control in HUD",
+        "Operating": "Controls: {name}",
+        "ReadOnly": "Choose an owned character to use these controls",
+        "StartOwnTurn": "Start spells and ranged attacks only on this token’s turn.",
+        "Details": "Details"
+      }
     }
   }
 }

@@ -1,3 +1,5 @@
+import { requireTurnActionStart } from "../../shared/turn-start.js";
+import { addFocusedCombatTicks } from "./focus-ticks.js";
 import {
     services,
 } from "../../core/services.js";
@@ -49,6 +51,7 @@ export function getPreparationApplicationStatus(actor, now = Date.now()) {
 export async function prepareCombatAction(context, { kind, itemId, ticks, label }) {
     const actor = context?.actor;
     if (!actor || !["attack", "spell"].includes(kind) || !itemId || !Number.isFinite(Number(ticks))) return false;
+    if (!requireTurnActionStart(context)) return false;
     const lockKey = actor.uuid ?? actor.id;
     if (!lockKey || preparationLocks.has(lockKey) || getPreparationApplicationStatus(actor).state !== "idle") return false;
     preparationLocks.add(lockKey);
@@ -60,10 +63,19 @@ export async function prepareCombatAction(context, { kind, itemId, ticks, label 
             itemId,
             ticks: Number(ticks),
             previousInitiative: Number.isFinite(previousInitiative) ? previousInitiative : null,
-            initiatedBy: game.user?.id ?? null,
+          initiatedBy: game.user?.id ?? null,
         });
         try {
-            await actor.addTicks(Number(ticks), label);
+            if (!requireTurnActionStart(context)) {
+                await persistPreparationFailureState(actor, "idle", applying);
+                return false;
+            }
+            if (context.hudFocus) {
+                if (await addFocusedCombatTicks(context, Number(ticks)) === null) {
+                    await persistPreparationFailureState(actor, "idle", applying);
+                    return false;
+                }
+            } else await actor.addTicks(Number(ticks), label);
         } catch (error) {
             const changed = initiativeChanged(context.combatant, previousInitiative);
             await persistPreparationFailureState(actor, changed === false ? "idle" : "uncertain", applying);

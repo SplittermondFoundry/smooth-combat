@@ -15,7 +15,7 @@ export function captureHudViewState(root) {
     const scroller = root?.querySelector?.(".sf-event-scroller");
     const tickActionReference = root?.querySelector?.(".sf-tick-action-reference");
     const spellList = captureSpellListViewState(root);
-    if (!scroller && !tickActionReference && !spellList) return null;
+    if (!scroller && !tickActionReference && !spellList && !root?.querySelector?.(".sf-focus-controls")) return null;
     const groups = Array.from(scroller?.querySelectorAll(".sf-event-group[data-event-id]") ?? []);
     const subevents = Array.from(scroller?.querySelectorAll(".sf-associated-card[data-subevent-id]") ?? []);
     const focusedEvent = scroller?.querySelector('.sf-event-card[data-sf-flow-focus="true"]')
@@ -33,15 +33,17 @@ export function captureHudViewState(root) {
         tickActionReferenceOpen: Boolean(tickActionReference?.open),
         tickActionFilter: tickActionFilter?.value ?? "",
         tickActionScrollTop: tickActionPopover?.scrollTop ?? 0,
-        spellListActorId: root?.dataset?.activeActorId ?? null,
+        spellListActorId: root?.querySelector?.(".sf-focus-controls")?.dataset.sfFocusReference ?? root?.dataset?.activeActorId ?? null,
+        focusMenus: captureFocusMenus(root),
         spellList,
     };
 }
 
 export function restoreHudViewState(root, state, { forceLatestEvent = false } = {}) {
     if (!state) return;
-    restoreTickActionReferenceState(root, state);
-    if (state.spellListActorId === (root?.dataset?.activeActorId ?? null)) {
+    if (state.spellListActorId === (root?.querySelector?.(".sf-focus-controls")?.dataset.sfFocusReference ?? root?.dataset?.activeActorId ?? null)) restoreTickActionReferenceState(root, state);
+    restoreFocusMenus(root, state);
+    if (state.spellListActorId === (root?.querySelector?.(".sf-focus-controls")?.dataset.sfFocusReference ?? root?.dataset?.activeActorId ?? null)) {
         restoreSpellListViewState(root, state.spellList);
     }
     const scroller = root?.querySelector?.(".sf-event-scroller");
@@ -223,6 +225,7 @@ function enforceCombatEventAccordion(root, disclosure) {
 
 export function requestActionMenuExpansion(context, trigger, menuId) {
     hudState.actionMenuExpansionRequest = {
+        focusReference: context.focusReference ?? null,
         actorId: context.actor?.id ?? null,
         combatantId: context.combatant?.id ?? null,
         menuId,
@@ -239,7 +242,10 @@ export function applyActionMenuExpansionRequest(root) {
     if (!request) return;
     hudState.actionMenuExpansionRequest = null;
     let scope = root;
-    if (request.combatantId && request.combatantId !== root.dataset.activeCombatantId) {
+    if (request.focusReference) {
+        scope = root.querySelector(".sf-focus-controls");
+        if (scope?.dataset.sfFocusReference !== request.focusReference) return;
+    } else if (request.combatantId && request.combatantId !== root.dataset.activeCombatantId) {
         scope = Array.from(root.querySelectorAll("[data-sf-context-combatant-id]"))
             .find((candidate) => candidate.dataset.sfContextCombatantId === request.combatantId);
         if (!scope) return;
@@ -259,4 +265,21 @@ export function applyActionMenuExpansionRequest(root) {
     };
     restoreScroll();
     requestAnimationFrame(restoreScroll);
+}
+
+function captureFocusMenus(root) {
+    if (!root?.querySelector?.(".sf-focus-controls")) return null;
+    return Array.from(root.querySelectorAll(".sf-focus-controls details[data-sf-menu]")).map(menu => ({
+        id: menu.dataset.sfMenu, open: menu.open, scroll: menu.querySelector(".sf-action-popover")?.scrollTop ?? 0,
+    }));
+}
+function restoreFocusMenus(root, state) {
+    if (state.spellListActorId !== root?.querySelector?.(".sf-focus-controls")?.dataset.sfFocusReference) return;
+    for (const entry of state.focusMenus ?? []) {
+        const menu = Array.from(root.querySelectorAll(".sf-focus-controls details[data-sf-menu]")).find(m => m.dataset.sfMenu === entry.id);
+        if (!menu) continue;
+        menu.open = entry.open;
+        const popover = menu.querySelector(".sf-action-popover");
+        if (popover) popover.scrollTop = entry.scroll;
+    }
 }

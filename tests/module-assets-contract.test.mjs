@@ -58,9 +58,10 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "40a6b342bde6051866bb8fcaad7c78ebe9fedcfde8ab48546277e115032524ed",
+        "0cb3a080febcec8c007ff9f7330f43e7556fea163f547642eeb570943e702549",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
+    assert.equal(german.SMOOTHER_FIGHT.HUD.Focus, "FO");
     assert.equal(german.SMOOTHER_FIGHT.HUD.DefenseSplinterpoint, "Splitterpunkt (+ 3 VTD)");
     assert.equal(
         german.SMOOTHER_FIGHT.HUD.DefenseSplinterpointResonance,
@@ -97,7 +98,7 @@ test("published DOM integration attributes remain available", () => {
     assert.match(assignmentTemplate, /data-owner-permission-warning/u);
     assert.match(assignmentTemplate, /\{\{#if showSetupHint\}\}/u);
 
-    const hudView = ["view.js", "target-status.js", "combat-position-menu.js", "response-controls.js", "tick-action-reference.js"]
+    const hudView = ["view.js", "portraits.js", "target-status.js", "combat-position-menu.js", "response-controls.js", "tick-action-reference.js"]
         .map((file) => fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", file), "utf8"))
         .join("\n");
     const hudController = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "controller.js"), "utf8");
@@ -190,7 +191,7 @@ test("the local HUD demo loads the manifest stylesheet entry", () => {
 });
 
 test("the compact HUD retains mechanical status and summarizes secondary targets", () => {
-    const hudView = fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", "view.js"), "utf8");
+    const hudView = ["view.js", "portraits.js"].map(file => fs.readFileSync(path.join(moduleRoot, "scripts", "features", "hud", file), "utf8")).join("\n");
     const responsive = fs.readFileSync(path.join(moduleRoot, "styles", "responsive.css"), "utf8");
     assert.match(hudView, /<b>\+\$\{secondaryTargets\.length\}<\/b>/u);
     assert.doesNotMatch(responsive, /\.sf-actor \.sf-defense-row,\s*#splittermond-smoother-fight-hud \.sf-resources,\s*#splittermond-smoother-fight-hud \.sf-turn-target\s*\{\s*display:\s*none/u);

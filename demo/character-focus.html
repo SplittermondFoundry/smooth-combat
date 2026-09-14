@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Charakterwahl – Funktionsvorschau</title>
+<link rel="stylesheet" href="../Modul/splittermond-smoother-fight/styles/smoother-fight-0.6.6.css">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#30473d;color:#eee;font:14px system-ui}button,input,select{font:inherit}button{cursor:pointer}
+.map{position:fixed;inset:0 348px 0 0;background:radial-gradient(ellipse at 30% 45%,#65836b,transparent 35%),repeating-linear-gradient(0deg,transparent 0 79px,#a7b79b25 79px 80px),repeating-linear-gradient(90deg,transparent 0 79px,#a7b79b25 79px 80px),#30473d}
+.notice{position:fixed;top:16px;left:110px;color:#e4eadd;background:#142720e8;padding:10px;border-radius:5px;display:flex;align-items:center;gap:12px}
+.notice a{color:#a5e4d8}.sidebar{position:fixed;right:0;inset-block:0;width:348px;background:#151c1de8;padding:18px;border-left:1px solid #71908360}
+.tickbar{position:fixed;top:85px;left:110px;right:365px;display:flex;gap:16px;padding:18px;background:#101c19d9;border:1px solid #ab8d3e}
+.map-token{position:absolute;top:360px;left:690px;width:80px;height:80px;border:3px solid #c1a157;border-radius:50%;padding:8px;background:#10251d}.map-token.second{top:460px;left:860px;border-color:#81caba}
+.fa-chevron-down:before{content:'⌄'}.fa-lock:before{content:'▣'}.fa-address-card:before{content:'▤'}.fa-window-minimize:before{content:'−'}.fa-sun:before{content:'☀'}.fa-dice:before{content:'⚄'}
+#splittermond-smoother-fight-hud .sf-event-scroller{padding:7px}
+#splittermond-smoother-fight-hud .sf-focus-test-event{padding:10px;background:#071714;border:1px solid #718e8950;border-radius:4px;margin:6px 0}
+#splittermond-smoother-fight-hud .sf-focus-test-event strong{color:var(--sf-gold-bright)}
+</style>
+<div class="map"><img class="map-token" src="../Modul/splittermond-smoother-fight/assets/icons/damage.svg"><img class="map-token second" src="../Modul/splittermond-smoother-fight/assets/icons/active-defense.svg"></div>
+<div class="notice"><strong>Funktionsvorschau · Testdaten · 1920 × 1080</strong><a href="?gm=1">SL</a><a href="?gm=0">Spieler</a><button id="turn">Zug wechseln</button><button id="classic">Klassisches HUD</button><button id="theme">Hell / Dunkel</button></div>
+<div class="tickbar">Tick 18　▸　Geistervarg　　·　　Tick 21　Peritus　　·　　Tick 24　Söldner</div>
+<aside class="sidebar"><h2>Kampfverlauf</h2><p>Der Kampf läuft weiter, während ein anderer Charakter betrachtet wird.</p><p>Die Menüs und Bedienelemente darunter stammen direkt aus dem Modul.</p><p>Hier werden ausschließlich lokale Testdaten verändert.</p></aside>
+<script type="module">
+import { focusFixture } from "../tests/fixtures/hud-focus-fixture.mjs";
+import { services } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
+import { mountHud } from "../Modul/splittermond-smoother-fight/scripts/features/hud/controller.js";
+import { hudState } from "../Modul/splittermond-smoother-fight/scripts/features/hud/state.js";
+import { scheduleRender } from "../Modul/splittermond-smoother-fight/scripts/features/hud/visibility.js";
+import { setTargetFromQuickMenu, removeTargetFromQuickMenu, bindQuickTargetHover } from "../Modul/splittermond-smoother-fight/scripts/features/targeting/targeting.js";
+import { requireOwner, performAttack, performSpell } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
+import * as focus from "../Modul/splittermond-smoother-fight/scripts/features/hud/focus-context.js";
+const dictionary = await fetch("../Modul/splittermond-smoother-fight/lang/de.json").then(r=>r.json());
+const f = focusFixture({gm:new URLSearchParams(location.search).get("gm")==="1",dictionary});
+const icon=(name)=>"/Modul/splittermond-smoother-fight/assets/icons/"+name+".svg";
+for(const [actor,name] of [[f.ghost,"damage"],[f.own,"active-defense"],[f.merc,"ranged"],[f.unplaced,"spell"]]){
+ actor.img=icon(name);
+ for(const item of [...actor.attacks,...actor.spells]) item.img=icon(item.isRanged?"ranged":"spell");
+}
+for(const name of ["isCombatEventDeletionPending","clearCombatEventExpansionRequest","clearCombatEventDeletionPending","clearHoveredToken","enforceChatPermissions","enforceFumbleActionState","getCombatEventExpansionRequest","getActionApplicationStatus"]) services[name] ??= ()=>null;
+game.settings.set=async(_module,key,value)=>{f.settings[key]=value;scheduleRender(0);};
+Object.assign(services,{scheduleRender,setTargetFromQuickMenu,removeTargetFromQuickMenu,bindQuickTargetHover,requireOwner,performAttack,performSpell,
+ buildCombatEvents:context=>`<section class="sf-events"><div class="sf-events-heading"><strong>Kampfverlauf</strong></div><div class="sf-event-scroller">
+ <details class="sf-event-group" data-event-id="attack" data-event-combatant-id="${context.combatant.id}" data-event-actor-id="${context.actor?.id??''}" open><summary>Aktueller Kampf · ${context.actor?.name??'Verborgen'}</summary><div class="sf-event-body"><div class="sf-focus-test-event"><strong>Angriff → ${context.target?.name??'Kein Ziel'}</strong><p>Die Anzeige folgt dem aktuellen Kampfteilnehmer.</p></div><div class="sf-focus-test-event">Aktive Abwehr und Schaden bleiben hier erreichbar.</div></div></details></div></section>`,
+});
+if(game.user.isGM){
+ f.nativeTargets.set(f.player.id,{target:f.targetToken,targets:[f.targetToken]});
+ const active=services.getHudContext();
+ const personal=focus.getHudFocusContexts(active).personal;
+ await focus.setHudFocusTarget(personal,f.activeToken.uuid);
+}
+mountHud();await hudState.hud.render();
+document.querySelector("#turn").onclick=async()=>{f.combat.combatant=f.combat.combatant===f.combat.combatants[0]?f.combat.combatants[1]:f.combat.combatants[0];f.combat.currentTick++;await hudState.hud.render();};
+document.querySelector("#classic").onclick=async()=>{f.settings.characterFocusHud=!f.settings.characterFocusHud;await hudState.hud.render();};
+document.querySelector("#theme").onclick=async()=>{f.settings.theme=f.settings.theme==="light"?"dark":"light";await hudState.hud.render();};
+window.fixture=f;window.focus=focus;window.services=services;window.hud=hudState.hud;window.ready=true;
+</script>
+</html>

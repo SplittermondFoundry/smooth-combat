@@ -1,3 +1,4 @@
+import { resolveHudActionContext } from "./context.js";
 import { hudState } from "./state.js";
 import { services } from "../../core/services.js";
 
@@ -108,18 +109,21 @@ export function buildEquipmentTooltipModel(actor, item, attack = null, speed = "
 
 export function bindActionTooltips(root, context) {
     for (const button of root.querySelectorAll("[data-spell-id]")) {
-        const spell = resolveActionItem(context.actor, button);
+        const actor = resolveHudActionContext(context, button)?.actor;
+        const spell = resolveActionItem(actor, button);
         if (spell) bindTooltipEvents(button, () => showSpellTooltip(button, spell));
     }
 
     for (const button of root.querySelectorAll('[data-sf-action="attack"][data-attack-id]')) {
-        const attack = context.actor?.attacks?.find((candidate) => candidate.id === button.dataset.attackId);
-        if (attack) bindTooltipEvents(button, () => showAttackTooltip(button, context.actor, attack));
+        const actor = resolveHudActionContext(context, button)?.actor;
+        const attack = actor?.attacks?.find((candidate) => candidate.id === button.dataset.attackId);
+        if (attack) bindTooltipEvents(button, () => showAttackTooltip(button, actor, attack));
     }
 
     for (const button of root.querySelectorAll('[data-sf-action="toggle-equipped"][data-item-id]')) {
-        const item = resolveActionItem(context.actor, button);
-        if (item) bindTooltipEvents(button, () => showEquipmentTooltip(button, context.actor, item));
+        const actor = resolveHudActionContext(context, button)?.actor;
+        const item = resolveActionItem(actor, button);
+        if (item) bindTooltipEvents(button, () => showEquipmentTooltip(button, actor, item));
     }
 }
 

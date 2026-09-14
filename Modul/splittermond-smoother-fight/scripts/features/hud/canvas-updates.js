@@ -1,3 +1,5 @@
+import { focusEnabled, getHudFocusContexts, hudFocusContextKey } from "./focus-context.js";
+import { refreshFocusedTargetDistances } from "./focus-view.js";
 import { hudState } from "./state.js";
 import { services } from "../../core/services.js";
 import { getHudContext, getPersonalHudContext } from "./context.js";
@@ -15,7 +17,7 @@ import { escapeHtml, getSetting, t } from "../../shared/values.js";
 export function hudCanvasContextKey(context) {
     return JSON.stringify(context ? [
         globalThis.canvas?.scene?.id, context.combat.id, context.combatant.id,
-        context.concealed, context.actor?.id, context.token?.uuid, context.runtimeController?.id,
+        context.concealed, context.actor?.id, context.token?.uuid, context.runtimeController?.id, ...(focusEnabled() ? [hudFocusContextKey(context)] : []),
     ] : null);
 }
 
@@ -28,7 +30,7 @@ function visibilitySignature(context) {
         : [];
     return JSON.stringify([
         ...JSON.parse(hudCanvasContextKey(context)), context.target?.uuid,
-        context.targets.map((token) => token.uuid), candidates,
+        context.targets.map((token) => token.uuid), candidates, ...(focusEnabled() ? [getHudFocusContexts(context).personal?.targets.map(token => token.uuid)] : []),
     ]);
 }
 
@@ -41,7 +43,7 @@ export function rememberHudCanvas(context) {
 
 export function isHudCanvasContextCurrent(context) {
     const previous = JSON.parse(hudState.canvasSignature ?? "null");
-    return JSON.stringify(previous?.slice(0, 7) ?? null) === hudCanvasContextKey(context);
+    return JSON.stringify(previous?.slice(0, focusEnabled() ? 8 : 7) ?? null) === hudCanvasContextKey(context);
 }
 
 export function refreshHudCanvasVisibility(root, { rendering = false } = {}) {
@@ -53,7 +55,7 @@ export function refreshHudCanvasVisibility(root, { rendering = false } = {}) {
     clearActionTooltip();
     services.clearHoveredToken?.();
     const current = JSON.parse(signature ?? "null");
-    if (!previous || !current || JSON.stringify(previous.slice(0, 7)) !== JSON.stringify(current.slice(0, 7))) {
+    if (!previous || !current || JSON.stringify(previous.slice(0, focusEnabled() ? 8 : 7)) !== JSON.stringify(current.slice(0, focusEnabled() ? 8 : 7))) {
         // Keep an ordinary turn handoff visible until the next HUD is ready.
         // Its old controls must not execute against the new active character.
         root.inert = true;
@@ -80,21 +82,23 @@ export function refreshHudCanvas(root) {
     const context = getHudContext();
     if (!context || !isHudCanvasContextCurrent(context)) return;
     refreshHudMovementControls(root, context);
-    const personal = root.querySelector(".sf-personal-controls") ? getPersonalHudContext(context) : null;
+    const personal = focusEnabled() ? getHudFocusContexts(context).action : root.querySelector(".sf-personal-controls") ? getPersonalHudContext(context) : null;
     const grid = globalThis.canvas?.grid;
     const rangeKey = JSON.stringify([geometry(context.token), geometry(context.target),
         geometry(personal?.token), geometry(personal?.target), grid?.size, grid?.distance, grid?.units]);
     if (changed("ranges", rangeKey)) refreshRanges(root, context, personal);
     const tracker = root.querySelector(".sf-movement-tracker");
     if (!tracker) return;
-    const token = context.token?.document ?? context.token;
+    const movementContext = focusEnabled() ? personal : context;
+    if (!movementContext?.token) return;
+    const token = movementContext.token?.document ?? movementContext.token;
     const movement = token?.movement;
     const key = JSON.stringify([
         token?.uuid, token?.width, token?.height, token?.elevation, token?.movementHistory,
         grid?.size, grid?.distance, grid?.type, grid?.diagonals,
         movement?.state, movement?.recorded, movement?.history?.distance, movement?.passed?.distance,
     ]);
-    if (changed("movement", key)) tracker.outerHTML = buildMovementTracker(context, { cache: hudState.movementDistanceCache });
+    if (changed("movement", key)) tracker.outerHTML = buildMovementTracker(movementContext, { cache: hudState.movementDistanceCache });
 }
 
 function geometry(tokenLike) {
@@ -103,6 +107,7 @@ function geometry(tokenLike) {
 }
 
 function refreshRanges(root, context, personal) {
+    if (focusEnabled()) refreshFocusedTargetDistances(root, context);
     const distance = targetDistancePresentation(context);
     const line = targetLinePresentation(context, distance.text);
     if (changed("targetLine", line)) {
@@ -111,7 +116,7 @@ function refreshRanges(root, context, personal) {
     }
     root.querySelector(".sf-turn-target")?.classList?.toggle("is-user-target",
         context.targets.some((target) => services.isCurrentUserTarget?.(target)));
-    if (changed("targetDistance", distance.text) && context.target) {
+    if (!focusEnabled() && changed("targetDistance", distance.text) && context.target) {
         const label = `${t("SMOOTHER_FIGHT.HUD.PrimaryTarget")}${distance.text ? ` · ${distance.text}` : ""}`;
         const portrait = root.querySelector(".sf-primary-target-panel .sf-portrait");
         const eyebrow = portrait?.querySelector(".sf-eyebrow");
@@ -131,14 +136,14 @@ function refreshActionRanges(root, context, measurement, personal) {
     // A player's personal melee controls may belong to a different combatant.
     const personalMeasurement = personal ? targetDistancePresentation(personal).measurement : null;
     const contexts = new Map(context.actor ? [[context.combatant.id, { context, measurement }]] : []);
-    if (personal) contexts.set(personal.combatant.id, { context: personal, measurement: personalMeasurement });
+    if (personal) contexts.set(personal.combatant?.id ?? personal.focusReference, { context: personal, measurement: personalMeasurement });
     for (const entry of contexts.values()) {
         entry.attacks = new Map(Array.from(entry.context.actor.attacks ?? [], (item) => [item.id, item]));
         entry.spells = new Map(Array.from(entry.context.actor.spells ?? [], (item) => [item.id, item]));
     }
     for (const button of root.querySelectorAll('.sf-actions [data-sf-action="attack"], .sf-actions [data-sf-action="spell"], .sf-actions [data-sf-action="cast-prepared-spell"]')) {
         const combatantId = button.closest("[data-sf-context-combatant-id]")?.dataset.sfContextCombatantId ?? context.combatant.id;
-        const entry = contexts.get(combatantId);
+        const entry = focusEnabled() && personal ? contexts.get(personal.combatant?.id ?? personal.focusReference) : contexts.get(combatantId);
         if (!entry) continue;
         const actor = entry.context.actor;
         const attack = entry.attacks.get(button.dataset.attackId);

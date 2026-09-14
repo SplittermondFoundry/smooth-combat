@@ -1,0 +1,51 @@
+/* Opt-in extension: retain the existing center, menus and portrait dimensions. */
+#splittermond-smoother-fight-hud .sf-focus-actor-column,
+#splittermond-smoother-fight-hud .sf-focus-target-column { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+#splittermond-smoother-fight-hud .sf-focus-card-scope { min-width: 0; }
+#splittermond-smoother-fight-hud .sf-focus-actor-column { position: relative; z-index: 3; }
+#splittermond-smoother-fight-hud .sf-focus-controls { min-width: 0; }
+#splittermond-smoother-fight-hud .sf-focus-context-label { color: var(--sf-teal); border: 1px solid var(--sf-line); border-radius: 3px; padding: 3px 5px; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#splittermond-smoother-fight-hud .sf-focus-actor.is-selected { border-color: var(--sf-teal); }
+#splittermond-smoother-fight-hud .sf-focus-label { background: none; border: 0; color: inherit; font: inherit; font-size: 10px; line-height: 1.15; text-align: left; flex: 1; min-width: 0; padding: 0; position: relative; z-index: 3; }
+#splittermond-smoother-fight-hud .sf-focus-actor { overflow: visible; }
+#splittermond-smoother-fight-hud .sf-focus-actor .sf-portrait-header { overflow: visible; border-radius: 7px 7px 0 0; }
+#splittermond-smoother-fight-hud .sf-focus-label,
+#splittermond-smoother-fight-hud .sf-focus-picker { pointer-events: auto; }
+#splittermond-smoother-fight-hud .sf-focus-actor.is-compact,
+#splittermond-smoother-fight-hud .sf-focus-target.is-compact { height: 72px; min-height: 72px; display: grid; grid-template-rows: 20px 50px; overflow: visible; }
+#splittermond-smoother-fight-hud .sf-focus-actor.is-compact .sf-portrait-header,
+#splittermond-smoother-fight-hud .sf-focus-target.is-compact .sf-portrait-header { height: 20px; min-height: 20px; padding: 2px 6px; font-size: 10px; }
+#splittermond-smoother-fight-hud .sf-focus-mini { display: flex; align-items: center; gap: 6px; height: 50px; min-height: 0; width: 100%; padding: 1px 5px 1px 1px; background: none; border: 0; color: var(--sf-text); text-align: left; cursor: pointer; }
+#splittermond-smoother-fight-hud .sf-focus-mini img { height: 48px; width: 48px; object-fit: contain; flex: 0 0 48px; border: 0; }
+#splittermond-smoother-fight-hud .sf-focus-mini > span { display: flex; flex-direction: column; gap: 4px; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: 12px; }
+#splittermond-smoother-fight-hud .sf-focus-mini small { font-size: 10px; color: var(--sf-muted); }
+#splittermond-smoother-fight-hud .sf-focus-empty { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; }
+#splittermond-smoother-fight-hud .sf-focus-empty.is-compact { height: 72px; min-height: 72px; }
+#splittermond-smoother-fight-hud .sf-focus-target-role { display: flex; align-items: center; height: 34px; background: var(--sf-bg); color: var(--sf-muted); padding: 3px 6px; font-size: 10px; }
+#splittermond-smoother-fight-hud .sf-focus-target .sf-no-target { border: 0; height: calc(100% - 34px); min-height: 0; border-radius: 0; }
+#splittermond-smoother-fight-hud .sf-focus-target.is-compact .sf-focus-target-role { height: 20px; }
+#splittermond-smoother-fight-hud .sf-focus-target.is-compact .sf-no-target { height: 50px; min-height: 50px; padding: 5px; gap: 3px; }
+#splittermond-smoother-fight-hud .sf-focus-target.is-compact .sf-no-target .sf-target-rings,
+#splittermond-smoother-fight-hud .sf-focus-target.is-compact .sf-no-target small { display: none; }
+#splittermond-smoother-fight-hud .sf-focus-picker { position: relative; z-index: 8; margin-left: auto; }
+#splittermond-smoother-fight-hud .sf-focus-picker > summary { list-style: none; cursor: pointer; padding: 3px; min-width: 20px; text-align: center; }
+#splittermond-smoother-fight-hud .sf-focus-picker .sf-action-popover { left: auto; right: 0; width: 320px; z-index: 30; }
+#splittermond-smoother-fight-hud .sf-focus-picker input { width: 100%; margin-bottom: 5px; }
+#splittermond-smoother-fight-hud .sf-focus-picker .sf-action-popover > button { display: flex; width: 100%; gap: 8px; align-items: center; text-align: left; padding: 5px; min-height: 40px; }
+#splittermond-smoother-fight-hud .sf-focus-picker .sf-action-popover > button[hidden] { display: none; }
+#splittermond-smoother-fight-hud .sf-focus-picker .sf-action-popover img { width: 32px; height: 32px; object-fit: contain; border: 0; }
+#splittermond-smoother-fight-hud .sf-focus-picker .sf-action-popover span { display: grid; min-width: 0; }
+#splittermond-smoother-fight-hud .sf-focus-picker small { color: var(--sf-muted); font-size: 10px; }
+#splittermond-smoother-fight-hud .sf-focus-locked-option { display: flex; min-width: 0; align-items: stretch; }
+#splittermond-smoother-fight-hud .sf-focus-locked-option[hidden] { display: none; }
+#splittermond-smoother-fight-hud .sf-focus-shell [data-sf-spell-row][hidden],
+#splittermond-smoother-fight-hud .sf-focus-shell [data-sf-spell-filter-empty][hidden] { display: none; }
+#splittermond-smoother-fight-hud .sf-focus-locked-option > button:first-child { flex: 1; min-width: 0; }
+#splittermond-smoother-fight-hud .sf-focus-locked-option .sf-focus-item-details { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; width: auto; font-size: 10px; padding: 5px; color: var(--sf-teal); }
+#splittermond-smoother-fight-hud .sf-focus-locked-option > button[data-sf-start-blocked]:disabled { opacity: .8; cursor: not-allowed; }
+#splittermond-smoother-fight-hud .sf-focus-target-column .sf-portrait-header .sf-eyebrow { white-space: normal; line-height: 1.15; }
+#splittermond-smoother-fight-hud .sf-focus-shell .sf-quick-targets { width: 100%; }
+@media (max-width: 1100px) {
+    #splittermond-smoother-fight-hud .sf-focus-picker .sf-action-popover { width: 280px; }
+    #splittermond-smoother-fight-hud .sf-focus-context-label { max-width: 150px; }
+}

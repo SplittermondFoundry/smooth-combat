@@ -26,6 +26,11 @@ export function registerSettings() {
         default: true,
         onChange: rerender,
     });
+    game.settings.register(MODULE_ID, "characterFocusHud", {
+        name: "SMOOTHER_FIGHT.Settings.CharacterFocusName",
+        hint: "SMOOTHER_FIGHT.Settings.CharacterFocusHint",
+        scope: "client", config: true, type: Boolean, default: false, onChange: () => services.changeHudFocusMode(),
+    });
     game.settings.register(MODULE_ID, "hideSystemBar", {
         name: "SMOOTHER_FIGHT.Settings.HideSystemBarName",
         hint: "SMOOTHER_FIGHT.Settings.HideSystemBarHint",

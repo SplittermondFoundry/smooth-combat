@@ -1,3 +1,5 @@
+import { handleHudFocusAction } from "./focus-controls.js";
+import { bindHudFocusSearch } from "./focus-view.js";
 import { hudState } from "./state.js";
 import { hudCanvasContextKey, rememberHudCanvas, refreshHudCanvas, refreshHudCanvasVisibility } from "./canvas-updates.js";
 import { rememberHudMarkup, refreshHudVisibilityParts } from "./canvas-parts.js";
@@ -22,9 +24,7 @@ import {
     restoreHudViewState,
 } from "./view-state.js";
 
-import {
-    buildHud,
-} from "./view.js";
+import { buildHud } from "./view.js";
 
 import {
     bindActionTooltips,
@@ -38,9 +38,7 @@ import {
     restoreQuickTargetViewState,
 } from "./quick-targets.js";
 
-import {
-    bindSpellListFilters,
-} from "./spell-filters.js";
+import { bindSpellListFilters } from "./spell-filters.js";
 
 import {
     scheduleRender,
@@ -403,6 +401,7 @@ class SmootherFightHud {
         services.clearHoveredToken();
         clearActionTooltip();
         this.element.innerHTML = html;
+        bindHudFocusSearch(this.element);
         rememberHudMarkup(this.element);
         rememberHudCanvas(context);
         this.element.hidden = false;
@@ -525,6 +524,7 @@ class SmootherFightHud {
         }
 
         const hudContext = getHudContext();
+        if (handleHudFocusAction(this.element, hudContext, target)) return;
         const context = resolveHudActionContext(hudContext, target);
         if (!context) return;
 

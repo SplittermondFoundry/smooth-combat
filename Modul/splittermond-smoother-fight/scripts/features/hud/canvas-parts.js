@@ -1,3 +1,5 @@
+import { focusEnabled, getHudFocusContexts } from "./focus-context.js";
+import { buildFocusedActorColumn, bindHudFocusSearch } from "./focus-view.js";
 import { hudState } from "./state.js";
 import { services } from "../../core/services.js";
 import { getPersonalHudContext } from "./context.js";
@@ -10,7 +12,7 @@ import { getSetting } from "../../shared/values.js";
 // modify it. An unchanged source subtree must retain those changes and listeners.
 export function rememberHudMarkup(root) {
     hudState.canvasMarkup = new WeakMap();
-    for (const part of root.querySelectorAll(".sf-target-column, .sf-tick-buttons, .sf-defense-menu, .sf-defense-response-control, .sf-events, .sf-selected-movement-control")) {
+    for (const part of root.querySelectorAll(".sf-focus-actor-column, .sf-target-column, .sf-tick-buttons, .sf-defense-menu, .sf-defense-response-control, .sf-events, .sf-selected-movement-control")) {
         rememberNodes(part);
     }
 }
@@ -87,7 +89,7 @@ export function refreshHudMovementControls(root, context) {
     const html = buildSelectedMovementControl(context.combat);
     if (hudState.canvasValues.get("selectedMovement") === html) return;
     hudState.canvasValues.set("selectedMovement", html);
-    const anchor = center.querySelector(":scope > .sf-movement-tracker, :scope > .sf-actions, :scope > .sf-events");
+    const anchor = center.querySelector(":scope > .sf-focus-controls, :scope > .sf-movement-tracker, :scope > .sf-actions, :scope > .sf-events");
     patchPart(center.querySelector(".sf-selected-movement-control"), html, new Set(), center, anchor);
 }
 
@@ -115,17 +117,19 @@ export function refreshHudVisibilityParts(root, context) {
     const column = root.querySelector(".sf-target-column");
     if (column) patchPart(column, buildTargetColumn(context), added);
 
+    const actorColumn = root.querySelector(".sf-focus-actor-column");
+    if (actorColumn) patchPart(actorColumn, buildFocusedActorColumn(context), added);
     const personalRoot = root.querySelector(".sf-personal-controls");
     const personal = personalRoot ? getPersonalHudContext(context) : null;
-    const actionContext = personal ? { ...personal, combatEventPresentation: context.combatEventPresentation } : context;
-    const controls = personalRoot ?? root.querySelector(".sf-center");
+    const actionContext = focusEnabled() ? getHudFocusContexts(context).action : personal ? { ...personal, combatEventPresentation: context.combatEventPresentation } : context;
+    const controls = root.querySelector(".sf-focus-controls") ?? personalRoot ?? root.querySelector(".sf-center");
     const ticks = controls?.querySelector(".sf-tick-buttons");
-    if (ticks && actionContext.actor) patchPart(ticks, buildAdvanceButtons(actionContext, Boolean(personal)), added);
+    if (ticks && actionContext?.actor) patchPart(ticks, buildAdvanceButtons(actionContext, Boolean(personal)), added);
     const actions = controls?.querySelector(".sf-actions");
-    if (actions && actionContext.actor && (!personalRoot || personal)) {
+    if (actions && actionContext?.actor && (!personalRoot || personal)) {
         refreshInterruptionControls(actions, actionContext, added);
         const defense = actions.querySelector(":scope > .sf-defense-response-control:not(.sf-continuous-interruption-control), :scope > .sf-defense-menu");
-        patchPart(defense, buildDefenseControl(actionContext, Boolean(personalRoot)), added, actions);
+        patchPart(defense, buildDefenseControl(actionContext, Boolean(personalRoot) && !focusEnabled()), added, actions);
     }
     const events = root.querySelector(".sf-events");
     if (events) patchPart(events, services.buildCombatEvents(context), added);
@@ -136,5 +140,6 @@ export function refreshHudVisibilityParts(root, context) {
     const inserted = { querySelectorAll: (selector) => [...root.querySelectorAll(selector)].filter((node) => added.has(node)) };
     services.bindQuickTargetHover?.(inserted);
     bindQuickTargetSearch(inserted);
+    bindHudFocusSearch(inserted);
     restoreQuickTargetViewState(root, quickState);
 }

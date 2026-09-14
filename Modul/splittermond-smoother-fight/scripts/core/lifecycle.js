@@ -127,7 +127,7 @@ export function registerHooks() {
         }
         const references = Array.from(targets);
         services.rememberTargetReferences(user.id, references);
-        if (user.id === game.user.id) services.publishOwnTarget(references);
+        if (user.id === game.user.id && !services.captureHudFocusTargets?.(user, references)) services.publishOwnTarget(references);
         services.scheduleRender();
     });
 
@@ -229,6 +229,11 @@ export function registerSocket() {
         if (typeof authenticatedSenderId !== "string" || payload.senderId !== authenticatedSenderId) return;
         const sender = game.users.get(authenticatedSenderId);
         if (!sender) return;
+
+        if (payload.type === "hud-focus-target-update") {
+            services.receiveHudFocusTargets(payload, sender);
+            return;
+        }
 
         if (payload.type === "target-update" && typeof payload.userId === "string") {
             if (authenticatedSenderId !== payload.userId && !sender.isGM) return;

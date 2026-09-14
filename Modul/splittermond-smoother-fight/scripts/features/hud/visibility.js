@@ -3,6 +3,7 @@ import { hudState } from "./state.js";
 import { services } from "../../core/services.js";
 
 import { getHudContext } from "./context.js";
+import { focusEnabled, getHudFocusContexts } from "./focus-context.js";
 import { isHudCanvasContextCurrent, refreshHudCanvas, refreshHudCanvasVisibility } from "./canvas-updates.js";
 import { refreshHudVisibilityParts } from "./canvas-parts.js";
 import { clearActionTooltip } from "./action-tooltips.js";
@@ -28,7 +29,9 @@ export function scheduleHudCanvasRefresh(recordedToken = null, { movementComplet
     const root = hudState.hud?.element;
     // Recorded paths only affect the active movement tracker. Other token
     // positions and sight are handled separately by updateToken/sightRefresh.
-    if (recordedToken && recordedToken.uuid !== getHudContext()?.token?.uuid) return;
+    const active = getHudContext();
+    if (recordedToken && recordedToken.uuid !== active?.token?.uuid
+        && (!focusEnabled() || recordedToken.uuid !== getHudFocusContexts(active).action?.token?.uuid)) return;
     // Token flags include completed plans and cleared interruption requests,
     // including changes received by clients that do not execute the movement.
     const flagsChanged = Object.keys(documentChanges ?? {}).some((key) => key === "flags" || key.startsWith("flags."));

@@ -1,3 +1,4 @@
+import { focusEnabled, getHudFocusTurnTargets, resolveHudFocusElement } from "./focus-context.js";
 import { hudState } from "./state.js";
 
 import { services } from "../../core/services.js";
@@ -38,7 +39,8 @@ export function getHudContext() {
     if (!actor) return null;
     const assignedUser = services.getAssignedUser(combatant);
     const runtimeController = services.getRuntimeController(combatant);
-    const targetSelection = services.getTargetSelectionForUser(runtimeController);
+    const base = { combat, combatant, actor, token, assignedUser, runtimeController };
+    const targetSelection = getHudFocusTurnTargets(base, services.getTargetSelectionForUser(runtimeController));
     return { combat, combatant, actor, token, assignedUser, runtimeController, ...targetSelection };
 }
 
@@ -131,6 +133,7 @@ export function syncActiveCombatantTokenSelection(combat = getApplicableCombat()
     const tokenObject = token?.object ?? globalThis.canvas?.tokens?.get?.(token?.id);
     if (!token || !tokenObject?.control) return false;
 
+    if (focusEnabled()) return false;
     hudState.personalCombatId = combat.id;
     hudState.personalCombatantId = combatant.id;
     const controlledToken = services.getControlledTokenDocument();
@@ -141,7 +144,7 @@ export function syncActiveCombatantTokenSelection(combat = getApplicableCombat()
 }
 
 export function reconcileControlledCombatTokenSelection(combat = getApplicableCombat()) {
-    if (!combat?.started) return false;
+    if (!combat?.started || focusEnabled()) return false;
     if (syncActiveCombatantTokenSelection(combat)) return true;
     if (game.user?.isGM) return false;
 
@@ -172,6 +175,7 @@ export function resetPersonalCombatantSelection() {
 
 export function resolveHudActionContext(activeContext, element) {
     if (!activeContext) return null;
+    if (focusEnabled() && element?.closest?.("[data-sf-focus-reference]")) return resolveHudFocusElement(activeContext, element);
     const scope = element?.closest?.("[data-sf-context-combatant-id]");
     if (!scope) return activeContext;
     const combatantId = scope.dataset.sfContextCombatantId;

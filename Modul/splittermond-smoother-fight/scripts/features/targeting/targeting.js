@@ -117,6 +117,7 @@ export function tokenUuid(tokenOrObject) {
 }
 
 export async function setTargetFromQuickMenu(context, uuid, { additive = false, replaceSelection = !additive } = {}) {
+    if (context?.hudFocus) return services.setHudFocusTarget(context, uuid, { additive, replaceSelection });
     const recipient = runtimeControllerFor(context);
     if (!recipient) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable"));
@@ -158,6 +159,7 @@ export async function setTargetFromQuickMenu(context, uuid, { additive = false, 
 }
 
 export async function removeTargetFromQuickMenu(context, uuid) {
+    if (context?.hudFocus) return services.setHudFocusTarget(context, uuid, { remove: true });
     const recipient = runtimeControllerFor(context);
     if (!recipient) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable"));
@@ -224,6 +226,7 @@ export function setLocalTarget(tokenDocument, targeted = true, releaseOthers = f
 }
 
 export function canChooseTarget(context, runtimeController = runtimeControllerFor(context)) {
+    if (context?.hudFocus) return Boolean(services.resolveHudFocusActionContext(context));
     return Boolean(
         game.user.isGM ||
         runtimeController?.id === game.user.id

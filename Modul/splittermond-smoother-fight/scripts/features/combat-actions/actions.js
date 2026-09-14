@@ -1,3 +1,5 @@
+import { requireTurnActionStart } from "../../shared/turn-start.js";
+import { addFocusedCombatTicks } from "./focus-ticks.js";
 import { combatActionState } from "./state.js";
 
 import { services } from "../../core/services.js";
@@ -80,6 +82,7 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
     const ranged = isRangedAttack(attack);
     const preparedAttackId = preparedActionId(context.actor, "attack");
     const readiness = attackReadiness(ranged, attack.id, preparedAttackId);
+    if (ranged && !readiness.prepared && !requireTurnActionStart(context)) return false;
     if (actionRequiresTarget(readiness.ready) && !context.target) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
         return false;
@@ -232,6 +235,7 @@ export async function performSpell(context, spellId) {
     const spell = context.actor.spells?.find((candidate) => candidate.id === spellId);
     if (!spell) return;
     const prepared = preparedActionId(context.actor, "spell") === spellId;
+    if (!prepared && !requireTurnActionStart(context)) return false;
     const targetDependent = isTargetDependentDifficulty(spell.difficulty ?? spell.system?.difficulty);
     if (actionRequiresTarget(prepared, targetDependent) && !context.target) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
@@ -337,6 +341,7 @@ function snapshotTargetContext(context) {
 }
 
 function liveRuntimeActionContext(context) {
+    if (context?.hudFocus) return services.resolveHudFocusActionContext(context);
     const runtimeController = services.getRuntimeController(context.combatant ?? context.actor);
     if (!runtimeController) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable"));
@@ -356,6 +361,13 @@ export async function addCombatTicks(context, requestedTicks) {
         return null;
     }
     let advancedTicks;
+    if (context.hudFocus) {
+        advancedTicks = await addFocusedCombatTicks(context, requestedTicks === "custom" ? 3 : Number(requestedTicks), {
+            prompt: requestedTicks === "custom", label: t("SMOOTHER_FIGHT.HUD.CustomTicksPrompt", { name: context.actor.name }),
+        });
+        services.scheduleRender(0);
+        return advancedTicks;
+    }
     if (requestedTicks === "custom") {
         const previousInitiative = Math.round(Number(context.combatant.initiative) || 0);
         await context.actor.addTicks(3, t("SMOOTHER_FIGHT.HUD.CustomTicksPrompt", { name: context.actor.name }), true);
@@ -493,6 +505,7 @@ export async function toggleEquipped(actor, itemId) {
 }
 
 export async function requireOwner(context, callback) {
+    if (context?.hudFocus) return services.resolveHudFocusActionContext(context) ? callback() : undefined;
     const runtimeController = services.getRuntimeController(context.combatant ?? context.actor);
     if (!runtimeController) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.RuntimeControllerUnavailable"));

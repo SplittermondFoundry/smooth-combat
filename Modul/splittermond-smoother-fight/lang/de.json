@@ -246,7 +246,9 @@
       "PrimaryGmAssignment": "Haupt-GM",
       "OwnerAssignment": "Foundry-OWNER",
       "TokenAssigned": "{token} wurde direkt {user} zugewiesen.",
-      "TokenAssignmentCleared": "Die direkte Zuordnung von {token} wurde entfernt; die Bogen-Zuordnung oder der Foundry-OWNER-Fallback greift wieder."
+      "TokenAssignmentCleared": "Die direkte Zuordnung von {token} wurde entfernt; die Bogen-Zuordnung oder der Foundry-OWNER-Fallback greift wieder.",
+      "CharacterFocusName": "Charakterwahl im HUD (Vorschau)",
+      "CharacterFocusHint": "Eigene bzw. beliebige SL-Charaktere neben dem laufenden Kampf bedienen. Abschalten stellt die klassische Ansicht wieder her."
     },
     "HUD": {
       "Active": "Gerade aktiv",
@@ -745,7 +747,23 @@
       "CheatRollInvalid": "Jeder Wert muss eine ganze Zahl im Wertebereich seines Würfels sein.",
       "CheatRollUnavailable": "Der Wurf konnte nicht sicher abgefangen werden und wird normal ausgewürfelt.",
       "UseLightMode": "Lightmode verwenden",
-      "UseDarkMode": "Darkmode verwenden"
+      "UseDarkMode": "Darkmode verwenden",
+      "CharacterFocus": {
+        "YourActor": "Dein Charakter",
+        "GmActor": "SL-Auswahl",
+        "YourTarget": "Dein Ziel",
+        "HiddenActive": "Verborgener Kämpfer am Zug",
+        "ChooseCharacter": "Charakter auswählen",
+        "SearchCharacter": "Charaktere durchsuchen",
+        "SceneToken": "Szenentoken",
+        "WithoutToken": "Kein Token in dieser Szene",
+        "NotInCombat": "Nicht im laufenden Kampf",
+        "Inspect": "Im HUD bedienen",
+        "Operating": "Bedienung: {name}",
+        "ReadOnly": "Für die Bedienung einen eigenen Charakter wählen",
+        "StartOwnTurn": "Zauber und Fernkampfangriffe nur im eigenen Zug starten.",
+        "Details": "Details"
+      }
     }
   }
 }

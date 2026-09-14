@@ -1,3 +1,6 @@
+export { captureHudFocusTargets, resolveHudFocusActionContext, setHudFocusTarget } from "./focus-context.js";
+export { receiveHudFocusTargets, changeHudFocusMode } from "./focus-target-sync.js";
+
 export {
     getHudContext,
     reconcileControlledCombatTokenSelection,
