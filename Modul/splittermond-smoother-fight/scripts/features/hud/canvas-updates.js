@@ -4,7 +4,7 @@ import { hudState } from "./state.js";
 import { services } from "../../core/services.js";
 import { getHudContext, getPersonalHudContext } from "./context.js";
 import { clearActionTooltip } from "./action-tooltips.js";
-import { buildMovementTracker } from "./movement.js";
+import { buildMovementTracker, canShowMovementTracker } from "./movement.js";
 import { refreshHudMovementControls, refreshHudVisibilityParts } from "./canvas-parts.js";
 import {
     attackRangePresentation, rangeStatusMarkup, spellRangePresentation,
@@ -94,6 +94,7 @@ export function refreshHudCanvas(root) {
     const token = movementContext.token?.document ?? movementContext.token;
     const movement = token?.movement;
     const key = JSON.stringify([
+        canShowMovementTracker(movementContext),
         token?.uuid, token?.width, token?.height, token?.elevation, token?.movementHistory,
         grid?.size, grid?.distance, grid?.type, grid?.diagonals,
         movement?.state, movement?.recorded, movement?.history?.distance, movement?.passed?.distance,

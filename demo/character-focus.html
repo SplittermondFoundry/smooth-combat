@@ -26,7 +26,7 @@ import { mountHud } from "../Modul/splittermond-smoother-fight/scripts/features/
 import { hudState } from "../Modul/splittermond-smoother-fight/scripts/features/hud/state.js";
 import { scheduleRender } from "../Modul/splittermond-smoother-fight/scripts/features/hud/visibility.js";
 import { setTargetFromQuickMenu, removeTargetFromQuickMenu, bindQuickTargetHover } from "../Modul/splittermond-smoother-fight/scripts/features/targeting/targeting.js";
-import { requireOwner, performAttack, performSpell } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
+import { requireOwner, performAttack, performSpell, showTokenOnCanvas } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
 import * as focus from "../Modul/splittermond-smoother-fight/scripts/features/hud/focus-context.js";
 const dictionary = await fetch("../Modul/splittermond-smoother-fight/lang/de.json").then(r=>r.json());
 const f = focusFixture({gm:new URLSearchParams(location.search).get("gm")==="1",dictionary});
@@ -38,7 +38,7 @@ for(const [actor,name] of [[f.ghost,"damage"],[f.own,"active-defense"],[f.merc,"
 for(const token of f.scene.tokens) token.texture.src=token.actor.img;
 for(const name of ["isCombatEventDeletionPending","clearCombatEventExpansionRequest","clearCombatEventDeletionPending","clearHoveredToken","enforceChatPermissions","enforceFumbleActionState","getCombatEventExpansionRequest","getActionApplicationStatus"]) services[name] ??= ()=>null;
 game.settings.set=async(_module,key,value)=>{f.settings[key]=value;scheduleRender(0);};
-Object.assign(services,{scheduleRender,setTargetFromQuickMenu,removeTargetFromQuickMenu,bindQuickTargetHover,requireOwner,performAttack,performSpell,
+Object.assign(services,{scheduleRender,setTargetFromQuickMenu,removeTargetFromQuickMenu,bindQuickTargetHover,requireOwner,performAttack,performSpell,showTokenOnCanvas,
  buildCombatEvents:context=>`<section class="sf-events"><div class="sf-events-heading"><strong>Kampfverlauf</strong></div><div class="sf-event-scroller">
  <details class="sf-event-group" data-event-id="attack" data-event-combatant-id="${context.combatant.id}" data-event-actor-id="${context.actor?.id??''}" open><summary>Aktueller Kampf · ${context.actor?.name??'Verborgen'}</summary><div class="sf-event-body"><div class="sf-focus-test-event"><strong>Angriff → ${context.target?.name??'Kein Ziel'}</strong><p>Die Anzeige folgt dem aktuellen Kampfteilnehmer.</p></div><div class="sf-focus-test-event">Aktive Abwehr und Schaden bleiben hier erreichbar.</div></div></details></div></section>`,
 });

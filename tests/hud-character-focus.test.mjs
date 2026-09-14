@@ -214,3 +214,40 @@ test('turn starts become available for the exact active token and classic layout
  const f=focusFixture();f.combat.combatant=f.combat.combatants[1];const html=await buildHud(getHudContext());assert.doesNotMatch(html,/data-sf-start-blocked/);
  f.settings.characterFocusHud=false;const classic=await buildHud(getHudContext());assert.doesNotMatch(classic,/sf-focus-shell|sf-focus-actor-column/);assert.match(classic,/sf-shell/);
 });
+
+test('movement ranges follow the exact player token turn and hide defeated combatants for everyone',async()=>{
+ for(const gm of [false,true]){
+  const f=focusFixture({gm});f.settings.movementTracking=true;
+  selectHudFocus(getHudContext(),'personal',f.ownToken.uuid);
+  let html=await buildHud(getHudContext());
+  assert.equal(html.includes('sf-movement-tracker'),gm);
+  f.combat.combatant=f.combat.combatants[2]; // Same actor, different token.
+  html=await buildHud(getHudContext());assert.equal(html.includes('sf-movement-tracker'),gm);
+  f.combat.combatant=f.combat.combatants[1];
+  assert.match(await buildHud(getHudContext()),/sf-movement-tracker/);
+  f.combat.combatants[1].isDefeated=true;
+  assert.doesNotMatch(await buildHud(getHudContext()),/sf-movement-tracker/);
+  f.combat.combatant=f.combat.combatants[0];
+  assert.doesNotMatch(await buildHud(getHudContext()),/sf-movement-tracker/);
+ }
+});
+
+test('compact actor and target bars obey observer, GM and reveal permissions',async()=>{
+ const compact=html=>[...html.matchAll(/<aside class="sf-portrait [^"]*is-compact"[\s\S]*?<\/aside>/g)].map(([part])=>part).join('');
+ const f=focusFixture();
+ const actor=()=>compact(buildFocusedActorColumn(getHudContext()));
+ const target=()=>compact(buildFocusedTargetColumn(getHudContext()));
+ assert.doesNotMatch(actor()+target(),/sf-resource/);
+ f.ghost.testUserPermission=()=>true;f.merc.testUserPermission=()=>true;
+ assert.match(actor(),/sf-resource-health/);assert.match(target(),/sf-resource-focus/);
+ f.ghost.testUserPermission=()=>false;f.merc.testUserPermission=()=>false;
+ assert.doesNotMatch(actor()+target(),/sf-resource|24\/30|15\/21/);
+ f.settings.revealTargetResources=true;
+ assert.match(actor(),/24\/30/);assert.match(target(),/15\/21/);
+ f.settings.revealTargetResources=false;
+ await setHudFocusTarget(getHudFocusContexts(getHudContext()).personal,f.ownToken.uuid);
+ selectHudFocus(getHudContext(),'active');
+ assert.match(actor(),/sf-resource-health/);assert.match(target(),/sf-resource-focus/);
+ f.player.isGM=true;selectHudFocus(getHudContext(),'personal');
+ assert.match(actor(),/sf-resource-health/);assert.match(target(),/sf-resource-focus/);
+});

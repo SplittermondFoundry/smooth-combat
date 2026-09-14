@@ -18,12 +18,19 @@ import {
     readTokenMovementDistance,
 } from "../../shared/movement.js";
 import { resolveCombatPosition } from "../../shared/combat-position-state.js";
+import { mayStartTurnAction } from "../../shared/turn-start.js";
 
 export {
     readTokenMovementDistance,
 } from "../../shared/movement.js";
 
+export function canShowMovementTracker(context) {
+    if (context?.combatant?.isDefeated) return false;
+    return Boolean(game.user?.isGM || !context?.combat?.started || mayStartTurnAction(context));
+}
+
 export function buildMovementTracker(context, { cache } = {}) {
+    if (!canShowMovementTracker(context)) return "";
     const speed = readMovementSpeed(context.actor);
     const position = resolveCombatPosition(context.actor);
     const state = movementTrackerState(readTokenMovementDistance(context.token, {

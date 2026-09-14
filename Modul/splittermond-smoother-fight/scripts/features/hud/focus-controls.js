@@ -4,6 +4,11 @@ import { services } from "../../core/services.js";
 export function handleHudFocusAction(root, active, target) {
     if (!focusEnabled()) return false;
     const action = target.dataset.sfAction;
+    if (action === "show-token") {
+        const token = services.resolveToken(target.dataset.tokenUuid);
+        if (services.isTokenPerceivableByUser(token, game.user)) services.showTokenOnCanvas(token);
+        return true;
+    }
     if (action === "open-token-sheet") {
         const token = services.resolveToken(target.dataset.sfTokenUuid);
         if (services.isTokenPerceivableByUser(token, game.user)) token?.actor?.sheet?.render?.({ force: true });

@@ -33,7 +33,7 @@ export function portraitPanel({ side, token, actor, eyebrow, headerActions = "",
                 <span><small>KW</small>${escapeHtml(body)}</span>
                 <span><small>GW</small>${escapeHtml(mind)}</span>
             </div>` : `<div class="sf-defense-row is-concealed"><i class="fa-solid fa-eye-slash"></i><span>${escapeHtml(t("SMOOTHER_FIGHT.HUD.DefensesHidden"))}</span></div>`}
-            ${canViewResources(actor) ? resourceBars(actor) : ""}
+            ${resourceBars(actor)}
         </aside>
     `;
 }
@@ -53,14 +53,16 @@ export function noTargetPanel() {
     `;
 }
 
-function resourceBars(actor) {
+export function resourceBars(actor, { compact = false } = {}) {
+    if (!canViewResources(actor)) return "";
     const health = actor?.system?.healthBar;
     const focus = actor?.system?.focusBar;
     if (!health && !focus) return "";
-    return `<div class="sf-resources">
-        ${resourceBar("health", t("SMOOTHER_FIGHT.HUD.Health"), health)}
-        ${resourceBar("focus", t("SMOOTHER_FIGHT.HUD.Focus"), focus)}
-    </div>`;
+    const tag = compact ? "span" : "div";
+    return `<${tag} class="sf-resources">
+        ${resourceBar("health", t("SMOOTHER_FIGHT.HUD.Health"), health, tag)}
+        ${resourceBar("focus", t("SMOOTHER_FIGHT.HUD.Focus"), focus, tag)}
+    </${tag}>`;
 }
 
 function canViewResources(actor) {
@@ -68,14 +70,14 @@ function canViewResources(actor) {
     return mayViewTargetResources(getSetting("revealTargetResources", false), game.user?.isGM, observer);
 }
 
-function resourceBar(type, label, resource) {
+function resourceBar(type, label, resource, tag) {
     if (!resource) return "";
     const value = numericValue(resource.value);
     const max = Math.max(0, numericValue(resource.max));
     const percent = max ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
-    return `<div class="sf-resource sf-resource-${type}" title="${escapeAttr(`${label}: ${value}/${max}`)}">
+    return `<${tag} class="sf-resource sf-resource-${type}" title="${escapeAttr(`${label}: ${value}/${max}`)}">
         <span style="width:${percent}%"></span><small><span>${escapeHtml(label)}</span><b>${value}/${max}</b></small>
-    </div>`;
+    </${tag}>`;
 }
 
 export function buildSecondaryTargets(context) {

@@ -19,6 +19,12 @@
 #splittermond-smoother-fight-hud .sf-focus-mini img { height: 48px; width: 48px; object-fit: contain; flex: 0 0 48px; border: 0; }
 #splittermond-smoother-fight-hud .sf-focus-mini > span { display: flex; flex-direction: column; gap: 4px; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: 12px; }
 #splittermond-smoother-fight-hud .sf-focus-mini small { font-size: 10px; color: var(--sf-muted); }
+#splittermond-smoother-fight-hud .sf-focus-mini > .sf-focus-mini-info { flex: 1; gap: 3px; text-align: left; }
+#splittermond-smoother-fight-hud .sf-focus-mini-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#splittermond-smoother-fight-hud .sf-focus-mini .sf-resources { padding: 0; gap: 2px; }
+#splittermond-smoother-fight-hud .sf-focus-mini .sf-resource { display: block; height: 11px; border-radius: 2px; }
+#splittermond-smoother-fight-hud .sf-focus-mini .sf-resource small { inset: 0 3px; font-size: 9px; line-height: 11px; color: #fff; }
+#splittermond-smoother-fight-hud .sf-focus-mini .sf-resource small b { font-size: 9px; }
 #splittermond-smoother-fight-hud .sf-focus-empty { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; overflow: visible; }
 #splittermond-smoother-fight-hud .sf-focus-empty.is-compact { height: 72px; min-height: 72px; }
 #splittermond-smoother-fight-hud .sf-focus-target-role { display: flex; align-items: center; height: 34px; background: var(--sf-bg); color: var(--sf-muted); padding: 3px 6px; font-size: 10px; }

@@ -18,7 +18,7 @@ Der Browser dient zum Prüfen von Layout, Charakterwechsel, Zielauswahl und Men�
 
 ## In einer Foundry-Testwelt
 
-Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-8.zip`. Es trägt im Paket die Version `0.6.6-character-focus.8` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
+Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-9.zip`. Es trägt im Paket die Version `0.6.6-character-focus.9` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
 
 Die Charakterwahl ist ab Revision 3 standardmäßig eingeschaltet. Eine bereits ausdrücklich gespeicherte Abschaltung wird respektiert und kann über den Schalter unten geändert werden. Die eigene Figur bzw. SL-Auswahl und deren Ziel stehen oben; der gerade aktive Charakter und sein Primärziel stehen unten. Diese Rollenreihenfolge bleibt beim Umschalten bestehen. Identische Tokens werden weiterhin zusammengefasst.
 
@@ -38,6 +38,8 @@ Ab Revision 6 schließt sich das Charakterauswahlmenü bei einer erfolgreichen T
 Ab Revision 7 zeigt die Startsperre ausschließlich ein Schloss ohne „Details“-Schaltfläche. Beim Überfahren des Schlosses oder der Aktion erklärt der Item-Tooltip die Sperre durch den fremden Zug.
 
 Revision 8 korrigiert den Rechtsklick auf gesperrte Angriffe und Zauber: Die Buttons verwenden `aria-disabled` und die vorhandene Startsperre im Klick-Handler statt des nativen `disabled`, das je nach Browser auch Kontextmenü-Ereignisse unterdrückt. Rechtsklicks auf Text, Bild, Standardangriff oder Schloss öffnen das zugehörige Item. Linksklick, Enter und Leertaste starten weiterhin keine gesperrte Aktion.
+
+Revision 9 blendet die Bewegungsreichweite für Spieler außerhalb des Zuges des angezeigten Tokens aus. Für als besiegt markierte Kampfteilnehmer entfällt sie auch bei der SL. Ein Klick auf eine kleine Charakterkarte wählt deren HUD; ein weiterer Klick auf das große Porträt zeigt das Token auf der Karte, identisch zum Rechtsklick. Kleine Charakter- und Zielkarten zeigen LP und Fokus unter dem Namen. Sie verwenden dieselben Sichtrechte wie die großen Karten (SL, Beobachterrechte oder ausdrücklich freigegebene Ressourcen). Ihre Höhe bleibt bei 72 Pixeln.
 
 Die bestehenden Menüs, Favoriten, Ausrüstungsschalter, vollständigen Bögen und Reaktionsabläufe bleiben vorhanden. Neue Zauber- und Fernkampfvorbereitungen sind außerhalb des eigenen Token-Zuges gesperrt, auch für die SL. Vorhandene Regeln für bereits vorbereitete Aktionen bleiben bestehen.
 

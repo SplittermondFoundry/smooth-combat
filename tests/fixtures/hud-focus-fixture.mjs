@@ -5,7 +5,7 @@ import { isRangedAttack } from "../../Modul/splittermond-smoother-fight/scripts/
 
 export function focusFixture({ gm = false, dictionary = null } = {}) {
     resetHudFocus();
-    const calls = { controls: [], targets: [], flags: [], ticks: [], events: [], sheets: [], warnings: [], rolls: [] };
+    const calls = { controls: [], targets: [], flags: [], ticks: [], events: [], sheets: [], warnings: [], rolls: [], pans: [] };
     const player = { id: "player", isGM: gm, active: true, name: "Pad", targets: new Set() };
     const other = { id: "other", active: true, name: "Andere Person" };
     const settings = { characterFocusHud: true, enabled: true, showCards: true, minimized: false, movementTracking: false, meleeRange: 2, theme: "dark" };
@@ -29,14 +29,14 @@ export function focusFixture({ gm = false, dictionary = null } = {}) {
     }
     const ghost=actor('Geistervarg',false),own=actor('Peritus',true),merc=actor('Söldner',false),unplaced=actor('Bogen ohne Token',true);
     const scene={id:'scene',name:'Battle-Map',tokens:[]};
-    function token(id,a){const t={id,uuid:`Scene.scene.Token.${id}`,name:a.name,actor:a,parent:scene,hidden:false,texture:{src:a.img},x:0,y:0,width:1,height:1};t.object={document:t,isVisible:true,control:()=>calls.controls.push(id)};return t;}
+    function token(id,a){const t={id,uuid:`Scene.scene.Token.${id}`,name:a.name,actor:a,parent:scene,hidden:false,texture:{src:a.img},x:0,y:0,width:1,height:1};t.object={document:t,isVisible:true,visible:true,get center(){return {x:t.x+50,y:t.y+50};},control:()=>calls.controls.push(id)};return t;}
     const activeToken=token('active',ghost),ownToken=token('own',own),cloneToken=token('clone',own),targetToken=token('target',merc);
     scene.tokens=[activeToken,ownToken,cloneToken,targetToken];
     const cb=(id,t,user)=>({id,actor:t.actor,token:t,initiative:18,runtimeController:user,assignedUser:user});
     const combat={id:'combat',started:true,currentTick:18,scene,combatants:[cb('active',activeToken,gm?player:other),cb('own',ownToken,player),cb('clone',cloneToken,player)]};
     combat.combatant=combat.combatants[0];combat.turns=combat.combatants;
     game.combat=combat;game.actors=[ghost,own,merc,unplaced];game.scenes=[scene];player.character=own;
-    globalThis.canvas={ready:true,scene,tokens:{get:id=>scene.tokens.find(t=>t.id===id)?.object},grid:{size:100,distance:2,units:'m',type:1}};
+    globalThis.canvas={ready:true,scene,animatePan:pan=>calls.pans.push(pan),tokens:{get:id=>scene.tokens.find(t=>t.id===id)?.object},grid:{size:100,distance:2,units:'m',type:1}};
     globalThis.ui={notifications:{warn:m=>calls.warnings.push(m),info:()=>{},error:()=>{}}};
     const nativeTargets = new Map([[player.id,{target:activeToken,targets:[activeToken]}],[other.id,{target:targetToken,targets:[targetToken]}]]);
     Object.assign(services,{

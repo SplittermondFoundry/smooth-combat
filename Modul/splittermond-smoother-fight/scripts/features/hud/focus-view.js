@@ -3,7 +3,7 @@ import { escapeAttr, escapeHtml, getSetting, t } from "../../shared/values.js";
 import { mayStartTurnAction } from "../../shared/turn-start.js";
 import { preparedActionId } from "../../shared/prepared-action-compatibility.js";
 import { getHudFocusCandidates, getHudFocusContexts, sameHudToken, resolveHudFocusElement } from "./focus-context.js";
-import { portraitPanel, noTargetPanel, canViewDefenseValues, buildSecondaryTargets } from "./portraits.js";
+import { portraitPanel, noTargetPanel, canViewDefenseValues, buildSecondaryTargets, resourceBars } from "./portraits.js";
 import { buildTargetHeaderActions, isTargetDefeated } from "./target-status.js";
 import { isPlayersTurn } from "../../combat-rules.js";
 import { buildQuickTargets, buildStructuredTokenChoices, quickTargetLabels, quickTargetActorKind, quickTargetSearchValue } from "./quick-targets.js";
@@ -30,16 +30,18 @@ function picker(active, personal) {
     });
     return `<details class="sf-focus-picker is-structured" data-sf-menu="focus-character"><summary title="${escapeAttr(label("ChooseCharacter"))}" aria-label="${escapeAttr(label("ChooseCharacter"))}"><i class="fa-solid fa-chevron-down"></i></summary><div class="sf-quick-target-popover">${content}</div></details>`;
 }
+function compactIdentity(actor, name, hint = "") {
+    const bars = resourceBars(actor, { compact: true });
+    return `<span class="sf-focus-mini-info"><span class="sf-focus-mini-name">${escapeHtml(name)}</span>${bars || (hint ? `<small>${escapeHtml(hint)}</small>` : "")}</span>`;
+}
 function actorCard(context, { role, compact, mode, chooser = "", selected }) {
     if (!context?.actor) return `<aside class="sf-portrait sf-focus-empty ${compact ? "is-compact" : ""}"><span>${escapeHtml(role)}</span>${chooser}</aside>`;
     const switchButton = `<button type="button" data-sf-action="switch-hud-focus" data-focus-mode="${mode}" class="sf-focus-label" aria-pressed="${selected}">${escapeHtml(role)}</button>`;
-    if (compact) return `<aside class="sf-portrait sf-focus-actor is-compact" data-sf-token-uuid="${escapeAttr(context.token?.uuid ?? "")}"><div class="sf-portrait-header">${switchButton}${chooser}</div><button type="button" class="sf-focus-mini" data-sf-action="switch-hud-focus" data-focus-mode="${mode}"><img src="${escapeAttr(context.actor.img || context.token?.texture?.src || "icons/svg/mystery-man.svg")}" alt=""><span>${escapeHtml(nameOf(context))}<small>${escapeHtml(label("Inspect"))}</small></span></button></aside>`;
+    if (compact) return `<aside class="sf-portrait sf-focus-actor is-compact" data-sf-token-uuid="${escapeAttr(context.token?.uuid ?? "")}"><div class="sf-portrait-header">${switchButton}${chooser}</div><button type="button" class="sf-focus-mini" data-sf-action="switch-hud-focus" data-focus-mode="${mode}" title="${escapeAttr(`${label("Inspect")}: ${nameOf(context)}`)}"><img src="${escapeAttr(context.actor.img || context.token?.texture?.src || "icons/svg/mystery-man.svg")}" alt="">${compactIdentity(context.actor, nameOf(context), label("Inspect"))}</button></aside>`;
     let html = portraitPanel({ side: "actor", token: context.token, actor: context.actor, eyebrow: role,
         action: context.token ? "open-token-sheet" : "open-sheet", showDefenses: canViewDefenseValues(context.actor) });
     html = html.replace('class="sf-portrait sf-actor ', 'class="sf-portrait sf-actor sf-focus-actor is-selected ')
-        .replace('<span class="sf-eyebrow">' + escapeHtml(role) + '</span>', switchButton + chooser)
-        .replace('data-sf-action="show-token"', `data-sf-action="switch-hud-focus" data-focus-mode="${mode}"`)
-        .replaceAll(escapeAttr(`${t("SMOOTHER_FIGHT.HUD.FocusCombatant")}: ${nameOf(context)}`), escapeAttr(`${label("Inspect")}: ${nameOf(context)}`));
+        .replace('<span class="sf-eyebrow">' + escapeHtml(role) + '</span>', switchButton + chooser);
     return `<div class="sf-focus-card-scope" ${focusScope(context)}>${html}</div>`;
 }
 export function buildFocusedActorColumn(active) {
@@ -56,7 +58,7 @@ export function buildFocusedActorColumn(active) {
 function targetCard(context, role, compact, primary, interactive = false) {
     const target = context?.target;
     if (!target) return `<div class="sf-portrait sf-focus-target ${compact ? "is-compact" : ""}"><span class="sf-focus-target-role">${escapeHtml(role)}</span>${noTargetPanel()}</div>`;
-    if (compact) return `<aside class="sf-portrait sf-focus-target is-compact"><div class="sf-portrait-header"><span class="sf-eyebrow">${escapeHtml(role)}</span></div><button type="button" class="sf-focus-mini" data-sf-action="open-token-sheet" data-sf-token-uuid="${escapeAttr(target.uuid)}"><img src="${escapeAttr(target.actor?.img || target.texture?.src || "icons/svg/mystery-man.svg")}" alt=""><span>${escapeHtml(target.name ?? target.actor?.name)}</span></button></aside>`;
+    if (compact) return `<aside class="sf-portrait sf-focus-target is-compact" data-sf-token-uuid="${escapeAttr(target.uuid)}"><div class="sf-portrait-header"><span class="sf-eyebrow">${escapeHtml(role)}</span></div><button type="button" class="sf-focus-mini" data-sf-action="open-token-sheet" data-sf-token-uuid="${escapeAttr(target.uuid)}"><img src="${escapeAttr(target.actor?.img || target.texture?.src || "icons/svg/mystery-man.svg")}" alt="">${compactIdentity(target.actor, target.name ?? target.actor?.name)}</button></aside>`;
     const distance = targetDistancePresentation(context).text;
     const card = portraitPanel({ side: "target", token: target, actor: target.actor, eyebrow: `${role}${distance ? ` · ${distance}` : ""}`,
         headerActions: interactive ? buildTargetHeaderActions(context) : "", defeated: isTargetDefeated(context),

@@ -295,6 +295,83 @@ try{
  await search.fill('');
  await page.locator('.sf-focus-picker .sf-quick-target-results').evaluate(el=>{el.scrollTop=0;});
  await page.screenshot({path:path.join(output,"scene-character-picker-fullhd.png")});
+ // Expanded portraits pan; compact portraits select. Resource permissions apply to every small card.
+ for(const gm of [false,true]){
+  await page.goto("http://127.0.0.1:"+server.address().port+`/demo/character-focus.html?gm=${Number(gm)}`);
+  await page.waitForFunction(()=>window.ready);
+  await page.evaluate(async()=>{
+   fixture.settings.movementTracking=true;fixture.ownToken.x=400;fixture.activeToken.x=900;
+   focus.selectHudFocus(services.getHudContext(),'active');await hud.render();
+  });
+  const miniOwn=page.locator('.sf-focus-actor.is-compact[data-sf-token-uuid="Scene.scene.Token.own"]');
+  assert.equal(await miniOwn.locator('.sf-resource').count(),2);
+  assert.equal(await miniOwn.evaluate(el=>el.getBoundingClientRect().height),72);
+  await miniOwn.locator('.sf-focus-mini').click();
+  await page.waitForFunction(()=>document.querySelector('.sf-focus-shell')?.dataset.sfFocusMode==='personal');
+  assert.equal(await page.evaluate(()=>fixture.calls.pans.length),0);
+  assert.equal(await page.locator('.sf-movement-tracker').count(),Number(gm));
+  const ownPortrait=page.locator('.sf-focus-actor.is-selected .sf-portrait-focus');
+  await ownPortrait.click();
+  assert.equal(await page.evaluate(()=>fixture.calls.pans.at(-1)?.x),450);
+  const leftPan=await page.evaluate(()=>fixture.calls.pans.at(-1));
+  await ownPortrait.click({button:'right'});
+  assert.deepEqual(await page.evaluate(()=>fixture.calls.pans.at(-1)),leftPan);
+  assert.equal(await page.evaluate(()=>fixture.calls.pans.length),2);
+  assert.equal(await page.evaluate(()=>fixture.combat.combatant.id),'active');
+  assert.equal(await page.locator('.sf-focus-actor.is-compact .sf-resource').count(),gm?2:0);
+  assert.equal(await page.locator('.sf-focus-target.is-compact .sf-resource').count(),gm?2:0);
+  await page.locator('#turn').click();
+  assert.equal(await page.locator('.sf-movement-tracker').count(),1);
+  await page.evaluate(async()=>{fixture.combat.combatants[1].isDefeated=true;await hud.render();});
+  assert.equal(await page.locator('.sf-movement-tracker').count(),0);
+  await page.locator('#turn').click();
+  assert.equal(await page.locator('.sf-movement-tracker').count(),0);
+  await page.evaluate(async()=>{fixture.combat.combatants[1].isDefeated=false;await hud.render();});
+  if(gm){
+   assert.equal(await page.locator('.sf-movement-tracker').count(),1);
+   await page.evaluate(async()=>{
+    fixture.combat.combatants[1].isDefeated=true;
+    const {refreshHudCanvas}=await import('/Modul/splittermond-smoother-fight/scripts/features/hud/canvas-updates.js');
+    refreshHudCanvas(hud.element);
+   });
+   assert.equal(await page.locator('.sf-movement-tracker').count(),0);
+  }else{
+   await page.evaluate(async()=>{
+    fixture.ghost.testUserPermission=()=>true;fixture.merc.testUserPermission=()=>true;
+    await hud.render();
+   });
+   assert.equal(await page.locator('.sf-focus-actor.is-compact .sf-resource').count(),2);
+   assert.equal(await page.locator('.sf-focus-target.is-compact .sf-resource').count(),2);
+   await page.evaluate(async()=>{
+    fixture.ghost.system.healthBar.value=7;fixture.merc.system.focusBar.value=3;
+    const {refreshHudVisibilityParts}=await import('/Modul/splittermond-smoother-fight/scripts/features/hud/canvas-parts.js');
+    refreshHudVisibilityParts(hud.element,services.getHudContext());
+   });
+   assert.match(await page.locator('.sf-focus-actor.is-compact .sf-resource-health').innerText(),/7\/30/);
+   assert.match(await page.locator('.sf-focus-target.is-compact .sf-resource-focus').innerText(),/3\/21/);
+  }
+  const smallBars=await page.locator('.is-compact .sf-resource').evaluateAll(bars=>bars.map(el=>{
+   const bar=el.getBoundingClientRect(),card=el.closest('.sf-portrait').getBoundingClientRect();
+   return {width:bar.width,height:bar.height,fits:bar.right<=card.right&&bar.bottom<=card.bottom};
+  }));
+  assert.ok(smallBars.length>=2);
+  for(const bar of smallBars){assert.equal(bar.height,11);assert.ok(bar.width>=70&&bar.fits);}
+  await page.screenshot({path:path.join(output,`compact-resources-${gm?'gm':'player'}-fullhd.png`)});
+  if(!gm){
+   await page.evaluate(async()=>{
+    fixture.ghost.testUserPermission=()=>false;fixture.merc.testUserPermission=()=>false;
+    const {refreshHudVisibilityParts}=await import('/Modul/splittermond-smoother-fight/scripts/features/hud/canvas-parts.js');
+    refreshHudVisibilityParts(hud.element,services.getHudContext());
+   });
+   assert.equal(await page.locator('.is-compact .sf-resource').count(),0);
+  }
+  const beforeActivePan=await page.evaluate(()=>fixture.calls.pans.length);
+  await page.locator('.sf-focus-actor.is-compact .sf-focus-mini').click();
+  await page.waitForFunction(()=>document.querySelector('.sf-focus-shell')?.dataset.sfFocusMode==='active');
+  assert.equal(await page.evaluate(()=>fixture.calls.pans.length),beforeActivePan);
+  await page.locator('.sf-focus-actor.is-selected .sf-portrait-focus').click();
+  assert.equal(await page.evaluate(()=>fixture.calls.pans.at(-1)?.x),950);
+ }
  assert.deepEqual(errors,[]);
  console.log(JSON.stringify({runtimeRoot,version:manifest.version,stylesheetChecks:6,styleFailures}));
 }finally{await browser.close();await new Promise(r=>server.close(r));}
