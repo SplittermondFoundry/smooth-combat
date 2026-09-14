@@ -218,14 +218,16 @@ test("the legacy stylesheet URL remains a compatible entry point", () => {
     assert.equal(compatibilityWrapper, `@import url("./${versionedWrapper}?module=${manifest.version}");\n`);
 });
 
-test("only the current versioned stylesheet wrapper is shipped", () => {
+test("the previously installed stylesheet URL forwards to the current styles", () => {
     const manifest = readManifest();
     const expectedWrapper = path.posix.basename(manifest.styles[0]);
     const versionedWrappers = fs.readdirSync(stylesRoot)
         .filter((name) => /^smoother-fight-\d+\.\d+\.\d+\.css$/u.test(name))
         .sort();
     assert.equal(expectedWrapper, `smoother-fight-${manifest.version}.css`);
-    assert.deepEqual(versionedWrappers, [expectedWrapper]);
+    assert.deepEqual(versionedWrappers, ["smoother-fight-0.6.4.css", expectedWrapper]);
+    const upgradeWrapper = fs.readFileSync(path.join(stylesRoot, "smoother-fight-0.6.4.css"), "utf8");
+    assert.equal(upgradeWrapper.trim(), `@import url("./${expectedWrapper}?module=${manifest.version}");`);
 });
 
 test("split styles flatten in the verified cascade order", () => {

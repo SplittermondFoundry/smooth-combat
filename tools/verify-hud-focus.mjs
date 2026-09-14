@@ -4,13 +4,16 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import { pathToFileURL, fileURLToPath } from "node:url";
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
+const runtimeRoot=path.resolve(process.env.HUD_MODULE_ROOT ?? path.join(root,"Modul","splittermond-smoother-fight"));
 const modulePath=process.env.PLAYWRIGHT_MODULE_PATH;
 const {chromium}=await import(modulePath ? pathToFileURL(path.join(modulePath,"index.mjs")).href : "playwright");
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,"http://localhost"),local=decodeURIComponent(url.pathname).replace(/^\/modules\//,"/Modul/");
-  const file=path.resolve(root,"."+local);
-  if(!file.startsWith(root+path.sep)) {res.writeHead(403).end();return;}
+  const prefix="/Modul/splittermond-smoother-fight/",isRuntime=local.startsWith(prefix);
+  const base=isRuntime?runtimeRoot:root;
+  const file=path.resolve(base,isRuntime?local.slice(prefix.length):"."+local);
+  if(!file.startsWith(base+path.sep)) {res.writeHead(403).end();return;}
   const types={".js":"text/javascript",".mjs":"text/javascript",".json":"application/json",".css":"text/css",".html":"text/html",".svg":"image/svg+xml",".webp":"image/webp"};
   res.setHeader("content-type",types[path.extname(file)]??"application/octet-stream");res.end(await fs.readFile(file));
  }catch{res.writeHead(404).end();}
@@ -98,4 +101,31 @@ try{
  assert.doesNotMatch(await page.locator('.sf-hud').innerText(),/\[object Object\]/);
  await page.screenshot({path:path.join(output,"no-target-fullhd.png")});
  assert.deepEqual(errors,[]);
+ // Exercise the installed CSS entry points, including a client still using the pre-upgrade URL.
+ // Foundry's main template imports module CSS from an inline style; some packages use a layer.
+ const manifest=JSON.parse(await fs.readFile(path.join(runtimeRoot,"module.json"),"utf8"));
+ const styleFailures=[];
+ page.on("response",response=>{
+  if(new URL(response.url()).pathname.endsWith(".css") && !response.ok()) styleFailures.push(response.url());
+ });
+ for(const stylesheet of [manifest.styles[0],"styles/smoother-fight.css","styles/smoother-fight-0.6.4.css"]){
+  for(const layered of [false,true]){
+   await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=1");
+   await page.waitForFunction(()=>window.ready);
+   await page.evaluate(({stylesheet,layered})=>{
+    document.querySelector('link[rel="stylesheet"]').remove();
+    const style=document.createElement("style");
+    style.textContent=`@import "/modules/splittermond-smoother-fight/${stylesheet}"${layered?" layer(modules)":""};`;
+    document.head.prepend(style);
+   },{stylesheet,layered});
+   await page.waitForFunction(()=>getComputedStyle(document.querySelector('.sf-hud')).position==="fixed");
+   assert.equal(await page.locator('.sf-focus-actor.is-compact').evaluate(el=>el.getBoundingClientRect().height),72);
+   await page.locator('#classic').click();
+   assert.equal(await page.locator('.sf-focus-shell').count(),0);
+   assert.equal(await page.locator('.sf-hud').evaluate(el=>getComputedStyle(el).position),"fixed");
+  }
+ }
+ assert.deepEqual(styleFailures,[]);
+ assert.deepEqual(errors,[]);
+ console.log(JSON.stringify({runtimeRoot,version:manifest.version,stylesheetChecks:6,styleFailures}));
 }finally{await browser.close();await new Promise(r=>server.close(r));}

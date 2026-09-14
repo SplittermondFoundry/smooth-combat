@@ -1,6 +1,6 @@
 # Charakterwahl im HUD – lokale Vorschau
 
-Die kleine Erweiterung ist auf dem lokalen Branch `codex/character-focus` umgesetzt. Grundlage ist der Quellstand 0.6.6 (`507426b`). Die laufende Foundry-Installation wurde nicht verändert.
+Die kleine Erweiterung ist auf dem lokalen Branch `codex/character-focus` umgesetzt. Grundlage ist der Quellstand 0.6.6 (`507426b`). Die Installation erfolgt getrennt über das Vorschaupaket.
 
 ## Ausprobieren
 
@@ -18,7 +18,11 @@ Der Browser dient zum Prüfen von Layout, Charakterwechsel, Zielauswahl und Men�
 
 ## In einer Foundry-Testwelt
 
-Das Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview.zip`. Es trägt im Paket die Version `0.6.6-character-focus.1` und bietet keine öffentliche Update-URL. Die bisher installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
+Das korrigierte Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-2.zip`. Es trägt im Paket die Version `0.6.6-character-focus.2` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
+
+Die Charakterwahl ist auch in diesem Paket zunächst ausgeschaltet. Ein klassisch aussehendes HUD bedeutet deshalb nicht, dass noch die alte Modulversion installiert ist. Der Schalter unten aktiviert die Erweiterung ohne Austausch des Pakets; das funktioniert bereits mit `0.6.6-character-focus.1`.
+
+Revision 2 ergänzt den CSS-Einstiegspunkt `smoother-fight-0.6.4.css` als Weiterleitung auf die aktuellen Styles. Damit funktioniert das Layout auch dann, wenn ein Client beim Austausch des Modulordners noch die frühere Stylesheet-Adresse verwendet. Beim ersten Paket lieferte diese Adresse HTTP 404. Der gemeldete Layoutfehler verschwand nach einem weiteren Foundry-Neustart; der genaue Ladezustand des betroffenen Clients konnte nachträglich nicht nachgewiesen werden.
 
 1. In einer getrennten Foundry-Datenkopie das Vorschaupaket nach `Data/modules` entpacken. Der enthaltene Ordner heißt wie bisher `splittermond-smoother-fight`.
 2. Foundry mit dieser Datenkopie starten und die Testwelt öffnen; den Browser vollständig neu laden.
@@ -42,5 +46,7 @@ Die Installation auf dem produktiven Foundry-Server ist nicht Bestandteil dieser
 `npm run check` prüft die gesamte Testsuite sowie die vorgeschriebene Regelabdeckung. Die zusätzlichen Tests behandeln insbesondere Besitzrechte, unsichtbare Ziele, getrennte Benutzerziele, identische Actor-IDs mit unterschiedlichen Tokens, exakte Tickempfänger, Zugwechsel während asynchroner Vorbereitung und die klassische Ansicht.
 
 `tools/verify-hud-focus.mjs` prüft mit Playwright die echten HUD-Komponenten bei 1920 × 1080: Charakterauswahl einschließlich Actor ohne Token, Bogen-/Detailknöpfe, 18 Zauber in aufklappbaren Listen, Startsperren, stabile Menüs beim Zugwechsel, Kartenzusammenführung sowie helles und dunkles Erscheinungsbild. Playwright wird optional über `PLAYWRIGHT_MODULE_PATH`, ein Chromium-Browser über `BROWSER_EXECUTABLE` angegeben.
+
+Mit `HUD_MODULE_ROOT` kann die Prüfung direkt auf den aus dem ZIP entpackten Modulordner zeigen. Zusätzlich werden die aktuelle, unversionierte und frühere CSS-Adresse über den von Foundry verwendeten Inline-Import mit und ohne CSS-Layer geladen. Geprüft werden HTTP-Fehler, die feste HUD-Position, die kompakte Karte und der Rückwechsel zur klassischen Ansicht. Die Browserprüfung verwendet weiterhin eine lokale Testumgebung und keine vollständige Foundry-Spielwelt.
 
 Gemessen: Seitenbreite weiterhin 172 Pixel; große Karte 246 Pixel, kleine Karte 72 Pixel plus 6 Pixel Abstand. Bei zwei unterschiedlichen Figuren und Zielen sind das rund 1,3 Prozent zusätzliche Bildschirmfläche. Die Höhe der HUD-Mitte hängt weiterhin vom bisherigen Inhalt der Kampfereignisse ab.
