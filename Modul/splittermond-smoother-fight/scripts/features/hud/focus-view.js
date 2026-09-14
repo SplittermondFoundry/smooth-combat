@@ -107,6 +107,7 @@ export function decorateFocusActions(html, context) {
         if (!item || preparedActionId(context.actor, kind) === item.id || (kind === "attack" && !services.isRangedAttack(item))) return all;
         const filters = attrs.match(/\sdata-sf-(?:spell-row|search|enough-focus|spell-school|spell-level)(?:="[^"]*")?/g)?.join("") ?? "";
         const clean = attrs.replace(/\sdata-sf-(?:spell-row|search|enough-focus|spell-school|spell-level)(?:="[^"]*")?/g, "").replace(/\saria-disabled="[^"]*"/g, "");
-        return `<div class="sf-focus-locked-option"${filters}><button ${clean} disabled data-sf-start-blocked title="${escapeAttr(label("StartOwnTurn"))}">${body}</button><button type="button" class="sf-focus-item-details" data-sf-action="inspect-hud-item" data-item-kind="${kind}" data-item-id="${escapeAttr(item.id)}" title="${escapeAttr(label("StartOwnTurn"))}"><i class="fa-solid fa-lock"></i>${escapeHtml(label("Details"))}</button></div>`;
+        const reason = escapeAttr(label("StartOwnTurn"));
+        return `<div class="sf-focus-locked-option" data-sf-start-blocked title="${reason}"${filters}><button ${clean} disabled data-sf-start-blocked>${body}</button><span class="sf-focus-lock" data-${kind}-id="${escapeAttr(item.id)}" role="img" aria-label="${reason}"><i class="fa-solid fa-lock" aria-hidden="true"></i></span></div>`;
     });
 }

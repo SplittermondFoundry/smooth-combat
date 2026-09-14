@@ -108,16 +108,18 @@ export function buildEquipmentTooltipModel(actor, item, attack = null, speed = "
 }
 
 export function bindActionTooltips(root, context) {
-    for (const button of root.querySelectorAll("[data-spell-id]")) {
+    for (const button of root.querySelectorAll("[data-spell-id]:not(.sf-focus-lock)")) {
         const actor = resolveHudActionContext(context, button)?.actor;
         const spell = resolveActionItem(actor, button);
-        if (spell) bindTooltipEvents(button, () => showSpellTooltip(button, spell));
+        const anchor = button.closest?.(".sf-focus-locked-option") ?? button;
+        if (spell) bindTooltipEvents(anchor, () => showSpellTooltip(anchor, spell));
     }
 
     for (const button of root.querySelectorAll('[data-sf-action="attack"][data-attack-id]')) {
         const actor = resolveHudActionContext(context, button)?.actor;
         const attack = actor?.attacks?.find((candidate) => candidate.id === button.dataset.attackId);
-        if (attack) bindTooltipEvents(button, () => showAttackTooltip(button, actor, attack));
+        const anchor = button.closest?.(".sf-focus-locked-option") ?? button;
+        if (attack) bindTooltipEvents(anchor, () => showAttackTooltip(anchor, actor, attack));
     }
 
     for (const button of root.querySelectorAll('[data-sf-action="toggle-equipped"][data-item-id]')) {
@@ -234,7 +236,9 @@ function showActionTooltip(anchor, kind, markup) {
     tooltip.id = `${MODULE_ID}-action-tooltip`;
     tooltip.className = `sf-action-tooltip is-${kind}`;
     tooltip.setAttribute("role", "tooltip");
-    tooltip.innerHTML = markup;
+    const lockNotice = anchor.hasAttribute?.("data-sf-start-blocked")
+        ? `<p class="sf-focus-lock-notice"><i class="fa-solid fa-lock" aria-hidden="true"></i> ${escapeHtml(t("SMOOTHER_FIGHT.HUD.CharacterFocus.StartOwnTurn"))}</p>` : "";
+    tooltip.innerHTML = lockNotice + markup;
     document.body.append(tooltip);
     anchor.setAttribute("aria-describedby", tooltip.id);
     hudState.actionTooltip = { anchor, element: tooltip, closeTimer: null };

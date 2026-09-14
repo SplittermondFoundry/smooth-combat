@@ -35,8 +35,9 @@
 #splittermond-smoother-fight-hud .sf-focus-shell [data-sf-spell-row][hidden],
 #splittermond-smoother-fight-hud .sf-focus-shell [data-sf-spell-filter-empty][hidden] { display: none; }
 #splittermond-smoother-fight-hud .sf-focus-locked-option > button:first-child { flex: 1; min-width: 0; }
-#splittermond-smoother-fight-hud .sf-focus-locked-option .sf-focus-item-details { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; width: auto; font-size: 10px; padding: 5px; color: var(--sf-teal); }
+#splittermond-smoother-fight-hud .sf-focus-locked-option .sf-focus-lock { display: flex; align-items: center; flex: 0 0 auto; font-size: 10px; padding: 5px; color: var(--sf-teal); cursor: not-allowed; }
 #splittermond-smoother-fight-hud .sf-focus-locked-option > button[data-sf-start-blocked]:disabled { opacity: .8; cursor: not-allowed; }
+body > .sf-action-tooltip .sf-focus-lock-notice { margin: 0 0 8px; color: var(--sf-gold-bright); }
 #splittermond-smoother-fight-hud .sf-focus-target-column .sf-portrait-header .sf-eyebrow { white-space: normal; line-height: 1.15; }
 #splittermond-smoother-fight-hud .sf-focus-shell .sf-quick-targets { width: 100%; }
 @media (max-width: 1100px) {

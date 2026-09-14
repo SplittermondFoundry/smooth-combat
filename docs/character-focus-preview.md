@@ -18,7 +18,7 @@ Der Browser dient zum Prüfen von Layout, Charakterwechsel, Zielauswahl und Men�
 
 ## In einer Foundry-Testwelt
 
-Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-6.zip`. Es trägt im Paket die Version `0.6.6-character-focus.6` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
+Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-7.zip`. Es trägt im Paket die Version `0.6.6-character-focus.7` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
 
 Die Charakterwahl ist ab Revision 3 standardmäßig eingeschaltet. Eine bereits ausdrücklich gespeicherte Abschaltung wird respektiert und kann über den Schalter unten geändert werden. Die eigene Figur bzw. SL-Auswahl und deren Ziel stehen oben; der gerade aktive Charakter und sein Primärziel stehen unten. Diese Rollenreihenfolge bleibt beim Umschalten bestehen. Identische Tokens werden weiterhin zusammengefasst.
 
@@ -34,6 +34,8 @@ Ab Revision 4 übernimmt eine neue Tokenauswahl auf der Karte direkt die persön
 Ab Revision 5 enthält die Charakterauswahl ausschließlich berechtigte Tokens der aktuell geöffneten Szene. Andere Szenen und Actors ohne Token werden nicht angeboten. Suche, Typfilter und Gruppierung verwenden dieselben Bausteine wie „Ziel wechseln“: „Alle / Charaktere / NSC“ sowie „Im Kampf / Weitere Tokens der Szene“. Suche und Filter bleiben über der separat scrollenden Ergebnisliste sichtbar und bei Kampfaktualisierungen erhalten. Bei identischen Namen unterscheidet eine kurze Nummerierung die Tokens; technische Token-IDs entfallen aus der sichtbaren Liste.
 
 Ab Revision 6 schließt sich das Charakterauswahlmenü bei einer erfolgreichen Tokenübernahme von der Karte sofort. Die nächste HUD-Aktualisierung öffnet es nicht wieder. Das gilt sowohl für die SL als auch für Spieler bei eigenen Tokens.
+
+Ab Revision 7 zeigt die Startsperre ausschließlich ein Schloss ohne „Details“-Schaltfläche. Beim Überfahren des Schlosses oder der Aktion erklärt der Item-Tooltip die Sperre durch den fremden Zug. Ein Rechtsklick auf den Angriff, Standardangriff oder Zauber sowie das Schloss öffnet das zugehörige Item wie gewohnt; ein Linksklick startet keine gesperrte Aktion.
 
 Die bestehenden Menüs, Favoriten, Ausrüstungsschalter, vollständigen Bögen und Reaktionsabläufe bleiben vorhanden. Neue Zauber- und Fernkampfvorbereitungen sind außerhalb des eigenen Token-Zuges gesperrt, auch für die SL. Vorhandene Regeln für bereits vorbereitete Aktionen bleiben bestehen.
 
@@ -51,7 +53,7 @@ Die Installation auf dem produktiven Foundry-Server ist nicht Bestandteil dieser
 
 `npm run check` prüft die gesamte Testsuite sowie die vorgeschriebene Regelabdeckung. Die zusätzlichen Tests behandeln insbesondere Besitzrechte, unsichtbare Ziele, getrennte Benutzerziele, identische Actor-IDs mit unterschiedlichen Tokens, exakte Tickempfänger, Zugwechsel während asynchroner Vorbereitung und die klassische Ansicht.
 
-`tools/verify-hud-focus.mjs` prüft mit Playwright die echten HUD-Komponenten bei 1920 × 1080: Charakterauswahl einschließlich Szenentokens außerhalb des Kampfes, Bogen-/Detailknöpfe, 18 Zauber in aufklappbaren Listen, Startsperren, stabile Menüs beim Zugwechsel, Kartenzusammenführung sowie helles und dunkles Erscheinungsbild. Playwright wird optional über `PLAYWRIGHT_MODULE_PATH`, ein Chromium-Browser über `BROWSER_EXECUTABLE` angegeben.
+`tools/verify-hud-focus.mjs` prüft mit Playwright die echten HUD-Komponenten bei 1920 × 1080: Charakterauswahl einschließlich Szenentokens außerhalb des Kampfes, Charakterbögen, Item-Rechtsklick und Sperr-Tooltip, 18 Zauber in aufklappbaren Listen, Startsperren, stabile Menüs beim Zugwechsel, Kartenzusammenführung sowie helles und dunkles Erscheinungsbild. Playwright wird optional über `PLAYWRIGHT_MODULE_PATH`, ein Chromium-Browser über `BROWSER_EXECUTABLE` angegeben.
 
 Mit `HUD_MODULE_ROOT` kann die Prüfung direkt auf den aus dem ZIP entpackten Modulordner zeigen. Zusätzlich werden die aktuelle, unversionierte und frühere CSS-Adresse über den von Foundry verwendeten Inline-Import mit und ohne CSS-Layer geladen. Geprüft werden HTTP-Fehler, die feste HUD-Position, die kompakte Karte und der Rückwechsel zur klassischen Ansicht. Die Browserprüfung verwendet weiterhin eine lokale Testumgebung und keine vollständige Foundry-Spielwelt.
 

@@ -23,6 +23,11 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.BR
 const page=await browser.newPage({viewport:{width:1920,height:1080}});
 const errors=[];page.on("pageerror",e=>errors.push(e.message));
 const output=path.join(root,"tmp","hud-focus-qa");await fs.mkdir(output,{recursive:true});
+async function rightClickItem(locator,itemId,{force=false}={}){
+ const count=await page.evaluate(()=>fixture.calls.sheets.length);
+ await locator.click({button:'right',force});
+ assert.deepEqual(await page.evaluate(count=>fixture.calls.sheets.slice(count),count),[itemId]);
+}
 try{
  await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=1");
  await page.waitForFunction(()=>window.ready,{},{timeout:8000});
@@ -45,10 +50,36 @@ try{
  await page.locator('.sf-focus-picker > summary').click();
  await page.locator('[data-focus-reference="Scene.scene.Token.own"]').click();
  await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.own");
+ await page.evaluate(async()=>{
+  fixture.own.flags['splittermond-smoother-fight']={defaultAttackId:'bow'};
+  fixture.ghost.items.get('bow').sheet.render=()=>fixture.calls.sheets.push('wrong-active-bow');
+  await hud.render();
+ });
+ const directBow=page.locator('.sf-direct-attack[data-attack-id="bow"]');
+ await rightClickItem(directBow,'bow',{force:true});
+ await page.locator('[data-sf-menu="attacks"] > summary').click();
+ const bow=page.locator('.sf-attack-option [data-sf-action="attack"][data-attack-id="bow"]');
+ const bowLock=page.locator('.sf-attack-option .sf-focus-lock[data-attack-id="bow"]');
+ await bowLock.hover();
+ await page.waitForFunction(()=>document.querySelector('.sf-action-tooltip .sf-focus-lock-notice')?.textContent.includes('nicht an der Reihe'));
+ assert.equal(await bowLock.innerText(),'');
+ assert.equal(await page.locator('[data-sf-action="inspect-hud-item"]').count(),0);
+ await page.screenshot({path:path.join(output,"locked-attack-fullhd.png")});
+ await rightClickItem(bowLock,'bow');
+ await page.mouse.move(50,300);
+ await bow.hover({force:true});
+ await page.waitForFunction(()=>document.querySelector('.sf-action-tooltip .sf-focus-lock-notice')?.textContent.includes('nicht an der Reihe'));
+ await rightClickItem(bow,'bow',{force:true});
+ const beforeBlockedClicks=await page.evaluate(()=>({flags:fixture.calls.flags.length,ticks:fixture.calls.ticks.length,sheets:fixture.calls.sheets.length}));
+ await bow.click({force:true});
+ await bowLock.click();
+ await directBow.click({force:true});
+ assert.deepEqual(await page.evaluate(()=>({flags:fixture.calls.flags.length,ticks:fixture.calls.ticks.length,sheets:fixture.calls.sheets.length})),beforeBlockedClicks);
+ await page.mouse.move(50,300);
+ await page.waitForFunction(()=>!document.querySelector('.sf-action-tooltip'));
  await page.locator('[data-sf-menu="spells"] > summary').click();
  assert.equal(await page.locator('[data-sf-action="spell"]:disabled').count(),18);
- await page.locator('[data-sf-action="inspect-hud-item"][data-item-id="spell0"]').click();
- assert.equal(await page.evaluate(()=>fixture.calls.sheets.at(-1)),"spell0");
+ await rightClickItem(page.locator('[data-sf-action="spell"][data-spell-id="spell0"]'),'spell0',{force:true});
  await page.screenshot({path:path.join(output,"spells-fullhd.png")});
  await page.locator('#turn').click();
  await page.waitForFunction(()=>document.querySelector('.sf-turnline strong')?.textContent==="Peritus");

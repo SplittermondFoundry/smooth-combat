@@ -24,7 +24,7 @@ export function focusFixture({ gm = false, dictionary = null } = {}) {
             async addTicks(ticks){calls.ticks.push([id,ticks]);},
             testUserPermission:()=>gm||own, sheet:{render:()=>calls.sheets.push(id)}, rollSkill:()=>calls.rolls.push(id),
         };
-        a.items = new Map([...a.attacks,...a.spells].map(item=>[item.id,{...item,sheet:{render:()=>calls.sheets.push(item.id)}}]));
+        a.items = new Map([...a.attacks,...a.spells].map(item=>[item.id,Object.assign(item,{sheet:{render:()=>calls.sheets.push(item.id)}})]));
         return a;
     }
     const ghost=actor('Geistervarg',false),own=actor('Peritus',true),merc=actor('Söldner',false),unplaced=actor('Bogen ohne Token',true);
