@@ -64,7 +64,9 @@
     transform: translate(-50%, -100%);
 }
 
-#splittermond-smoother-fight-hud .sf-shell,
+/* Only visible panels receive input; the grid's empty space belongs to the canvas. */
+#splittermond-smoother-fight-hud .sf-center,
+#splittermond-smoother-fight-hud .sf-secondary-targets,
 #splittermond-smoother-fight-hud .sf-quick-targets {
     pointer-events: auto;
 }

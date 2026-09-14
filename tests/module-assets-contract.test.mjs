@@ -270,7 +270,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-action-tooltip\.is-spell\s*\{[^}]*width:\s*min\(500px,/su);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "ce395d7c5cf05b4b07b5cbbd3ece00cf11aa1c897cf43373244175e6a95964b8",
+        "222d000b7cfdec7300663eee828563dd7b1c031b09ed4898169847025a789436",
     );
 });
 

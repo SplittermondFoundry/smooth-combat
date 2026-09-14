@@ -18,7 +18,7 @@ Der Browser dient zum Prüfen von Layout, Charakterwechsel, Zielauswahl und Men�
 
 ## In einer Foundry-Testwelt
 
-Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-12.zip`. Es trägt im Paket die Version `0.6.6-character-focus.12` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
+Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-13.zip`. Es trägt im Paket die Version `0.6.6-character-focus.13` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
 
 Die Charakterwahl ist ab Revision 3 standardmäßig eingeschaltet. Eine bereits ausdrücklich gespeicherte Abschaltung wird respektiert und kann über den Schalter unten geändert werden. Die eigene Figur bzw. SL-Auswahl und deren Ziel stehen oben; der gerade aktive Charakter und sein Primärziel stehen unten. Diese Rollenreihenfolge bleibt beim Umschalten bestehen. Identische Tokens werden weiterhin zusammengefasst.
 
@@ -66,6 +66,8 @@ Ziele werden pro Benutzer und Token getrennt gehalten. Gleiche Token-UUIDs werde
 Die Installation auf dem produktiven Foundry-Server ist nicht Bestandteil dieser lokalen Vorschau. Normale Spielaktionen in einer späteren Testwelt verändern deren Daten wie bisher; eine Code-Rückkehr macht solche Spielaktionen nicht rückgängig.
 
 ## Prüfung
+
+Revision 13 lässt Mausereignisse in den freien Flächen über den Portraitspalten und zwischen den HUD-Bereichen wieder zur Kampfkarte durch. Sichtbare Karten, zusätzliche Ziele, die HUD-Mitte und geöffnete Menüs bleiben bedienbar. Die Browserprüfung reproduziert die Blockade mit Revision 12 und prüft danach echte Links- und Rechtsklicks, Ziehen und Mausrad in diesen Freiflächen, für SL und Spieler sowie klassische und persönliche Ansicht bei 1920 × 1080 und 1280 × 720.
 
 `npm run check` prüft die gesamte Testsuite sowie die vorgeschriebene Regelabdeckung. Die zusätzlichen Tests behandeln insbesondere Besitzrechte, unsichtbare Ziele, getrennte Benutzerziele, identische Actor-IDs mit unterschiedlichen Tokens, exakte Tickempfänger, Zugwechsel während asynchroner Vorbereitung und die klassische Ansicht.
 

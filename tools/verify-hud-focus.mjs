@@ -4,6 +4,7 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { verifyHudFeedback } from "./hud-feedback-qa.mjs";
+import { verifyHudPointerAreas } from "./hud-pointer-qa.mjs";
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const runtimeRoot=path.resolve(process.env.HUD_MODULE_ROOT ?? path.join(root,"Modul","splittermond-smoother-fight"));
 const modulePath=process.env.PLAYWRIGHT_MODULE_PATH;
@@ -41,6 +42,7 @@ async function rightClickItem(locator,itemId){
  assert.equal(await page.evaluate(()=>window.lastItemContextMenu?.defaultPrevented),true);
 }
 try{
+ await verifyHudPointerAreas(page,output,"http://127.0.0.1:"+server.address().port+"/demo/character-focus.html");
  await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=1");
  await page.waitForFunction(()=>window.ready,{},{timeout:8000});
  await page.screenshot({path:path.join(output,"gm-fullhd.png")});
