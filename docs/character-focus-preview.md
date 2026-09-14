@@ -14,6 +14,8 @@ Adresse: http://127.0.0.1:4267/demo/character-focus.html?gm=1
 
 Die Vorschau verwendet die echten HUD-Renderer, den Controller und die Aktionslogik mit lokalen Testdaten. Die Karte, Bilder und Kampfereignisse sind Beispieldaten. Über „Spieler“, „SL“ und „Zug wechseln“ lassen sich Rechte, Kartenzusammenführung und offene Listen beim Zugwechsel prüfen. Sie ist kein vollständiger Foundry-Integrationstest.
 
+Der Browser dient zum Prüfen von Layout, Charakterwechsel, Zielauswahl und Menüverhalten. Vollständige Charakterbögen und Spielaktionen benötigen Foundry.
+
 ## In einer Foundry-Testwelt
 
 Das Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview.zip`. Es trägt im Paket die Version `0.6.6-character-focus.1` und bietet keine öffentliche Update-URL. Die bisher installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
