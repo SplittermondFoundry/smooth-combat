@@ -12,6 +12,7 @@ assert.ok(appRoot, "Set FOUNDRY_APP_ROOT to the local Foundry resources/app dire
 const systemRoots = process.argv.slice(2).map(value => path.resolve(value));
 assert.ok(systemRoots.length, "Pass one or more extracted/installed Splittermond directories");
 const runtimeRoot = path.resolve(process.env.HUD_MODULE_ROOT ?? path.join(root, "Modul/splittermond-smoother-fight"));
+const manifest = JSON.parse(await fs.readFile(path.join(runtimeRoot, "module.json"), "utf8"));
 const { default: handlebars } = await import(pathToFileURL(path.join(appRoot, "node_modules/handlebars/lib/index.js")));
 handlebars.registerHelper("localize", key => ({
     "splittermond.modifier": "Modifikator", "splittermond.difficulty": "Schwierigkeit",
@@ -112,7 +113,7 @@ try {
             const baseline = await scroller.evaluate(el => ({ overflow: getComputedStyle(el).overflowY, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }));
             assert.equal(baseline.overflow, 'hidden', 'Fixture must reproduce the native clipping bug');
             assert.ok(baseline.scrollHeight > baseline.clientHeight + 100);
-            await page.addStyleTag({ url: '/module/styles/smoother-fight-0.6.6.css' });
+            await page.addStyleTag({ url: `/module/${manifest.styles[0]}` });
             await page.waitForFunction(() => getComputedStyle(document.querySelector('.window-content')).overflowY === 'auto');
             const top = await page.locator('dialog').boundingBox();
             assert.ok(top.y + top.height <= height, `Dialog must remain within the viewport: ${JSON.stringify({top,height,css:await page.locator('dialog').evaluate(el=>({maxHeight:getComputedStyle(el).maxHeight,hotbar:getComputedStyle(el).getPropertyValue('--hotbar-height')}))})}`);
@@ -137,7 +138,7 @@ try {
         // Short dialogs keep their natural height; unrelated system dialogs are untouched.
         await page.goto(`http://127.0.0.1:${server.address().port}/?system=${index}&count=1`);
         await page.setViewportSize({ width: 1920, height: 1080 });
-        await page.addStyleTag({ url: '/module/styles/smoother-fight-0.6.6.css' });
+        await page.addStyleTag({ url: `/module/${manifest.styles[0]}` });
         await page.waitForFunction(() => getComputedStyle(document.querySelector('.window-content')).overflowY === 'auto');
         assert.ok(await page.locator('.window-content').evaluate(el => el.scrollHeight <= el.clientHeight + 1));
         await page.locator('dialog').evaluate(el => el.classList.remove('dialog-check'));

@@ -1,10 +1,10 @@
 # Splittermond Smoother Fight
 
-Smoother Fight ist ein Foundry-VTT-Modul für Splittermond. Es ergänzt laufende Kämpfe um ein kompaktes HUD für den aktiven Kämpfer, dessen Ziele, häufige Systemaktionen, Chatkarten und die Aktive Abwehr.
+Smoother Fight ist ein Foundry-VTT-Modul für Splittermond. Es ergänzt laufende Kämpfe um ein kompaktes HUD für den aktiven Kämpfer, eigene Charaktere und ihre Ziele, häufige Systemaktionen, Chatkarten und die Aktive Abwehr.
 
 Versionshinweise stehen im [Changelog](CHANGELOG.md).
 
-Dieser lokale Entwicklungszweig enthält die optionale [Charakterwahl im HUD](docs/character-focus-preview.md) mit Funktionsvorschau, Testpaket und Rückkehranleitung.
+Version **0.7.0** übernimmt die geprüfte Charakterwahl und alle Korrekturen aus Vorschau 14 in den regulären Build.
 
 ## Voraussetzungen
 
@@ -30,6 +30,8 @@ Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github
 ## Funktionen
 
 - kompaktes Kampf-HUD mit aktivem Combatant, ausgewählten Zielen, VTD/KW/GW sowie Lebens- und Fokusleiste
+- standardmäßig aktive Charakterwahl: eigene Szenentokens für Spieler, beliebige Szenentokens für die SL; der aktuelle Kampf und sein Primärziel bleiben sichtbar
+- getrennte Ziele je Benutzer und Token mit zugehörigem Charakternamen, kompakte Ressourcenleisten nach Berechtigung und ein Hinweis, wenn der gerade aktive Token bedient werden sollte
 - persönliche Zuganzeige, Zielwarnungen und ein- oder ausblendbare Standard-Aktionsleiste
 - Foundry-basierte Bewegungsverfolgung mit freier Bewegung, Kriechen, Laufen, Sprinten, Überziehungswarnung, eigenem Token-Status **In Bewegung**, regelgerechter Bewegung entlang der gewählten Route bei Tick 5, 3/5 beziehungsweise 3/5/7/10 sowie parallel, für alle Spieler und standardmäßig dauerhaft eingeblendeten, tokenfarbigen Routen mit ganzzahligen Meilensteinen, Hover-Hervorhebung und Abbruch am nächstgelegenen Segment direkt im Kampf-HUD; die automatische Daueranzeige lässt sich pro Client abschalten und über eine Welteinstellung auf den betroffenen Spieler und die SL beschränken
 - Für **Liegend** ersetzt die Bewegungsleiste Laufen durch **Kriechen (höchstens 1 m, 5 Ticks)** und Sprinten durch **Aufstehen (6 Ticks)**. Freie Bewegung bleibt eine SL-Entscheidung. Zu lange Kriechrouten müssen vor der Buchung rückgängig gemacht und neu gewählt werden; Aufstehen übernimmt keine gewählte Bewegungsstrecke. **Kniend** bietet Aufstehen für 3 Ticks und einen Hinweis zur SL-Entscheidung über Bewegung in dieser Haltung. Der Positionswechsel erfolgt erst beim Abschluss der Aufstehen-Handlung im eigenen Zug.
@@ -39,7 +41,7 @@ Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github
 - Fertigkeiten, Favoriten, Zauber, Angriffe, Ausrüstung und Aktive Abwehr direkt im HUD
 - **Zauber identifizieren** unter Handlungen: Arkane-Kunde-Probe mit Gradbuttons 0–5, wählbaren Umständen, zwei Ticks und passenden Ergebnishinweisen im Chat
 - Splitterpunkte für +3 VTD und Splitterpunkt-Resonanz für weitere +2 VTD direkt an der Angriffskarte
-- korrekte Vorbereitung und Auslösung von Fernkampfangriffen und Zaubern
+- Vorbereitung und Auslösung von Fernkampfangriffen und Zaubern nur im Zug des ausgewählten Tokens; gesperrte Items bleiben per Rechtsklick erreichbar
 - vorgangsbezogene Kampfereignisse für Angriff, Abwehr, Schaden und Patzer: Das HUD öffnet automatisch nur den nächsten noch ausstehenden Schritt, hält laufende Aktive Abwehren bis zur Tickzahlung im Fokus und erfasst auch Gelegenheitsangriffe außerhalb des aktiven Combatants
 - Unterstützung der Meisterschaft **Verteidiger** einschließlich Reichweiten- und Abwehrprüfung
 - Ziel-Quickmenü, Mehrfachziele und zwischen Clients synchronisiertes Primärziel
@@ -52,6 +54,8 @@ Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github
 - deutsche und englische Benutzeroberfläche
 
 ## Ersteinrichtung
+
+**Charakterwahl im HUD** ist standardmäßig eingeschaltet. Links steht die eigene Figur bzw. SL-Auswahl oben, der gerade aktive Kämpfer darunter. Rechts stehen die zugehörigen Ziele; identische Tokens werden nur einmal gezeigt. Die Auswahl übernimmt ein berechtigtes Token beim Anklicken auf der Karte und bietet zusätzlich eine Suche nach Szenentokens. Ein Klick auf eine kompakte Karte übernimmt die Bedienung, ein weiterer Klick auf das geöffnete Porträt zeigt den Token auf der Karte. Die Kampfereignisse folgen weiterhin dem aktiven Kämpfer. Unter Moduleinstellungen lässt sich die klassische Ansicht wieder einschalten.
 
 Nach dem Aktivieren werden die Zuordnungen unter **Einstellungen → Moduleinstellungen → Spieler, Bögen und Tokens verknüpfen** festgelegt. Die dauerhafte Zuordnung wird in dieser Reihenfolge ermittelt: direkte Token-Zuordnung → Bogen-Zuordnung → Foundry-OWNER. Für die Laufzeitsteuerung gilt separat: aktiver zugeordneter Benutzer → aktiver Primary GM → anderer aktiver GM.
 
@@ -76,6 +80,8 @@ npm run assets:audio
 ```
 
 `npm run check` führt die vollständige Testsuite und die zusätzlichen Coverage-Regeln aus. `demo/index.html` dient als statische Vorschau und Test-Fixture für das HUD-Stylesheet.
+
+Nach erfolgreicher Prüfung erstellt `./tools/package-release.ps1` das reguläre lokale Paket samt Manifest und Versionshinweisen unter `dist/<Version>`. Es enthält ausschließlich die benötigten Moduldateien und lädt nichts hoch.
 
 ## Probleme und Vorschläge
 

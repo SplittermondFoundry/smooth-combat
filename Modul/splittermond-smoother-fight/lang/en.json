@@ -247,7 +247,7 @@
       "OwnerAssignment": "Foundry OWNER",
       "TokenAssigned": "{token} was directly assigned to {user}.",
       "TokenAssignmentCleared": "The direct assignment for {token} was removed; the sheet assignment or Foundry OWNER fallback applies again.",
-      "CharacterFocusName": "Character selection in HUD (preview)",
+      "CharacterFocusName": "Character selection in HUD",
       "CharacterFocusHint": "Control owned characters or any character as GM alongside the ongoing combat. Disable to restore the classic HUD."
     },
     "HUD": {

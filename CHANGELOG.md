@@ -2,6 +2,29 @@
 
 ## Unveröffentlicht
 
+## 0.7.0 – 14. September 2026
+
+Die geprüfte Charakterwahl aus Vorschau 14 ist Teil des regulären Builds und standardmäßig aktiv. Eine bereits gespeicherte Abschaltung bleibt erhalten.
+
+### Charakterwahl und Ziele
+
+- Eigene Szenentokens für Spieler und beliebige Szenentokens für die SL sind über eine durchsuchbare Auswahl oder direkt auf der Karte erreichbar. Kampfereignisse und gerade aktiver Kämpfer bleiben sichtbar. Persönliche Karten stehen oben, aktive Karten darunter; gleiche Tokens werden zusammengefasst.
+- Ziele werden je Benutzer und Token getrennt geführt und nennen die zugehörige Figur. Kompakte Karten zeigen Ressourcen nur mit entsprechender Berechtigung. Ein wiederholter Porträtklick zeigt den Token auf der Karte.
+- Wer am Zug ist, aber gerade eine andere Figur bedient, erhält einen blinkenden Hinweis am aktiven Porträt. Die Bewegungsreichweite erscheint bei Spielern nur für den aktiven Token und nicht für besiegte Figuren.
+- Vorbereitung und Auslösung von Zaubern und Fernkampfangriffen prüfen den exakten Token-Zug. Derselbe Spieler oder Actor mit einer anderen Token-UUID genügt nicht. Schloss und Tooltip erklären die Sperre; Rechtsklick und Abbrechen bleiben nutzbar.
+
+### Bedienung und Korrekturen
+
+- Fertigkeiten, Angriffe, Zauber und Aktive Abwehr bleiben als vollständige aufklappbare Menüs erhalten und schließen einander beim Öffnen.
+- Tooltips stehen über der Aktionsleiste bzw. neben der Angriffszeile und lassen den Favoritenstern frei. Freie Bereiche über und zwischen den Portraitspalten geben Mausereignisse an die Kampfkarte weiter.
+- Einblendungs-Icons verwenden korrekt aufgelöste Pfade. HUD-Aktualisierungen setzen laufende Aktionseinblendungen fort, statt sie erneut zu starten.
+- Lange Modifikatorlisten in Wurfdialogen bleiben scrollbar. Die Korrektur gilt weiterhin ausdrücklich für Splittermond 14.2.7 und wird auch bei neueren Systemversionen geladen.
+- Die bisherigen CSS-Adressen aus 0.6.4 und 0.6.6 leiten auf den aktuellen Einstieg weiter. Einstellungen und Weltdaten benötigen keine Migration.
+
+### Aktualisierung
+
+Das reguläre ZIP wird in `Data/modules/splittermond-smoother-fight` entpackt. Danach Foundry und die Browserseiten aller Beteiligten neu laden. Die klassische Ansicht bleibt über **Charakterwahl im HUD** abschaltbar. Der frühere Code-Stand und die Vorschaupakete bleiben lokal als Rückkehrmöglichkeit erhalten.
+
 ## 0.6.6 – 12. September 2026
 
 Kompatibilitätsupdate für vorbereitete Angriffe und Zauber unter **Splittermond 14.3.0-beta4**, weiterhin vollständig kompatibel mit **14.2.7**.

@@ -1,5 +1,7 @@
 # Charakterwahl im HUD – lokale Vorschau
 
+Die Vorschauphase ist abgeschlossen. Der Stand aus Vorschau 14 ist ab **0.7.0** Teil des regulären Builds. Die folgende Dokumentation beschreibt die bisherigen Testpakete und Sicherungen; neue Installationen verwenden das reguläre Paket `splittermond-smoother-fight-v0.7.0.zip`.
+
 Die kleine Erweiterung ist auf dem lokalen Branch `codex/character-focus` umgesetzt. Grundlage ist der Quellstand 0.6.6 (`507426b`). Die Installation erfolgt getrennt über das Vorschaupaket.
 
 ## Ausprobieren

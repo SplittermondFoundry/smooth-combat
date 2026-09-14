@@ -176,7 +176,8 @@ try{
  page.on("response",response=>{
   if(new URL(response.url()).pathname.endsWith(".css") && !response.ok()) styleFailures.push(response.url());
  });
- for(const stylesheet of [manifest.styles[0],"styles/smoother-fight.css","styles/smoother-fight-0.6.4.css"]){
+ const stylesheets=[manifest.styles[0],"styles/smoother-fight.css","styles/smoother-fight-0.6.4.css","styles/smoother-fight-0.6.6.css"];
+ for(const stylesheet of stylesheets){
   for(const layered of [false,true]){
    await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=1");
    await page.waitForFunction(()=>window.ready);
@@ -485,5 +486,5 @@ try{
  assert.deepEqual(errors,[]);
  await verifyHudFeedback(page,output);
  assert.deepEqual(errors,[]);
- console.log(JSON.stringify({runtimeRoot,version:manifest.version,stylesheetChecks:6,styleFailures}));
+ console.log(JSON.stringify({runtimeRoot,version:manifest.version,stylesheetChecks:stylesheets.length*2,styleFailures}));
 }finally{await browser.close();await new Promise(r=>server.close(r));}

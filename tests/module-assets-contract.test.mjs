@@ -21,7 +21,7 @@ test("Foundry manifest entry points remain stable", () => {
     const manifest = readManifest();
     const packageMetadata = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.6.6");
+    assert.equal(manifest.version, "0.7.0");
     assert.equal(packageMetadata.version, manifest.version);
     assert.equal(manifest.download, `${manifest.url}/releases/download/v${manifest.version}/${manifest.id}-v${manifest.version}.zip`);
     const releaseNotes = fs.readFileSync(path.join(projectRoot, "RELEASE_NOTES.md"), "utf8");
@@ -225,9 +225,11 @@ test("the previously installed stylesheet URL forwards to the current styles", (
         .filter((name) => /^smoother-fight-\d+\.\d+\.\d+\.css$/u.test(name))
         .sort();
     assert.equal(expectedWrapper, `smoother-fight-${manifest.version}.css`);
-    assert.deepEqual(versionedWrappers, ["smoother-fight-0.6.4.css", expectedWrapper]);
-    const upgradeWrapper = fs.readFileSync(path.join(stylesRoot, "smoother-fight-0.6.4.css"), "utf8");
-    assert.equal(upgradeWrapper.trim(), `@import url("./${expectedWrapper}?module=${manifest.version}");`);
+    assert.deepEqual(versionedWrappers, ["smoother-fight-0.6.4.css", "smoother-fight-0.6.6.css", expectedWrapper]);
+    for (const previous of ["smoother-fight-0.6.4.css", "smoother-fight-0.6.6.css"]) {
+        const upgradeWrapper = fs.readFileSync(path.join(stylesRoot, previous), "utf8");
+        assert.equal(upgradeWrapper.trim(), `@import url("./${expectedWrapper}?module=${manifest.version}");`);
+    }
 });
 
 test("split styles flatten in the verified cascade order", () => {
@@ -240,7 +242,7 @@ test("split styles flatten in the verified cascade order", () => {
     );
     const imports = [...wrapper.matchAll(importPattern)]
         .map((match) => match[1]);
-    assert.deepEqual(imports, ["themes/default.css", "hud.css", "combat-events.css", "settings.css", "responsive.css"]);
+    assert.deepEqual(imports, ["themes/default.css", "hud.css", "combat-events.css", "settings.css", "responsive.css", "hud-focus.css", "roll-dialog-compatibility.css"]);
     // Git may convert line endings on checkout; the stylesheet contract covers CSS content.
     const flattened = imports.map((file) => fs.readFileSync(path.join(moduleRoot, "styles", file), "utf8")
         .replace(/\r\n/gu, "\n")).join("");
@@ -270,7 +272,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-action-tooltip\.is-spell\s*\{[^}]*width:\s*min\(500px,/su);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "222d000b7cfdec7300663eee828563dd7b1c031b09ed4898169847025a789436",
+        "3206bef6cc16cc599dfb543ff2055e2bc9aef4e8ca5f6888449cf850b5a38378",
     );
 });
 

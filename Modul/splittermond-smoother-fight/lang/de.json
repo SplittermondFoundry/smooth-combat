@@ -247,7 +247,7 @@
       "OwnerAssignment": "Foundry-OWNER",
       "TokenAssigned": "{token} wurde direkt {user} zugewiesen.",
       "TokenAssignmentCleared": "Die direkte Zuordnung von {token} wurde entfernt; die Bogen-Zuordnung oder der Foundry-OWNER-Fallback greift wieder.",
-      "CharacterFocusName": "Charakterwahl im HUD (Vorschau)",
+      "CharacterFocusName": "Charakterwahl im HUD",
       "CharacterFocusHint": "Eigene bzw. beliebige SL-Charaktere neben dem laufenden Kampf bedienen. Abschalten stellt die klassische Ansicht wieder her."
     },
     "HUD": {

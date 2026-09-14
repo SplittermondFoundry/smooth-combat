@@ -1,26 +1,28 @@
-# Splittermond Smoother Fight 0.6.6
+# Splittermond Smoother Fight 0.7.0
 
-Änderungen seit **0.6.5**. Dieses Kompatibilitätsupdate erhält vorbereitete Angriffe und Zauber unter **Splittermond 14.3.0-beta4** und bleibt mit **14.2.7** kompatibel.
+Die Charakterwahl und alle Korrekturen aus Vorschau 14 gehören jetzt zum regulären Build. Das bestehende HUD behält seinen Aufbau; die Charakterwahl ist standardmäßig eingeschaltet.
 
-## Vorbereitete Angriffe und Zauber
+## Charakterwahl im laufenden Kampf
 
-- Splittermond 14.3.0-beta4 speichert vorbereitete Aktionen im neuen Actor-Datenmodell `system.preparedAction`. Smoother Fight erkennt dieses Modell und verwendet unter 14.2.7 weiterhin die bisherigen Systemflags.
-- Vorbereitung, Anzeige, Auslösen, Abbruch, Unterbrechung und Wiederherstellung verwenden nun einen gemeinsamen, strukturprüfenden Kompatibilitätsadapter.
-- Vorbereitungsticks werden weiterhin genau einmal gebucht. Smoother Fight schreibt den vorbereiteten Zustand unter beta4 direkt, da die neue Systemmethode `PreparedAction.set(...)` zusätzlich selbst Ticks berechnet.
-- Kurze und lange Rasten entfernen nun auch die zugehörige kontinuierliche Handlung und deren Status aus dem HUD, nachdem beta4 die vorbereitete Aktion gelöscht hat.
+- Spieler wechseln zwischen ihren Tokens der aktuellen Szene, die SL zwischen allen Szenentokens. Suche und direkte Auswahl auf der Karte führen zur gewünschten Figur.
+- Eigene Figur und eigenes Ziel stehen oben, aktiver Kämpfer und sein Primärziel darunter. Gleiche Tokens werden zusammengefasst. Zielkarten nennen die zugehörige Figur und zeigen Ressourcen entsprechend den Berechtigungen.
+- Die Kampfereignisse folgen weiterhin dem aktuellen Kämpfer. Sein Porträt blinkt, wenn der zuständige Spieler bzw. die SL gerade eine andere Figur bedient.
+- Zauber und Fernkampfangriffe lassen sich nur im Zug des genauen Tokens vorbereiten oder auslösen. Gesperrte Aktionen zeigen ein Schloss und eine Begründung. Vorbereitung, Abbrechen und Item-Rechtsklick bleiben erhalten.
 
-## Rollmodifikatoren und allgemeine Kompatibilität
+## Bedienung und Fehlerkorrekturen
 
-- Die Actor-Rollmethoden, Zielermittlung, vorausgewählten temporären Modifikatoren und der synchrone Dialog-Snapshot wurden gegen **14.2.7** und **14.3.0-beta4** geprüft. Das bestehende Konzept für zielabhängige Modifikatoren bleibt unverändert funktionsfähig.
-- Bei der Prüfung der Änderungen von beta3 auf beta4 wurden keine weiteren inkompatiblen, von Smoother Fight verwendeten System-Schnittstellen gefunden.
-- Die Voraussetzungen bleiben **Foundry VTT 14 ab Build 14.359** und **Splittermond ab 14.2.0**. Einstellungen und Weltdaten benötigen keine Migration.
+- Die vollständigen Menüs für Fertigkeiten, Angriffe, Zauber und Aktive Abwehr schließen einander beim Öffnen. Tooltips lassen die Aktionsleiste und Favoritensterne frei.
+- Freie Flächen über den Portraits und zwischen den HUD-Bereichen lassen Klicks, Ziehen und Mausrad wieder zur Kampfkarte durch.
+- Aktionseinblendungen laden ihre Icons korrekt und starten bei HUD-Aktualisierungen nicht erneut.
+- Die Scrollkorrektur für lange Modifikatorlisten bleibt auch für Splittermond 14.2.7 enthalten. Alte CSS-Adressen bleiben als Weiterleitungen verfügbar.
 
-## Aktualisierung
+## Installation und Kompatibilität
 
-- Nach der Installation Foundry beziehungsweise die Welt und anschließend die Browserseiten aller Beteiligten neu laden, bei Bedarf mit **Strg+F5**.
-- Bereits vorbereitete Aktionen aus einer laufenden 14.2.7-Sitzung sollten vor einem gleichzeitigen Systemwechsel auf beta4 abgeschlossen oder abgebrochen werden.
+Das ZIP enthält die Moduldateien direkt auf der obersten Ebene. Bei beendetem Foundry in **Data/modules/splittermond-smoother-fight** entpacken. Anschließend Foundry und die Browserseiten neu laden, bei Bedarf mit **Strg+F5**. Die Welt- und Systemeinstellungen benötigen keine Migration. Eine bereits gespeicherte Abschaltung der Charakterwahl bleibt bestehen.
+
+Die Voraussetzungen bleiben **Foundry VTT 14 ab Build 14.359** und **Splittermond ab 14.2.0**. Die Vorbereitungsdaten aus **14.2.7** und **14.3.0-beta4** bleiben unterstützt. Die klassische HUD-Ansicht ist über **Charakterwahl im HUD** weiterhin erreichbar.
 
 ## Prüfung
 
-- `npm run check`: **808 Tests** erfolgreich; zusätzlich **80 Regeltests** mit den vorgegebenen Coverage-Grenzen.
-- Regressionstests decken beide Speichermodelle, einfache Tickbuchung, Abbruch und erfolgreiche Ausführung sowie die Bereinigung durch kurze und lange Rasten ab.
+- `npm run check` prüft die vollständige Testsuite und die Regelabdeckung.
+- Lokale Browserprüfungen mit echten HUD-Komponenten decken Charakterwahl, unabhängige Ziele, Rechte, Zugsperren, Item-Rechtsklick, Tooltips, Mausdurchleitung und Aktionseinblendungen ab. Sie ersetzen keine vollständige Foundry-Spielwelt.
