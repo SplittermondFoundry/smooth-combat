@@ -10,7 +10,7 @@ Das vorhandene HUD behält Aufbau, Position, Farben, große Porträts, Bewegung,
 
 Links stehen die Rollen **Gerade aktiv** und **Dein Charakter**, rechts **Primärziel** und **Dein Ziel**. Bei SL-Zugriff auf eine andere Figur heißt die persönliche Rolle **SL-Auswahl**. Zielüberschriften nennen die Bezugsfigur, etwa „Primärziel · Geistervarg“ und „Dein Ziel · Peritus“.
 
-Je Seite bleibt eine große Karte im bisherigen Format von 172 × 246 Pixeln erhalten. Eine zweite, abweichende Figur erscheint mit Bild und Namen als 172 × 72 Pixel große Karte; dazwischen liegen 6 Pixel Abstand. Die Rollen bleiben in fester Reihenfolge: aktiv bzw. Primärziel oben, persönlich unten. Der gerade bediente Charakter und sein zugehöriges Ziel erhalten die große Karte. Beim Umschalten wechseln lediglich die Größen und Inhalte, nicht die Reihenfolge der Rollen.
+Je Seite bleibt eine große Karte im bisherigen Format von 172 × 246 Pixeln erhalten. Eine zweite, abweichende Figur erscheint mit Bild und Namen als 172 × 72 Pixel große Karte; dazwischen liegen 6 Pixel Abstand. Die Rollen bleiben in fester Reihenfolge: persönlich oben, aktiv bzw. Primärziel unten. Der gerade bediente Charakter und sein zugehöriges Ziel erhalten die große Karte. Beim Umschalten wechseln lediglich die Größen und Inhalte, nicht die Reihenfolge der Rollen. Die Charakterwahl ist standardmäßig aktiv und lässt sich pro Client ausschalten.
 
 Sind aktiver und persönlich gewählter Token identisch, erscheint eine einzige große Karte mit „Gerade aktiv + dein Charakter“ bzw. „Gerade aktiv + SL-Auswahl“. Sind die Ziele identisch, erscheint eine einzige Karte mit „Primärziel + dein Ziel“. Beide Zusammenführungen erfolgen unabhängig voneinander.
 

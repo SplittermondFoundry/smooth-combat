@@ -2,7 +2,7 @@ import { getApplicableCombat } from "../core/combat-compatibility.js";
 import { getSetting, t } from "./values.js";
 
 export function mayStartTurnAction(context) {
-    if (!context?.hudFocus && !getSetting("characterFocusHud", false)) return true;
+    if (!context?.hudFocus && !getSetting("characterFocusHud", true)) return true;
     const combat = getApplicableCombat() ?? context?.combat;
     if (!combat?.started) return true;
     if (context?.combat?.id !== combat.id) return false;

@@ -122,7 +122,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     ]);
 
     const settingByKey = Object.fromEntries(settings.map(({ key, options }) => [key, options]));
-    assert.equal(settingByKey.characterFocusHud.default, false);
+    assert.equal(settingByKey.characterFocusHud.default, true);
     assert.equal(settingByKey.characterFocusHud.scope, "client");
     assert.deepEqual(
         Object.fromEntries(["enabled", "hideSystemBar", "showCards"].map((key) => [key, {

@@ -45,8 +45,8 @@ export function buildFocusedActorColumn(active) {
     const activeRole = active.concealed ? label("HiddenActive") : t("SMOOTHER_FIGHT.HUD.Active");
     const html = merged
         ? actorCard(personal, { role: `${activeRole} + ${ownRole}`, compact: false, mode: "personal", chooser, selected: true })
-        : actorCard(active.concealed ? null : { ...active, focusReference: active.token?.uuid ?? active.actor?.uuid }, { role: activeRole, compact: mode !== "active", mode: "active", selected: mode === "active" })
-        + (personal || chooser ? actorCard(personal, { role: ownRole, compact: mode !== "personal", mode: "personal", chooser, selected: mode === "personal" }) : "");
+        : (personal || chooser ? actorCard(personal, { role: ownRole, compact: mode !== "personal", mode: "personal", chooser, selected: mode === "personal" }) : "")
+        + actorCard(active.concealed ? null : { ...active, focusReference: active.token?.uuid ?? active.actor?.uuid }, { role: activeRole, compact: mode !== "active", mode: "active", selected: mode === "active" });
     return `<div class="sf-focus-actor-column" data-sf-inspection="${escapeAttr(action?.focusReference ?? "")}">${html}</div>`;
 }
 function targetCard(context, role, compact, primary, interactive = false) {
@@ -66,8 +66,8 @@ export function buildFocusedTargetColumn(active) {
     const primaryContext = mode === "active" && action ? action : active;
     const merged = sameHudToken(primaryContext.target, personal?.target);
     const column = merged ? targetCard(mode === "personal" ? personal : primaryContext, `${primaryRole} + ${ownRole}`, false, true, Boolean(action))
-        : targetCard(primaryContext, primaryRole, Boolean(personal && mode !== "active"), true, mode === "active" && Boolean(action))
-        + (personal ? targetCard(personal, ownRole, mode !== "personal", false, mode === "personal") : "");
+        : (personal ? targetCard(personal, ownRole, mode !== "personal", false, mode === "personal") : "")
+        + targetCard(primaryContext, primaryRole, Boolean(personal && mode !== "active"), true, mode === "active" && Boolean(action));
     return `<div class="sf-target-column sf-focus-target-column">${action ? `<div ${focusScope(action)}>${buildQuickTargets(action)}</div>` : ""}${column}</div>`;
 }
 export function refreshFocusedTargetDistances(root, active) {

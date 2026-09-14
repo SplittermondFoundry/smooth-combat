@@ -6,7 +6,7 @@ import { clearHudFocusTargetSync, getPublishedHudFocusTargets, publishHudFocusTa
 // Session-only preferences: no Actor/Token flags or world migrations.
 const users = new Map();
 let syncingNativeTargets = false;
-export const focusEnabled = () => Boolean(getSetting("characterFocusHud", false));
+export const focusEnabled = () => Boolean(getSetting("characterFocusHud", true));
 const documentOf = (value) => value?.document ?? value;
 const refOf = (value) => documentOf(value)?.uuid ?? null;
 const values = (collection) => Array.from(collection?.contents ?? collection ?? []);

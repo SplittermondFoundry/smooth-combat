@@ -18,15 +18,15 @@ Der Browser dient zum Prüfen von Layout, Charakterwechsel, Zielauswahl und Men�
 
 ## In einer Foundry-Testwelt
 
-Das korrigierte Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-2.zip`. Es trägt im Paket die Version `0.6.6-character-focus.2` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
+Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-3.zip`. Es trägt im Paket die Version `0.6.6-character-focus.3` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
 
-Die Charakterwahl ist auch in diesem Paket zunächst ausgeschaltet. Ein klassisch aussehendes HUD bedeutet deshalb nicht, dass noch die alte Modulversion installiert ist. Der Schalter unten aktiviert die Erweiterung ohne Austausch des Pakets; das funktioniert bereits mit `0.6.6-character-focus.1`.
+Die Charakterwahl ist ab Revision 3 standardmäßig eingeschaltet. Eine bereits ausdrücklich gespeicherte Abschaltung wird respektiert und kann über den Schalter unten geändert werden. Die eigene Figur bzw. SL-Auswahl und deren Ziel stehen oben; der gerade aktive Charakter und sein Primärziel stehen unten. Diese Rollenreihenfolge bleibt beim Umschalten bestehen. Identische Tokens werden weiterhin zusammengefasst.
 
 Revision 2 ergänzt den CSS-Einstiegspunkt `smoother-fight-0.6.4.css` als Weiterleitung auf die aktuellen Styles. Damit funktioniert das Layout auch dann, wenn ein Client beim Austausch des Modulordners noch die frühere Stylesheet-Adresse verwendet. Beim ersten Paket lieferte diese Adresse HTTP 404. Der gemeldete Layoutfehler verschwand nach einem weiteren Foundry-Neustart; der genaue Ladezustand des betroffenen Clients konnte nachträglich nicht nachgewiesen werden.
 
 1. In einer getrennten Foundry-Datenkopie das Vorschaupaket nach `Data/modules` entpacken. Der enthaltene Ordner heißt wie bisher `splittermond-smoother-fight`.
 2. Foundry mit dieser Datenkopie starten und die Testwelt öffnen; den Browser vollständig neu laden.
-3. Unter **Einstellungen → Einstellungen konfigurieren → Splittermond Smoother Fight** den Schalter **Charakterwahl im HUD (Vorschau)** aktivieren. Er ist standardmäßig aus und gilt pro Benutzer/Browser.
+3. Die Charakterwahl ist standardmäßig aktiv. Unter **Einstellungen → Einstellungen konfigurieren → Splittermond Smoother Fight** lässt sich **Charakterwahl im HUD (Vorschau)** pro Client ausschalten oder eine zuvor gespeicherte Abschaltung zurücknehmen.
 4. Auf die linke Charakterkarte klicken oder den Auswahlpfeil verwenden. Die Bedienzeile nennt die ausgewählte Figur. Der Kampfverlauf folgt weiter dem aktiven Kampfteilnehmer.
 
 Die bestehenden Menüs, Favoriten, Ausrüstungsschalter, vollständigen Bögen und Reaktionsabläufe bleiben vorhanden. Neue Zauber- und Fernkampfvorbereitungen sind außerhalb des eigenen Token-Zuges gesperrt, auch für die SL. Vorhandene Regeln für bereits vorbereitete Aktionen bleiben bestehen.

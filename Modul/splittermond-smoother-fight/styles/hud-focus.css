@@ -1,4 +1,4 @@
-/* Opt-in extension: retain the existing center, menus and portrait dimensions. */
+/* Character selection retains the existing center, menus and portrait dimensions. */
 #splittermond-smoother-fight-hud .sf-focus-actor-column,
 #splittermond-smoother-fight-hud .sf-focus-target-column { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 #splittermond-smoother-fight-hud .sf-focus-card-scope { min-width: 0; }
