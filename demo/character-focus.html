@@ -35,6 +35,7 @@ for(const [actor,name] of [[f.ghost,"damage"],[f.own,"active-defense"],[f.merc,"
  actor.img=icon(name);
  for(const item of [...actor.attacks,...actor.spells]) item.img=icon(item.isRanged?"ranged":"spell");
 }
+for(const token of f.scene.tokens) token.texture.src=token.actor.img;
 for(const name of ["isCombatEventDeletionPending","clearCombatEventExpansionRequest","clearCombatEventDeletionPending","clearHoveredToken","enforceChatPermissions","enforceFumbleActionState","getCombatEventExpansionRequest","getActionApplicationStatus"]) services[name] ??= ()=>null;
 game.settings.set=async(_module,key,value)=>{f.settings[key]=value;scheduleRender(0);};
 Object.assign(services,{scheduleRender,setTargetFromQuickMenu,removeTargetFromQuickMenu,bindQuickTargetHover,requireOwner,performAttack,performSpell,
