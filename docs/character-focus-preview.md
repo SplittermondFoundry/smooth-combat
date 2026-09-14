@@ -18,7 +18,7 @@ Der Browser dient zum Prüfen von Layout, Charakterwechsel, Zielauswahl und Men�
 
 ## In einer Foundry-Testwelt
 
-Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-13.zip`. Es trägt im Paket die Version `0.6.6-character-focus.13` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
+Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-14.zip`. Es trägt im Paket die Version `0.6.6-character-focus.14` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
 
 Die Charakterwahl ist ab Revision 3 standardmäßig eingeschaltet. Eine bereits ausdrücklich gespeicherte Abschaltung wird respektiert und kann über den Schalter unten geändert werden. Die eigene Figur bzw. SL-Auswahl und deren Ziel stehen oben; der gerade aktive Charakter und sein Primärziel stehen unten. Diese Rollenreihenfolge bleibt beim Umschalten bestehen. Identische Tokens werden weiterhin zusammengefasst.
 
@@ -47,7 +47,7 @@ Revision 11 positioniert Item-Tooltips der direkten Angriffe oberhalb der Aktion
 
 Zusätzlich können native Splittermond-Wurfdialoge mit vielen Modifikatoren im Fensterinhalt bis zu den Wurfbuttons gescrollt werden. Die CSS-Korrektur gilt ausschließlich für `splittermond.dialog-check`, unabhängig von der Charakterwahl und ohne Versionsschalter. Sie bleibt ausdrücklich auch für 14.2.7 erhalten, selbst wenn neuere Systemversionen eine eigene Lösung bekommen. Felder, Modifikatoren und native Wurfabläufe werden dabei nicht verändert.
 
-Die bestehenden Menüs, Favoriten, Ausrüstungsschalter, vollständigen Bögen und Reaktionsabläufe bleiben vorhanden. Neue Zauber- und Fernkampfvorbereitungen sind außerhalb des eigenen Token-Zuges gesperrt, auch für die SL. Vorhandene Regeln für bereits vorbereitete Aktionen bleiben bestehen.
+Die bestehenden Menüs, Favoriten, Ausrüstungsschalter, vollständigen Bögen und Reaktionsabläufe bleiben vorhanden. Zauber und Fernkampfangriffe können nur im eigenen Token-Zug vorbereitet oder ausgelöst werden, auch für die SL. Abbrechen und Item-Rechtsklick bleiben außerhalb des eigenen Zuges erreichbar.
 
 Revision 12 verankert Tooltips in der Angriffsliste an der gesamten Zeile einschließlich Favoritenstern. Bei ausreichendem Platz beginnt der Tooltip zehn Pixel rechts vom Stern; der bestehende Ausweichplatz links bei engem Bildschirmrand bleibt erhalten. Die Browserprüfung klickt bei geöffnetem Tooltip direkt auf den Stern, sowohl in der klassischen Ansicht als auch bei persönlicher Charakterwahl und gesperrtem Fernkampfangriff.
 
@@ -66,6 +66,8 @@ Ziele werden pro Benutzer und Token getrennt gehalten. Gleiche Token-UUIDs werde
 Die Installation auf dem produktiven Foundry-Server ist nicht Bestandteil dieser lokalen Vorschau. Normale Spielaktionen in einer späteren Testwelt verändern deren Daten wie bisher; eine Code-Rückkehr macht solche Spielaktionen nicht rückgängig.
 
 ## Prüfung
+
+Revision 14 entfernt die Ausnahme für bereits vorbereitete Zauber und Fernkampfangriffe. Auch ihr Auslösen prüft den gerade aktiven Token bei der Ausführung und zeigt außerhalb seines Zuges das Schloss samt Begründung. Gleicher Spieler oder gleicher Actor mit einer anderen Token-UUID genügen nicht. Die Tests prüfen die Sperre und das anschließende Freigeben im eigenen Zug für Spieler und SL, mit modernen Vorbereitungsdaten sowie den System-Flags aus 14.2.7. Abgewiesene Aktionen behalten ihre Vorbereitung und verursachen weder Würfe noch Tickkosten. Browserprüfungen testen reale Klicks, Sperr-Tooltips und Item-Rechtsklick bei FullHD und 1280 × 720.
 
 Revision 13 lässt Mausereignisse in den freien Flächen über den Portraitspalten und zwischen den HUD-Bereichen wieder zur Kampfkarte durch. Sichtbare Karten, zusätzliche Ziele, die HUD-Mitte und geöffnete Menüs bleiben bedienbar. Die Browserprüfung reproduziert die Blockade mit Revision 12 und prüft danach echte Links- und Rechtsklicks, Ziehen und Mausrad in diesen Freiflächen, für SL und Spieler sowie klassische und persönliche Ansicht bei 1920 × 1080 und 1280 × 720.
 

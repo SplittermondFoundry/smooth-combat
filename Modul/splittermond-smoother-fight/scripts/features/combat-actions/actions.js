@@ -82,7 +82,7 @@ export async function performAttack(context, attackId, rollOptions = {}, rollAtt
     const ranged = isRangedAttack(attack);
     const preparedAttackId = preparedActionId(context.actor, "attack");
     const readiness = attackReadiness(ranged, attack.id, preparedAttackId);
-    if (ranged && !readiness.prepared && !requireTurnActionStart(context)) return false;
+    if (ranged && !requireTurnActionStart(context)) return false;
     if (actionRequiresTarget(readiness.ready) && !context.target) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));
         return false;
@@ -235,7 +235,7 @@ export async function performSpell(context, spellId) {
     const spell = context.actor.spells?.find((candidate) => candidate.id === spellId);
     if (!spell) return;
     const prepared = preparedActionId(context.actor, "spell") === spellId;
-    if (!prepared && !requireTurnActionStart(context)) return false;
+    if (!requireTurnActionStart(context)) return false;
     const targetDependent = isTargetDependentDifficulty(spell.difficulty ?? spell.system?.difficulty);
     if (actionRequiresTarget(prepared, targetDependent) && !context.target) {
         ui.notifications.warn(t("SMOOTHER_FIGHT.HUD.SelectTargetFirst"));

@@ -764,7 +764,7 @@
         "Inspect": "Im HUD bedienen",
         "Operating": "Bedienung: {name}",
         "ReadOnly": "Für die Bedienung einen eigenen Charakter wählen",
-        "StartOwnTurn": "Gesperrt: Dieser Charakter ist nicht an der Reihe. Zauber und Fernkampfangriffe können nur im eigenen Zug gestartet werden.",
+        "StartOwnTurn": "Gesperrt: Dieser Charakter ist nicht an der Reihe. Zauber und Fernkampfangriffe können nur im eigenen Zug vorbereitet oder ausgelöst werden.",
         "Details": "Details"
       }
     }

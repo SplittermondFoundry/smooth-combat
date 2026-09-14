@@ -1,7 +1,6 @@
 import { services } from "../../core/services.js";
 import { escapeAttr, escapeHtml, getSetting, t } from "../../shared/values.js";
 import { mayStartTurnAction } from "../../shared/turn-start.js";
-import { preparedActionId } from "../../shared/prepared-action-compatibility.js";
 import { getHudFocusCandidates, getHudFocusContexts, sameHudToken, resolveHudFocusElement } from "./focus-context.js";
 import { portraitPanel, noTargetPanel, canViewDefenseValues, buildSecondaryTargets, resourceBars } from "./portraits.js";
 import { buildTargetHeaderActions, isTargetDefeated } from "./target-status.js";
@@ -122,13 +121,18 @@ export async function buildFocusedHud(active, options, renderers) {
 }
 export function decorateFocusActions(html, context) {
     if (mayStartTurnAction(context)) return html;
-    return html.replace(/<button\b([^>]*data-sf-action="(spell|attack)"[^>]*)>([\s\S]*?)<\/button>/g, (all, attrs, kind, body) => {
+    return html.replace(/<button\b([^>]*data-sf-action="(spell|cast-prepared-spell|attack)"[^>]*)>([\s\S]*?)<\/button>/g, (all, attrs, action, body) => {
+        const kind = action === "attack" ? "attack" : "spell";
         const id = attrs.match(/data-(?:spell|attack)-id="([^"]+)"/)?.[1];
         const item = Array.from(context.actor[kind === "spell" ? "spells" : "attacks"] ?? []).find(c => escapeAttr(c.id) === id);
-        if (!item || preparedActionId(context.actor, kind) === item.id || (kind === "attack" && !services.isRangedAttack(item))) return all;
+        if (!item || (kind === "attack" && !services.isRangedAttack(item))) return all;
         const filters = attrs.match(/\sdata-sf-(?:spell-row|search|enough-focus|spell-school|spell-level)(?:="[^"]*")?/g)?.join("") ?? "";
         const clean = attrs.replace(/\sdata-sf-(?:spell-row|search|enough-focus|spell-school|spell-level)(?:="[^"]*")?/g, "").replace(/\saria-disabled="[^"]*"/g, "");
         const reason = escapeAttr(label("StartOwnTurn"));
+        if (action === "cast-prepared-spell" || attrs.includes("sf-prepared-attack-release")) {
+            const locked = body.replace(/<b>[\s\S]*?<\/b>/, `<b role="img" aria-label="${reason}"><i class="fa-solid fa-lock" aria-hidden="true"></i></b>`);
+            return `<button ${clean} aria-disabled="true" data-sf-start-blocked title="${reason}">${locked}</button>`;
+        }
         // Native disabled suppresses contextmenu events in some browsers; onClick guards aria-disabled.
         return `<div class="sf-focus-locked-option" data-sf-start-blocked title="${reason}"${filters}><button ${clean} aria-disabled="true" data-sf-start-blocked>${body}</button><span class="sf-focus-lock" data-${kind}-id="${escapeAttr(item.id)}" role="img" aria-label="${reason}"><i class="fa-solid fa-lock" aria-hidden="true"></i></span></div>`;
     });

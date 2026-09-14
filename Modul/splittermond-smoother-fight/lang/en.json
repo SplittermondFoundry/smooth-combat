@@ -764,7 +764,7 @@
         "Inspect": "Control in HUD",
         "Operating": "Controls: {name}",
         "ReadOnly": "Choose an owned character to use these controls",
-        "StartOwnTurn": "Locked: It is not this character’s turn. Spells and ranged attacks can only be started on their own turn.",
+        "StartOwnTurn": "Locked: It is not this character’s turn. Spells and ranged attacks can only be prepared or released on their own turn.",
         "Details": "Details"
       }
     }
