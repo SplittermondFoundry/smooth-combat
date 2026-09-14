@@ -6,7 +6,8 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const runtimeRoot=path.resolve(process.env.HUD_MODULE_ROOT ?? path.join(root,"Modul","splittermond-smoother-fight"));
 const modulePath=process.env.PLAYWRIGHT_MODULE_PATH;
-const {chromium}=await import(modulePath ? pathToFileURL(path.join(modulePath,"index.mjs")).href : "playwright");
+const playwright=await import(modulePath ? pathToFileURL(path.join(modulePath,"index.mjs")).href : "playwright");
+const browserName=process.env.HUD_BROWSER ?? "chromium";
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,"http://localhost"),local=decodeURIComponent(url.pathname).replace(/^\/modules\//,"/Modul/");
@@ -19,14 +20,24 @@ const server=http.createServer(async(req,res)=>{
  }catch{res.writeHead(404).end();}
 });
 await new Promise(r=>server.listen(0,"127.0.0.1",r));
-const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE});
+const browser=await playwright[browserName].launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE || undefined});
 const page=await browser.newPage({viewport:{width:1920,height:1080}});
 const errors=[];page.on("pageerror",e=>errors.push(e.message));
-const output=path.join(root,"tmp","hud-focus-qa");await fs.mkdir(output,{recursive:true});
-async function rightClickItem(locator,itemId,{force=false}={}){
+const output=path.join(root,"tmp","hud-focus-qa",browserName);await fs.mkdir(output,{recursive:true});
+async function pointerClick(locator,button='left'){
+ await locator.scrollIntoViewIfNeeded();
+ const rect=await locator.boundingBox();assert.ok(rect);
+ await page.mouse.click(rect.x+rect.width/2,rect.y+rect.height/2,{button});
+}
+async function rightClickItem(locator,itemId){
  const count=await page.evaluate(()=>fixture.calls.sheets.length);
- await locator.click({button:'right',force});
+ await page.evaluate(()=>{
+  window.lastItemContextMenu=null;
+  document.addEventListener('contextmenu',event=>{window.lastItemContextMenu=event;},{capture:true,once:true});
+ });
+ await pointerClick(locator,'right');
  assert.deepEqual(await page.evaluate(count=>fixture.calls.sheets.slice(count),count),[itemId]);
+ assert.equal(await page.evaluate(()=>window.lastItemContextMenu?.defaultPrevented),true);
 }
 try{
  await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=1");
@@ -56,7 +67,7 @@ try{
   await hud.render();
  });
  const directBow=page.locator('.sf-direct-attack[data-attack-id="bow"]');
- await rightClickItem(directBow,'bow',{force:true});
+ await rightClickItem(directBow,'bow');
  await page.locator('[data-sf-menu="attacks"] > summary').click();
  const bow=page.locator('.sf-attack-option [data-sf-action="attack"][data-attack-id="bow"]');
  const bowLock=page.locator('.sf-attack-option .sf-focus-lock[data-attack-id="bow"]');
@@ -67,19 +78,30 @@ try{
  await page.screenshot({path:path.join(output,"locked-attack-fullhd.png")});
  await rightClickItem(bowLock,'bow');
  await page.mouse.move(50,300);
- await bow.hover({force:true});
+ await bow.hover();
  await page.waitForFunction(()=>document.querySelector('.sf-action-tooltip .sf-focus-lock-notice')?.textContent.includes('nicht an der Reihe'));
- await rightClickItem(bow,'bow',{force:true});
+ await rightClickItem(bow,'bow');
+ await rightClickItem(bow.locator('img'),'bow');
  const beforeBlockedClicks=await page.evaluate(()=>({flags:fixture.calls.flags.length,ticks:fixture.calls.ticks.length,sheets:fixture.calls.sheets.length}));
- await bow.click({force:true});
+ await pointerClick(bow);
  await bowLock.click();
- await directBow.click({force:true});
+ await pointerClick(directBow);
+ await directBow.press('Enter');
+ await directBow.press('Space');
  assert.deepEqual(await page.evaluate(()=>({flags:fixture.calls.flags.length,ticks:fixture.calls.ticks.length,sheets:fixture.calls.sheets.length})),beforeBlockedClicks);
  await page.mouse.move(50,300);
  await page.waitForFunction(()=>!document.querySelector('.sf-action-tooltip'));
  await page.locator('[data-sf-menu="spells"] > summary').click();
- assert.equal(await page.locator('[data-sf-action="spell"]:disabled').count(),18);
- await rightClickItem(page.locator('[data-sf-action="spell"][data-spell-id="spell0"]'),'spell0',{force:true});
+ assert.equal(await page.locator('[data-sf-action="spell"][aria-disabled="true"]').count(),18);
+ assert.equal(await page.locator('button[data-sf-start-blocked]:disabled').count(),0);
+ const blockedSpell=page.locator('[data-sf-action="spell"][data-spell-id="spell0"]');
+ await rightClickItem(blockedSpell,'spell0');
+ await rightClickItem(blockedSpell.locator('img'),'spell0');
+ const beforeSpellClicks=await page.evaluate(()=>({flags:fixture.calls.flags.length,ticks:fixture.calls.ticks.length,sheets:fixture.calls.sheets.length}));
+ await pointerClick(blockedSpell);
+ await blockedSpell.press('Enter');
+ await blockedSpell.press('Space');
+ assert.deepEqual(await page.evaluate(()=>({flags:fixture.calls.flags.length,ticks:fixture.calls.ticks.length,sheets:fixture.calls.sheets.length})),beforeSpellClicks);
  await page.screenshot({path:path.join(output,"spells-fullhd.png")});
  await page.locator('#turn').click();
  await page.waitForFunction(()=>document.querySelector('.sf-turnline strong')?.textContent==="Peritus");
@@ -90,7 +112,7 @@ try{
  await page.locator('#turn').click();
  await page.waitForFunction(()=>document.querySelector('.sf-turnline strong')?.textContent==="Geistervarg");
  assert.equal(await page.locator('[data-sf-menu="spells"]').evaluate(el=>el.open),true);
- assert.equal(await page.locator('[data-sf-action="spell"]:disabled').count(),18);
+ assert.equal(await page.locator('[data-sf-action="spell"][aria-disabled="true"]').count(),18);
  await page.locator('[data-sf-menu="spells"] > summary').click();
  await page.locator('#theme').click();
  await page.waitForFunction(()=>document.querySelector('.sf-hud')?.classList.contains('sf-theme-light'));
@@ -128,7 +150,7 @@ try{
    await hud.render();
  });
  assert.equal(await page.locator('.sf-focus-target-column .sf-no-target').count(),1);
- assert.equal(await page.locator('.sf-focus-target-column').evaluate(el=>el.getBoundingClientRect().height),356);
+ assert.equal(await page.locator('.sf-focus-target-column').evaluate(el=>el.getBoundingClientRect().height),rects[".sf-focus-target-column"].height);
  assert.doesNotMatch(await page.locator('.sf-hud').innerText(),/\[object Object\]/);
  await page.screenshot({path:path.join(output,"no-target-fullhd.png")});
  assert.deepEqual(errors,[]);

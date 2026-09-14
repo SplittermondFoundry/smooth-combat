@@ -108,6 +108,7 @@ export function decorateFocusActions(html, context) {
         const filters = attrs.match(/\sdata-sf-(?:spell-row|search|enough-focus|spell-school|spell-level)(?:="[^"]*")?/g)?.join("") ?? "";
         const clean = attrs.replace(/\sdata-sf-(?:spell-row|search|enough-focus|spell-school|spell-level)(?:="[^"]*")?/g, "").replace(/\saria-disabled="[^"]*"/g, "");
         const reason = escapeAttr(label("StartOwnTurn"));
-        return `<div class="sf-focus-locked-option" data-sf-start-blocked title="${reason}"${filters}><button ${clean} disabled data-sf-start-blocked>${body}</button><span class="sf-focus-lock" data-${kind}-id="${escapeAttr(item.id)}" role="img" aria-label="${reason}"><i class="fa-solid fa-lock" aria-hidden="true"></i></span></div>`;
+        // Native disabled suppresses contextmenu events in some browsers; onClick guards aria-disabled.
+        return `<div class="sf-focus-locked-option" data-sf-start-blocked title="${reason}"${filters}><button ${clean} aria-disabled="true" data-sf-start-blocked>${body}</button><span class="sf-focus-lock" data-${kind}-id="${escapeAttr(item.id)}" role="img" aria-label="${reason}"><i class="fa-solid fa-lock" aria-hidden="true"></i></span></div>`;
     });
 }

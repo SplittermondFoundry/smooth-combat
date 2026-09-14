@@ -187,7 +187,8 @@ test('a turn change during asynchronous ranged speed calculation is rechecked be
 test('new view reuses complete menus, blocks starts, and renders events from the active context',async()=>{
  const f=focusFixture(),active=getHudContext(),html=await buildHud(active);
  assert.match(html,/data-sf-menu="skills"/);assert.match(html,/data-sf-menu="attacks"/);assert.match(html,/spell17/);assert.match(html,/sf-defense-menu/);
- assert.match(html,/data-attack-id="bow"[^>]*disabled/);assert.match(html,/data-spell-id="spell0"[^>]*disabled/);assert.match(html,/class="sf-focus-lock"/);assert.doesNotMatch(html,/inspect-hud-item/);
+ assert.match(html,/data-attack-id="bow"[^>]*aria-disabled="true"/);assert.match(html,/data-spell-id="spell0"[^>]*aria-disabled="true"/);assert.match(html,/class="sf-focus-lock"/);assert.doesNotMatch(html,/inspect-hud-item/);
+ for(const [button] of html.matchAll(/<button\b[^>]*data-sf-start-blocked[^>]*>/g)) assert.doesNotMatch(button,/\sdisabled(?:\s|=|>)/);
  assert.equal(f.calls.events.at(-1),active);assert.match(html,/Kampf: Geistervarg/);
 });
 test('scene token outside combat offers its sheet and menus without assuming a combatant',async()=>{
