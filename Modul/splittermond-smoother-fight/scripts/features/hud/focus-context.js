@@ -1,4 +1,5 @@
 import { services } from "../../core/services.js";
+import { hudState } from "./state.js";
 import { getApplicableCombat } from "../../core/combat-compatibility.js";
 import { getSetting } from "../../shared/values.js";
 import { clearHudFocusTargetSync, getPublishedHudFocusTargets, publishHudFocusTargets } from "./focus-target-sync.js";
@@ -114,6 +115,8 @@ export function selectHudFocus(active, mode, reference = null) {
     if (reference) state().reference = reference;
     state().mode = mode;
     syncNativeTargets(getHudFocusContexts(active).action);
+    const picker = hudState.hud?.element?.querySelector?.(".sf-focus-picker");
+    if (picker) picker.open = false;
     services.clearActionMenuExpansionRequest?.();
     services.scheduleRender?.(0);
     return true;

@@ -18,7 +18,7 @@ Der Browser dient zum Prüfen von Layout, Charakterwechsel, Zielauswahl und Men�
 
 ## In einer Foundry-Testwelt
 
-Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-5.zip`. Es trägt im Paket die Version `0.6.6-character-focus.5` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
+Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-6.zip`. Es trägt im Paket die Version `0.6.6-character-focus.6` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
 
 Die Charakterwahl ist ab Revision 3 standardmäßig eingeschaltet. Eine bereits ausdrücklich gespeicherte Abschaltung wird respektiert und kann über den Schalter unten geändert werden. Die eigene Figur bzw. SL-Auswahl und deren Ziel stehen oben; der gerade aktive Charakter und sein Primärziel stehen unten. Diese Rollenreihenfolge bleibt beim Umschalten bestehen. Identische Tokens werden weiterhin zusammengefasst.
 
@@ -32,6 +32,8 @@ Revision 2 ergänzt den CSS-Einstiegspunkt `smoother-fight-0.6.4.css` als Weiter
 Ab Revision 4 übernimmt eine neue Tokenauswahl auf der Karte direkt die persönliche HUD-Auswahl: für die SL jedes Token, für Spieler nur eigene sichtbare Tokens. Bei Mehrfachauswahl gilt das zuletzt hinzugenommene berechtigte Token. Abwählen entfernt die persönliche Auswahl nicht. Auch ohne vorausgewählten SL-Charakter öffnet sich das Auswahlmenü frei außerhalb der kleinen Karte. Fertigkeiten, Angriffe, Zauber und Aktive Abwehr bilden eine gemeinsame Menügruppe: Öffnen eines Menüs schließt das andere, auch bei Favoriten-/Standardangriff-Pfeilen und in der klassischen Ansicht.
 
 Ab Revision 5 enthält die Charakterauswahl ausschließlich berechtigte Tokens der aktuell geöffneten Szene. Andere Szenen und Actors ohne Token werden nicht angeboten. Suche, Typfilter und Gruppierung verwenden dieselben Bausteine wie „Ziel wechseln“: „Alle / Charaktere / NSC“ sowie „Im Kampf / Weitere Tokens der Szene“. Suche und Filter bleiben über der separat scrollenden Ergebnisliste sichtbar und bei Kampfaktualisierungen erhalten. Bei identischen Namen unterscheidet eine kurze Nummerierung die Tokens; technische Token-IDs entfallen aus der sichtbaren Liste.
+
+Ab Revision 6 schließt sich das Charakterauswahlmenü bei einer erfolgreichen Tokenübernahme von der Karte sofort. Die nächste HUD-Aktualisierung öffnet es nicht wieder. Das gilt sowohl für die SL als auch für Spieler bei eigenen Tokens.
 
 Die bestehenden Menüs, Favoriten, Ausrüstungsschalter, vollständigen Bögen und Reaktionsabläufe bleiben vorhanden. Neue Zauber- und Fernkampfvorbereitungen sind außerhalb des eigenen Token-Zuges gesperrt, auch für die SL. Vorhandene Regeln für bereits vorbereitete Aktionen bleiben bestehen.
 

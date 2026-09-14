@@ -147,10 +147,16 @@ try{
  }
  await page.setViewportSize({width:1920,height:1080});
  // Demo map clicks invoke the same receiver as Foundry's controlToken hook.
+ await page.locator('.sf-focus-picker > summary').click();
  await page.locator('.map-token').first().click();
  await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.active");
+ assert.equal(await page.locator('.sf-focus-picker').evaluate(el=>el.open),false);
+ await page.locator('.sf-focus-picker > summary').click();
  await page.locator('.map-token.second').click();
  await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.own");
+ assert.equal(await page.locator('.sf-focus-picker').evaluate(el=>el.open),false);
+ await page.evaluate(async()=>{await hud.render();});
+ assert.equal(await page.locator('.sf-focus-picker').evaluate(el=>el.open),false);
  assert.match(await page.locator('.sf-turnline strong').innerText(),/Geistervarg/);
  // Native details grouping handles pointer, keyboard and programmatic openings.
  for(const menu of ['skills','attacks','spells','defense']){
@@ -182,12 +188,16 @@ try{
  }
  await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=0");
  await page.waitForFunction(()=>window.ready);
+ await page.locator('.sf-focus-picker > summary').click();
  await page.locator('.map-token').first().click();
  assert.equal(await page.locator('.sf-focus-controls').getAttribute('data-sf-focus-reference'),'Scene.scene.Token.own');
+ assert.equal(await page.locator('.sf-focus-picker').evaluate(el=>el.open),true);
  await page.locator('.sf-focus-actor.is-compact .sf-focus-mini').click();
  await page.waitForFunction(()=>document.querySelector('.sf-focus-shell')?.dataset.sfFocusMode==="active");
+ await page.locator('.sf-focus-picker > summary').click();
  await page.locator('.map-token.second').click();
  await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.own");
+ assert.equal(await page.locator('.sf-focus-picker').evaluate(el=>el.open),false);
  assert.match(await page.locator('.sf-events').innerText(),/Geistervarg/);
  assert.deepEqual(errors,[]);
  // A long scene list scrolls independently of the shared search and type controls.
