@@ -18,7 +18,7 @@ Der Browser dient zum Prüfen von Layout, Charakterwechsel, Zielauswahl und Men�
 
 ## In einer Foundry-Testwelt
 
-Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-10.zip`. Es trägt im Paket die Version `0.6.6-character-focus.10` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
+Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-11.zip`. Es trägt im Paket die Version `0.6.6-character-focus.11` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
 
 Die Charakterwahl ist ab Revision 3 standardmäßig eingeschaltet. Eine bereits ausdrücklich gespeicherte Abschaltung wird respektiert und kann über den Schalter unten geändert werden. Die eigene Figur bzw. SL-Auswahl und deren Ziel stehen oben; der gerade aktive Charakter und sein Primärziel stehen unten. Diese Rollenreihenfolge bleibt beim Umschalten bestehen. Identische Tokens werden weiterhin zusammengefasst.
 
@@ -43,6 +43,10 @@ Revision 9 blendet die Bewegungsreichweite für Spieler außerhalb des Zuges des
 
 Revision 10 hebt „Gerade aktiv“ mit einem goldenen Puls und Blitzsymbol hervor, wenn die Person für den aktuellen Zug zuständig ist, aber im HUD einen anderen Token bedient. Ein Wechsel zum aktiven Token oder das Ende der Zugzuständigkeit beendet den Hinweis. Unterschiedliche Tokens desselben Actors werden getrennt behandelt. Bei ausgeschalteten Animationen bleibt die goldene Markierung statisch sichtbar; die Einstellung für reduzierte Bewegung wird respektiert.
 
+Revision 11 positioniert Item-Tooltips der direkten Angriffe oberhalb der Aktionsleiste, damit benachbarte Menüs sofort erreichbar bleiben. Lange Inhalte scrollen innerhalb des verfügbaren Platzes; nur bei praktisch fehlendem Platz oberhalb wird der Tooltip unterhalb der Schaltfläche angeordnet. Tooltips in aufgeklappten Listen behalten ihre seitliche Position.
+
+Zusätzlich können native Splittermond-Wurfdialoge mit vielen Modifikatoren im Fensterinhalt bis zu den Wurfbuttons gescrollt werden. Die CSS-Korrektur gilt ausschließlich für `splittermond.dialog-check`, unabhängig von der Charakterwahl und ohne Versionsschalter. Sie bleibt ausdrücklich auch für 14.2.7 erhalten, selbst wenn neuere Systemversionen eine eigene Lösung bekommen. Felder, Modifikatoren und native Wurfabläufe werden dabei nicht verändert.
+
 Die bestehenden Menüs, Favoriten, Ausrüstungsschalter, vollständigen Bögen und Reaktionsabläufe bleiben vorhanden. Neue Zauber- und Fernkampfvorbereitungen sind außerhalb des eigenen Token-Zuges gesperrt, auch für die SL. Vorhandene Regeln für bereits vorbereitete Aktionen bleiben bestehen.
 
 Ziele werden pro Benutzer und Token getrennt gehalten. Gleiche Token-UUIDs werden zusammengefasst; unterschiedliche Tokens desselben Actors nicht. Auswahl und persönliche Ziele sind Sitzungsdaten. Der Ansichtswechsel selbst migriert keine Welt-, Actor- oder Token-Daten.
@@ -64,6 +68,10 @@ Die Installation auf dem produktiven Foundry-Server ist nicht Bestandteil dieser
 Mit `HUD_MODULE_ROOT` kann die Prüfung direkt auf den aus dem ZIP entpackten Modulordner zeigen. Zusätzlich werden die aktuelle, unversionierte und frühere CSS-Adresse über den von Foundry verwendeten Inline-Import mit und ohne CSS-Layer geladen. Geprüft werden HTTP-Fehler, die feste HUD-Position, die kompakte Karte und der Rückwechsel zur klassischen Ansicht. Die Browserprüfung verwendet weiterhin eine lokale Testumgebung und keine vollständige Foundry-Spielwelt.
 
 Die leere SL-Auswahl wird bei 1920 × 1080 und 1280 × 720 mit einem tatsächlichen Klick auf einen Menüeintrag außerhalb der Karte geprüft. Weitere Browserprüfungen decken Kartenwahl, gegenseitig ausschließende Menüs per Maus und Tastatur, Favoriten, Standardangriffe und Neurendern ab. Der Foundry-Hook und die Besitzprüfung sind separat automatisiert geprüft.
+
+Die Tooltip-Prüfung klickt direkt vom sichtbaren Standardangriff-Tooltip auf „Zauber“, bei FullHD und mit einem überlangen Tooltip bei 1280 × 720. `tools/verify-check-dialog-scroll.mjs` verwendet die echten Vorlagen und Styles aus Splittermond 14.2.7 und 14.3.0-beta4 sowie Foundrys DialogV2-Formularhülle und CSS. Die Prüfung reproduziert zuerst das Abschneiden ohne Modulkorrektur, scrollt danach per Mausrad durch 48 Modifikatoren und betätigt alle drei Wurfbuttons. Sie prüft 1920 × 1080, 1280 × 720, 800 × 600, verkleinerte Fenster und kurze Dialoge. Andere Dialogtypen behalten ihre bisherigen Scroll-Regeln. Das ist eine lokale Layout- und Formularprüfung, kein echter Würfelwurf in einer Foundry-Welt.
+
+Für diese Prüfung `FOUNDRY_APP_ROOT` auf Foundrys `resources/app` setzen und die jeweiligen installierten oder entpackten Systemordner als Argumente übergeben. Browser- und Modulpfade werden wie bei der HUD-Prüfung über Umgebungsvariablen gewählt. Öffentliche Systempakete und lokale Foundry-Dateien verbleiben ausschließlich in der lokalen Testumgebung und werden nicht in das Modulpaket aufgenommen.
 
 Eine Liste mit 24 Szenentokens prüft getrenntes Scrollen, gleiche Suchfeldgestaltung wie bei der Zielwahl, Namenssuche, Typfilter, leere Ergebnisse und Wiederherstellung der Suche nach dem Neurendern. Die Szenenbegrenzung wird auch bei fremden Kampfteilnehmern, Szenenwechsel und fehlender geöffneter Szene geprüft.
 

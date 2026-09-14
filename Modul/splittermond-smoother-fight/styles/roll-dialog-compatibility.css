@@ -1,0 +1,15 @@
+/* Keep CheckDialog usable on Splittermond 14.2.7 as well as current releases.
+ * No version gate: the system clips .window-content when modifiers make the
+ * form taller than Foundry's viewport limit. Scroll the complete native form,
+ * including its roll buttons, without changing fields or submission handlers.
+ */
+.system-splittermond .splittermond.dialog-check .window-content {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+}
+
+.system-splittermond .splittermond.dialog-check .window-content > .dialog-form {
+    flex: 0 0 auto;
+}

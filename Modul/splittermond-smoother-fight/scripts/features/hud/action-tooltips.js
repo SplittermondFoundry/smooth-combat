@@ -249,6 +249,10 @@ function showActionTooltip(anchor, kind, markup) {
 
 function positionTooltip(anchor, tooltip) {
     const anchorRect = anchor.getBoundingClientRect();
+    if (anchor.closest?.(".sf-actions") && !anchor.closest(".sf-action-popover")) {
+        positionActionBarTooltip(anchorRect, tooltip);
+        return;
+    }
     const tooltipRect = tooltip.getBoundingClientRect();
     const gap = 10;
     const viewportGap = 8;
@@ -263,6 +267,24 @@ function positionTooltip(anchor, tooltip) {
     );
     tooltip.style.left = `${Math.round(left)}px`;
     tooltip.style.top = `${Math.round(top)}px`;
+    tooltip.classList.add("is-visible");
+}
+
+function positionActionBarTooltip(anchorRect, tooltip) {
+    const gap = 10, viewportGap = 8;
+    const above = anchorRect.top - gap - viewportGap;
+    const below = window.innerHeight - anchorRect.bottom - gap - viewportGap;
+    const placeAbove = above >= 80 || above >= below;
+    const available = Math.max(0, placeAbove ? above : below);
+    tooltip.style.boxSizing = "border-box";
+    tooltip.style.maxHeight = `${Math.min(tooltip.getBoundingClientRect().height, available)}px`;
+    const bounds = tooltip.getBoundingClientRect();
+    const left = Math.max(viewportGap, Math.min(
+        anchorRect.left + (anchorRect.width - bounds.width) / 2,
+        window.innerWidth - bounds.width - viewportGap,
+    ));
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(placeAbove ? anchorRect.top - gap - bounds.height : anchorRect.bottom + gap)}px`;
     tooltip.classList.add("is-visible");
 }
 

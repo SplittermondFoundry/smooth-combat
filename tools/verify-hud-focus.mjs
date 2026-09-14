@@ -67,6 +67,16 @@ try{
   await hud.render();
  });
  const directBow=page.locator('.sf-direct-attack[data-attack-id="bow"]');
+ await directBow.hover();
+ await page.waitForFunction(()=>document.querySelector('.sf-action-tooltip.is-visible'));
+ const tooltipAbove=await page.locator('.sf-action-tooltip').boundingBox();
+ const attackBounds=await directBow.boundingBox();
+ assert.ok(tooltipAbove.y+tooltipAbove.height<=attackBounds.y-6,'Direct attack tooltip must leave the action row clear');
+ await page.screenshot({path:path.join(output,'default-attack-tooltip-above-fullhd.png')});
+ // A real click on the adjacent menu must work without first dismissing the tooltip.
+ await page.locator('[data-sf-menu="spells"] > summary').click({timeout:1500});
+ assert.equal(await page.locator('[data-sf-menu="spells"]').evaluate(el=>el.open),true);
+ await page.locator('[data-sf-menu="spells"] > summary').click();
  await rightClickItem(directBow,'bow');
  await page.locator('[data-sf-menu="attacks"] > summary').click();
  const bow=page.locator('.sf-attack-option [data-sf-action="attack"][data-attack-id="bow"]');
@@ -409,6 +419,25 @@ try{
   assert.equal(await attention.count(),0);
   assert.deepEqual(await page.evaluate(()=>fixture.calls.ticks),[]);
  }
+ assert.deepEqual(errors,[]);
+ // Long favorite tooltips scroll above the row, including at smaller resolutions.
+ await page.setViewportSize({width:1280,height:720});
+ await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=1");
+ await page.waitForFunction(()=>window.ready);
+ await page.evaluate(async()=>{
+  fixture.own.flags['splittermond-smoother-fight']={defaultAttackId:'bow'};
+  fixture.own.attacks.find(item=>item.id==='bow').features='Durchdringung 2, Scharf 5, Zweihändig, Treffsicher. '.repeat(60);
+  focus.selectHudFocus(services.getHudContext(),'personal',fixture.ownToken.uuid);await hud.render();
+ });
+ await page.locator('.sf-direct-attack[data-attack-id="bow"]').hover();
+ await page.waitForFunction(()=>document.querySelector('.sf-action-tooltip.is-visible'));
+ const longBounds=await page.locator('.sf-action-tooltip').boundingBox();
+ const longAnchor=await page.locator('.sf-direct-attack[data-attack-id="bow"]').boundingBox();
+ assert.ok(longBounds.y>=7 && longBounds.y+longBounds.height<=longAnchor.y-6);
+ assert.ok(await page.locator('.sf-action-tooltip').evaluate(el=>el.scrollHeight>el.clientHeight));
+ await page.screenshot({path:path.join(output,'long-default-tooltip-720.png')});
+ await page.locator('[data-sf-menu="spells"] > summary').click({timeout:1500});
+ assert.equal(await page.locator('[data-sf-menu="spells"]').evaluate(el=>el.open),true);
  assert.deepEqual(errors,[]);
  console.log(JSON.stringify({runtimeRoot,version:manifest.version,stylesheetChecks:6,styleFailures}));
 }finally{await browser.close();await new Promise(r=>server.close(r));}
