@@ -22,6 +22,8 @@ Die großen Karten verwenden die bisherigen Originalbilder. Die kleinen Karten e
 
 Ein Klick auf die Kopfzeile bzw. den auswählbaren Bildbereich der linken Karte macht diese Figur zum Bedienkontext. Der vorhandene Bogenknopf öffnet weiterhin den zugehörigen vollständigen Systembogen. Ein kleiner Pfeil bei „Dein Charakter“ bzw. „SL-Auswahl“ öffnet die Auswahl. Spieler erhalten ihre berechtigten Figuren, die SL alle Actors, mit konkreter Tokenauswahl, falls mehrere Instanzen vorhanden sind. Bei nur einer eigenen Figur entfällt ein überflüssiger Auswahlpfeil.
 
+Eine neue Tokenauswahl auf der Kampfkarte übernimmt die Figur ebenfalls in die persönliche HUD-Auswahl. Die SL kann jedes Token wählen; Spieler nur eigene sichtbare Tokens. Bei Mehrfachauswahl gilt das zuletzt hinzugenommene berechtigte Token. Abwählen lässt die persönliche Auswahl bestehen. Das Auswahlmenü bleibt auch bei leerer SL-Auswahl frei außerhalb der kleinen Karte bedienbar.
+
 Eine kleine Angabe **„Bedienung: [Name]“** in der bestehenden Kopfzeile macht die Zuordnung ausdrücklich sichtbar. Die Zuganzeige daneben benennt weiterhin den tatsächlich aktiven Token. Ein bewusster Wechsel schließt offene Auswahlmenüs. Bereits geöffnete Würfeldialoge behalten ihren ursprünglichen Befehlskontext.
 
 Die persönliche Auswahl bleibt bei Tickwechseln erhalten. Die Auswahl „Gerade aktiv“ folgt dem Kampf. Die Kamera, Foundrys aktiver Combatant und fremde Benutzerziele ändern sich durch das Umschalten nicht. Ein Klick auf eine Zielkarte öffnet deren erlaubte Informationen, ohne den Bedienkontext auf das Ziel umzulenken.
@@ -31,6 +33,8 @@ Persönliche Zielwahl und Zugriff der SL bleiben pro Benutzer und gewähltem Tok
 ## Bestehende Menüs und Ausführung
 
 Fertigkeiten, Angriffe, Zauber und Aktive Abwehr bleiben in der vorhandenen Aktionszeile. Ihre vollständigen Listen klappen wie bisher auf und scrollen innerhalb des Menüs. Favoriten, Standardangriffe, Vorbereitung, bestehende Ausrüstungsschalter und die Handlungsübersicht bleiben erhalten. Es gibt keinen neuen Ausrüstungsreiter als Bestandteil dieser kleinen Erweiterung.
+
+Von den vier Aktionsmenüs ist jeweils höchstens eines geöffnet. Das Öffnen eines anderen Menüs schließt das vorherige; dasselbe gilt für die Auswahlpfeile bei einem Fertigkeitsfavoriten oder Standardangriff.
 
 Die Menüs lesen den Bedienkontext. Inventar, Meisterschaften, Notizen und weitere Angaben bleiben zusätzlich über den vollständigen Bogen erreichbar. Personenbezogene Bewegung, Tickänderungen und Befehle müssen den ausgewählten Empfänger eindeutig verwenden und weiterhin ihre bisherigen Berechtigungs- und Regelprüfungen durchlaufen. Ein bloßer Kontextwechsel ist keine Handlung.
 

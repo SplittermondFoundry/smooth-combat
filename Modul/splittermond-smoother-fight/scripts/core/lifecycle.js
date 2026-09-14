@@ -58,6 +58,7 @@ export function registerHooks() {
     }));
     Hooks.on("controlToken", (token, controlled) => {
         services.installSystemActionBarActiveDefenseInterceptor?.();
+        services.selectControlledHudToken(token, controlled);
         if (!controlled) services.clearTemporaryMovementRoutePreview(token);
         services.scheduleRender(0);
     });

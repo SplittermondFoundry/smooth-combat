@@ -413,7 +413,7 @@ export function buildDefenseControl(context, personal = false) {
         defenseButton(context.actor, "defense", "VTD"),
         defenseButton(context.actor, "bodyresist", "KW"),
         defenseButton(context.actor, "mindresist", "GW"),
-    ].join(""), "sf-defense-menu");
+    ].join(""), "sf-defense-menu", "defense");
 }
 
 export function continuousActionInterruptionControls(context) {
@@ -495,7 +495,7 @@ function buildSpellFilterBody(spells, rows, availableSpells) {
 function spellActionMenu(label, body, filterable) {
     const popoverClass = filterable ? "sf-action-popover sf-spell-popover" : "sf-action-popover";
     const filterAttribute = filterable ? " data-sf-spell-filterable" : "";
-    return `<details class="sf-action-menu" data-sf-menu="spells">
+    return `<details class="sf-action-menu" data-sf-menu="spells" name="sf-hud-action-menu">
         <summary title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid fa-wand-sparkles" aria-hidden="true"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron" aria-hidden="true"></i></summary>
         <div class="${popoverClass}"${filterAttribute}>${body}</div>
     </details>`;
@@ -599,7 +599,7 @@ function directSkillControl(skill, menuBody) {
             <span><small>${escapeHtml(t("SMOOTHER_FIGHT.HUD.FavoriteSkill"))}</small><strong>${escapeHtml(label)}</strong></span>
             <b>${escapeHtml(displayValue(skill.value))}</b>
         </button>
-        <details class="sf-direct-attack-picker sf-direct-skill-picker" data-sf-menu="skills"><summary title="${escapeAttr(menuLabel)}" aria-label="${escapeAttr(menuLabel)}"><i class="fa-solid fa-chevron-down sf-chevron"></i></summary><div class="sf-action-popover">${menuBody}</div></details>
+        <details class="sf-direct-attack-picker sf-direct-skill-picker" data-sf-menu="skills" name="sf-hud-action-menu"><summary title="${escapeAttr(menuLabel)}" aria-label="${escapeAttr(menuLabel)}"><i class="fa-solid fa-chevron-down sf-chevron"></i></summary><div class="sf-action-popover">${menuBody}</div></details>
     </div>`;
 }
 
@@ -639,13 +639,13 @@ function directAttackControl(attack, { menuBody, showMenu, isDefault, readiness,
             <span><small>${escapeHtml(label)}</small><strong>${escapeHtml(attack.name)}</strong>${rangeStatusMarkup(range)}</span>
             <b>${escapeHtml(status)}</b>
         </button>
-        ${showMenu ? `<details class="sf-direct-attack-picker" data-sf-menu="attacks"><summary title="${escapeAttr(menuLabel)}" aria-label="${escapeAttr(menuLabel)}"><i class="fa-solid fa-chevron-down sf-chevron"></i></summary><div class="sf-action-popover">${menuBody}</div></details>` : ""}
+        ${showMenu ? `<details class="sf-direct-attack-picker" data-sf-menu="attacks" name="sf-hud-action-menu"><summary title="${escapeAttr(menuLabel)}" aria-label="${escapeAttr(menuLabel)}"><i class="fa-solid fa-chevron-down sf-chevron"></i></summary><div class="sf-action-popover">${menuBody}</div></details>` : ""}
     </div>`;
 }
 
 function actionMenu(icon, label, body, className = "", menuId = "") {
     const menuAttribute = menuId ? ` data-sf-menu="${escapeAttr(menuId)}"` : "";
-    return `<details class="sf-action-menu ${escapeAttr(className)}"${menuAttribute}>
+    return `<details class="sf-action-menu ${escapeAttr(className)}"${menuAttribute} name="sf-hud-action-menu">
         <summary title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="${icon}" aria-hidden="true"></i><span>${escapeHtml(label)}</span><i class="fa-solid fa-chevron-down sf-chevron" aria-hidden="true"></i></summary>
         <div class="sf-action-popover">${body}</div>
     </details>`;

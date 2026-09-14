@@ -19,7 +19,7 @@
 #splittermond-smoother-fight-hud .sf-focus-mini img { height: 48px; width: 48px; object-fit: contain; flex: 0 0 48px; border: 0; }
 #splittermond-smoother-fight-hud .sf-focus-mini > span { display: flex; flex-direction: column; gap: 4px; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: 12px; }
 #splittermond-smoother-fight-hud .sf-focus-mini small { font-size: 10px; color: var(--sf-muted); }
-#splittermond-smoother-fight-hud .sf-focus-empty { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; }
+#splittermond-smoother-fight-hud .sf-focus-empty { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; overflow: visible; }
 #splittermond-smoother-fight-hud .sf-focus-empty.is-compact { height: 72px; min-height: 72px; }
 #splittermond-smoother-fight-hud .sf-focus-target-role { display: flex; align-items: center; height: 34px; background: var(--sf-bg); color: var(--sf-muted); padding: 3px 6px; font-size: 10px; }
 #splittermond-smoother-fight-hud .sf-focus-target .sf-no-target { border: 0; height: calc(100% - 34px); min-height: 0; border-radius: 0; }
@@ -29,7 +29,7 @@
 #splittermond-smoother-fight-hud .sf-focus-target.is-compact .sf-no-target small { display: none; }
 #splittermond-smoother-fight-hud .sf-focus-picker { position: relative; z-index: 8; margin-left: auto; }
 #splittermond-smoother-fight-hud .sf-focus-picker > summary { list-style: none; cursor: pointer; padding: 3px; min-width: 20px; text-align: center; }
-#splittermond-smoother-fight-hud .sf-focus-picker .sf-action-popover { left: auto; right: 0; width: 320px; z-index: 30; }
+#splittermond-smoother-fight-hud .sf-focus-picker .sf-action-popover { left: 0; right: auto; width: 320px; z-index: 30; }
 #splittermond-smoother-fight-hud .sf-focus-picker input { width: 100%; margin-bottom: 5px; }
 #splittermond-smoother-fight-hud .sf-focus-picker .sf-action-popover > button { display: flex; width: 100%; gap: 8px; align-items: center; text-align: left; padding: 5px; min-height: 40px; }
 #splittermond-smoother-fight-hud .sf-focus-picker .sf-action-popover > button[hidden] { display: none; }

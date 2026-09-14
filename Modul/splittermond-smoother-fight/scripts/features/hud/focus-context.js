@@ -135,6 +135,11 @@ export function selectHudFocus(active, mode, reference = null) {
     services.scheduleRender?.(0);
     return true;
 }
+export function selectControlledHudToken(token, controlled) {
+    const document = documentOf(token), reference = refOf(document);
+    if (!controlled || !focusEnabled() || !reference || !canOwn(document?.actor) || !tokenVisible(document)) return false;
+    return selectHudFocus(services.getHudContext?.(), "personal", reference);
+}
 export function resolveHudFocusActionContext(context) {
     if (!focusEnabled() || !context?.hudFocus || context.focusUserId !== game.user?.id) return null;
     const combat = getApplicableCombat();

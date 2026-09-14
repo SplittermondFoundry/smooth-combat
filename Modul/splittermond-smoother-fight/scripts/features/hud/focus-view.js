@@ -40,7 +40,7 @@ function actorCard(context, { role, compact, mode, chooser = "", selected }) {
 }
 export function buildFocusedActorColumn(active) {
     const { mode, personal, action } = getHudFocusContexts(active), chooser = picker(active, personal);
-    const ownRole = game.user.isGM && personal?.actor?.id !== game.user.character?.id ? label("GmActor") : label("YourActor");
+    const ownRole = game.user.isGM && (!personal || personal.actor.id !== game.user.character?.id) ? label("GmActor") : label("YourActor");
     const merged = sameHudToken(active.token, personal?.token);
     const activeRole = active.concealed ? label("HiddenActive") : t("SMOOTHER_FIGHT.HUD.Active");
     const html = merged

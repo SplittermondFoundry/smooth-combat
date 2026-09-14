@@ -9,7 +9,7 @@
 .notice{position:fixed;top:16px;left:110px;color:#e4eadd;background:#142720e8;padding:10px;border-radius:5px;display:flex;align-items:center;gap:12px}
 .notice a{color:#a5e4d8}.sidebar{position:fixed;right:0;inset-block:0;width:348px;background:#151c1de8;padding:18px;border-left:1px solid #71908360}
 .tickbar{position:fixed;top:85px;left:110px;right:365px;display:flex;gap:16px;padding:18px;background:#101c19d9;border:1px solid #ab8d3e}
-.map-token{position:absolute;top:360px;left:690px;width:80px;height:80px;border:3px solid #c1a157;border-radius:50%;padding:8px;background:#10251d}.map-token.second{top:460px;left:860px;border-color:#81caba}
+.map-token{position:absolute;top:360px;left:690px;width:80px;height:80px;border:3px solid #c1a157;border-radius:50%;padding:8px;background:#10251d;cursor:pointer}.map-token.second{top:460px;left:860px;border-color:#81caba}
 .fa-chevron-down:before{content:'⌄'}.fa-lock:before{content:'▣'}.fa-address-card:before{content:'▤'}.fa-window-minimize:before{content:'−'}.fa-sun:before{content:'☀'}.fa-dice:before{content:'⚄'}
 #splittermond-smoother-fight-hud .sf-event-scroller{padding:7px}
 #splittermond-smoother-fight-hud .sf-focus-test-event{padding:10px;background:#071714;border:1px solid #718e8950;border-radius:4px;margin:6px 0}
@@ -49,6 +49,11 @@ if(game.user.isGM){
  await focus.setHudFocusTarget(personal,f.activeToken.uuid);
 }
 mountHud();await hudState.hud.render();
+for(const [index,token] of [f.activeToken,f.ownToken].entries()) document.querySelectorAll('.map-token')[index].onclick=async()=>{
+ if(!game.user.isGM&&!token.actor.isOwner)return;
+ services.getControlledTokenDocument=()=>token;
+ focus.selectControlledHudToken(token.object,true);await hudState.hud.render();
+};
 document.querySelector("#turn").onclick=async()=>{f.combat.combatant=f.combat.combatant===f.combat.combatants[0]?f.combat.combatants[1]:f.combat.combatants[0];f.combat.currentTick++;await hudState.hud.render();};
 document.querySelector("#classic").onclick=async()=>{f.settings.characterFocusHud=!f.settings.characterFocusHud;await hudState.hud.render();};
 document.querySelector("#theme").onclick=async()=>{f.settings.theme=f.settings.theme==="light"?"dark":"light";await hudState.hud.render();};

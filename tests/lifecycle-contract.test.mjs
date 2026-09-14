@@ -107,6 +107,7 @@ const serviceStubs = {
     publishOwnTarget: (...args) => record("publishOwnTarget", args),
     announceTurnFeedback: (...args) => record("announceTurnFeedback", args),
     resetPersonalCombatantSelection: (...args) => record("resetPersonalCombatantSelection", args),
+    selectControlledHudToken: (...args) => record("selectControlledHudToken", args),
     reconcileControlledCombatTokenSelection: (...args) => record("reconcileControlledCombatTokenSelection", args),
     syncActiveCombatantTokenSelection: (...args) => {
         record("syncActiveCombatantTokenSelection", args);
@@ -362,8 +363,15 @@ test("lifecycle hooks and socket routing preserve their Foundry contracts", asyn
         callLog.length = 0;
         const releasedToken = { id: "released-token" };
         handlersFor(hookRegistrations, "controlToken")[0](releasedToken, false);
+        assert.deepEqual(callsOf("selectControlledHudToken"), [[releasedToken, false]]);
         assert.deepEqual(callsOf("clearTemporaryMovementRoutePreview"), [[releasedToken]]);
         assert.deepEqual(callsOf("scheduleRender"), [[0]]);
+
+        callLog.length = 0;
+        const controlledToken = { id: "selected-token" };
+        handlersFor(hookRegistrations, "controlToken")[0](controlledToken, true);
+        assert.deepEqual(callsOf("selectControlledHudToken"), [[controlledToken, true]]);
+        assert.deepEqual(callsOf("clearTemporaryMovementRoutePreview"), []);
 
         callLog.length = 0;
         handlersFor(hookRegistrations, "canvasTearDown")[0]();

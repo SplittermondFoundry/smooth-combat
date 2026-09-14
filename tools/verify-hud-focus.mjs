@@ -127,5 +127,68 @@ try{
  }
  assert.deepEqual(styleFailures,[]);
  assert.deepEqual(errors,[]);
+ // Empty GM selection: the picker must be clickable outside the short portrait card.
+ for(const viewport of [{width:1920,height:1080},{width:1280,height:720}]){
+  await page.setViewportSize(viewport);
+  await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=1");
+  await page.waitForFunction(()=>window.ready);
+  await page.evaluate(async()=>{
+   focus.resetHudFocus();fixture.player.character=null;services.getControlledTokenDocument=()=>null;
+   await hud.render();
+  });
+  await page.locator('.sf-focus-empty .sf-focus-picker > summary').click();
+  const pickerBounds=await page.locator('.sf-focus-empty .sf-action-popover').boundingBox();
+  const cardBounds=await page.locator('.sf-focus-empty').boundingBox();
+  assert.ok(pickerBounds.y<cardBounds.y-50);
+  assert.ok(pickerBounds.x>=0 && pickerBounds.x+pickerBounds.width<=viewport.width);
+  if(viewport.width===1920)await page.screenshot({path:path.join(output,"gm-empty-picker-fullhd.png")});
+  await page.locator('.sf-focus-empty [data-focus-reference="Scene.scene.Token.own"]').click();
+  await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.own");
+ }
+ await page.setViewportSize({width:1920,height:1080});
+ // Demo map clicks invoke the same receiver as Foundry's controlToken hook.
+ await page.locator('.map-token').first().click();
+ await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.active");
+ await page.locator('.map-token.second').click();
+ await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.own");
+ assert.match(await page.locator('.sf-turnline strong').innerText(),/Geistervarg/);
+ // Native details grouping handles pointer, keyboard and programmatic openings.
+ for(const menu of ['skills','attacks','spells','defense']){
+  await page.locator(`[data-sf-menu="${menu}"] > summary`).click();
+  assert.equal(await page.locator('.sf-actions details[open]').count(),1);
+  assert.equal(await page.locator(`[data-sf-menu="${menu}"]`).evaluate(el=>el.open),true);
+ }
+ await page.evaluate(async()=>{await hud.render();});
+ assert.equal(await page.locator('[data-sf-menu="defense"]').evaluate(el=>el.open),true);
+ await page.locator('[data-sf-menu="skills"] > summary').focus();
+ await page.keyboard.press('Enter');
+ assert.equal(await page.locator('.sf-actions details[open]').count(),1);
+ assert.equal(await page.locator('[data-sf-menu="skills"]').evaluate(el=>el.open),true);
+ await page.evaluate(async()=>{
+  fixture.own.flags['splittermond-smoother-fight']={favoriteSkillIds:['acrobatics'],defaultAttackId:'staff'};
+  await hud.render();
+ });
+ assert.equal(await page.locator('.sf-direct-skill-picker').count(),1);
+ assert.equal(await page.locator('.sf-direct-attack-picker[data-sf-menu="attacks"]').count(),1);
+ await page.locator('[data-sf-menu="attacks"] > summary').click();
+ await page.locator('[data-sf-menu="spells"] > summary').click();
+ assert.equal(await page.locator('.sf-actions details[open]').count(),1);
+ await page.locator('.sf-direct-skill-picker > summary').click();
+ assert.equal(await page.locator('.sf-actions details[open]').count(),1);
+ await page.locator('#classic').click();
+ for(const menu of ['skills','attacks','spells','defense']){
+  await page.locator(`[data-sf-menu="${menu}"] > summary`).click();
+  assert.equal(await page.locator('.sf-actions details[open]').count(),1);
+ }
+ await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=0");
+ await page.waitForFunction(()=>window.ready);
+ await page.locator('.map-token').first().click();
+ assert.equal(await page.locator('.sf-focus-controls').getAttribute('data-sf-focus-reference'),'Scene.scene.Token.own');
+ await page.locator('.sf-focus-actor.is-compact .sf-focus-mini').click();
+ await page.waitForFunction(()=>document.querySelector('.sf-focus-shell')?.dataset.sfFocusMode==="active");
+ await page.locator('.map-token.second').click();
+ await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.own");
+ assert.match(await page.locator('.sf-events').innerText(),/Geistervarg/);
+ assert.deepEqual(errors,[]);
  console.log(JSON.stringify({runtimeRoot,version:manifest.version,stylesheetChecks:6,styleFailures}));
 }finally{await browser.close();await new Promise(r=>server.close(r));}

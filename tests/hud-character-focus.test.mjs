@@ -88,7 +88,7 @@ test('preparation rechecks a turn change while its application state is being sa
 });
 import { focusFixture } from "./fixtures/hud-focus-fixture.mjs";
 import { getHudContext, resolveHudActionContext, reconcileControlledCombatTokenSelection } from "../Modul/splittermond-smoother-fight/scripts/features/hud/context.js";
-import { getHudFocusCandidates,getHudFocusContexts,selectHudFocus,sameHudToken,resolveHudFocusActionContext,setHudFocusTarget,captureHudFocusTargets } from "../Modul/splittermond-smoother-fight/scripts/features/hud/focus-context.js";
+import { getHudFocusCandidates,getHudFocusContexts,selectHudFocus,selectControlledHudToken,sameHudToken,resolveHudFocusActionContext,setHudFocusTarget,captureHudFocusTargets } from "../Modul/splittermond-smoother-fight/scripts/features/hud/focus-context.js";
 import { buildHud } from "../Modul/splittermond-smoother-fight/scripts/features/hud/view.js";
 import { buildFocusedActorColumn,buildFocusedTargetColumn } from "../Modul/splittermond-smoother-fight/scripts/features/hud/focus-view.js";
 import { mayStartTurnAction } from "../Modul/splittermond-smoother-fight/scripts/shared/turn-start.js";
@@ -103,6 +103,30 @@ test('GM selection includes foreign tokens and unplaced Actors',()=>{
  const f=focusFixture({gm:true});assert.ok(getHudFocusCandidates(getHudContext()).some(c=>c.reference===f.activeToken.uuid));
  assert.equal(selectHudFocus(getHudContext(),'personal',f.unplaced.uuid),true);
  const c=getHudFocusContexts(getHudContext()).action;assert.equal(c.actor,f.unplaced);assert.equal(c.token,null);assert.equal(c.combatant,null);assert.equal(mayStartTurnAction(c),false);
+});
+
+test('a GM without a personal selection adopts a controlled NPC without changing the active turn',()=>{
+ const f=focusFixture({gm:true});f.player.character=null;services.getControlledTokenDocument=()=>null;
+ assert.equal(getHudFocusContexts(getHudContext()).personal,null);
+ const active=getHudContext();
+ assert.equal(selectControlledHudToken(f.targetToken.object,true),true);
+ const selected=getHudFocusContexts(getHudContext());
+ assert.equal(selected.mode,'personal');assert.equal(selected.action.token,f.targetToken);
+ assert.equal(f.combat.combatant.token,active.token);assert.equal(getHudContext().target,active.target);
+ assert.deepEqual(f.calls.controls,[]);
+});
+
+test('canvas selection accepts only owned visible player tokens and ignores releases',()=>{
+ const f=focusFixture();getHudFocusContexts(getHudContext());
+ services.getControlledTokenDocument=()=>f.cloneToken;
+ assert.equal(selectControlledHudToken(f.cloneToken.object,true),true);
+ assert.equal(getHudFocusContexts(getHudContext()).action.token,f.cloneToken);
+ assert.equal(selectControlledHudToken(f.activeToken.object,true),false);
+ assert.equal(selectControlledHudToken(f.cloneToken.object,false),false);
+ f.ownToken.hidden=true;assert.equal(selectControlledHudToken(f.ownToken,true),false);
+ assert.equal(getHudFocusContexts(getHudContext()).action.token,f.cloneToken);
+ f.ownToken.hidden=false;f.settings.characterFocusHud=false;
+ assert.equal(selectControlledHudToken(f.ownToken,true),false);
 });
 test('switching HUD selection neither controls a canvas token nor changes the active combatant',()=>{
  const f=focusFixture();selectHudFocus(getHudContext(),'personal',f.cloneToken.uuid);
