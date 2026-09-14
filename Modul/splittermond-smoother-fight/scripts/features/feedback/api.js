@@ -10,5 +10,6 @@ export {
     resolveActorUuid,
     seedHealthFeedbackState,
     setLastTurnCombatantId,
+    synchronizeFeedbackAnimations,
     withTrackedHealthCosts,
 } from "./feedback.js";

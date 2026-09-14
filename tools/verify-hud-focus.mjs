@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { verifyHudFeedback } from "./hud-feedback-qa.mjs";
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const runtimeRoot=path.resolve(process.env.HUD_MODULE_ROOT ?? path.join(root,"Modul","splittermond-smoother-fight"));
 const modulePath=process.env.PLAYWRIGHT_MODULE_PATH;
@@ -438,6 +439,47 @@ try{
  await page.screenshot({path:path.join(output,'long-default-tooltip-720.png')});
  await page.locator('[data-sf-menu="spells"] > summary').click({timeout:1500});
  assert.equal(await page.locator('[data-sf-menu="spells"]').evaluate(el=>el.open),true);
+ assert.deepEqual(errors,[]);
+ // List tooltips leave the favorite star clear in the classic and personal HUD.
+ for(const personal of [false,true]){
+  await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=1");
+  await page.waitForFunction(()=>window.ready);
+  await page.evaluate(async personal=>{
+   fixture.settings.characterFocusHud=personal;
+   if(personal)focus.selectHudFocus(services.getHudContext(),'personal',fixture.ownToken.uuid);
+   await hud.render();
+  },personal);
+  if(personal){
+   assert.deepEqual(await page.locator('.sf-focus-target-source').allTextContents(),['Für Peritus','Für Geistervarg']);
+   const headingSizes=await page.locator('.sf-focus-target-heading').evaluateAll(headings=>headings.map(el=>{
+    const own=el.getBoundingClientRect(),parent=el.parentElement.getBoundingClientRect();
+    return {height:own.height,available:parent.height};
+   }));
+   assert.ok(headingSizes.every(size=>size.height<=size.available));
+   assert.equal(await page.locator('.sf-focus-target.is-compact').evaluate(el=>el.getBoundingClientRect().height),72);
+   await page.evaluate(async()=>{
+    const { refreshFocusedTargetDistances }=await import('/Modul/splittermond-smoother-fight/scripts/features/hud/focus-view.js');
+    refreshFocusedTargetDistances(hud.element,services.getHudContext());
+   });
+   assert.deepEqual(await page.locator('.sf-focus-target-source').allTextContents(),['Für Peritus','Für Geistervarg']);
+  }
+  await page.locator('[data-sf-menu="attacks"] > summary').click();
+  for(const id of ['bow','staff']){
+   const row=page.locator(`.sf-attack-option:has([data-sf-action="attack"][data-attack-id="${id}"])`);
+   await row.locator('[data-sf-action="attack"]').hover();
+   await page.waitForFunction(id=>document.querySelector('.sf-action-tooltip header strong')?.textContent===(id==='bow'?'Kurzbogen':'Kampfstab'),id);
+   const star=await row.locator('.sf-default-attack-toggle').boundingBox();
+   const tip=await page.locator('.sf-action-tooltip').boundingBox();
+   assert.ok(tip.x>=star.x+star.width+9,'Tooltip must begin to the right of the favorite star');
+   assert.equal(await row.locator('[data-sf-action="attack"]').getAttribute('aria-disabled'),personal&&id==='bow'?'true':null);
+   await page.screenshot({path:path.join(output,`favorite-clear-${personal?'personal':'classic'}-${id}-720.png`)});
+   // Actual pointer click, with the tooltip still present; no forced locator action.
+   await page.mouse.click(star.x+star.width/2,star.y+star.height/2);
+   await page.waitForFunction(({personal,id})=>(personal?fixture.own:fixture.ghost).flags['splittermond-smoother-fight']?.defaultAttackId===id,{personal,id});
+  }
+ }
+ assert.deepEqual(errors,[]);
+ await verifyHudFeedback(page,output);
  assert.deepEqual(errors,[]);
  console.log(JSON.stringify({runtimeRoot,version:manifest.version,stylesheetChecks:6,styleFailures}));
 }finally{await browser.close();await new Promise(r=>server.close(r));}

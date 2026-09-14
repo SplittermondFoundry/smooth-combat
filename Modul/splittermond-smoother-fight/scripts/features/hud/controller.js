@@ -426,6 +426,7 @@ class SmootherFightHud {
             rememberHudCanvas(liveContext);
         }
         refreshHudCanvas(this.element);
+        services.synchronizeFeedbackAnimations?.(this.element);
     }
 
     onContextMenu(event) {

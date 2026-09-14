@@ -30,7 +30,12 @@ function cleanPath(value) {
 
 function cssUrl(value) {
     const path = String(value ?? "").replace(/[\n\r\f]/gu, "");
-    return `url(${JSON.stringify(path)})`;
+    const base = globalThis.document?.baseURI;
+    return `url(${JSON.stringify(base ? new URL(path, base).href : path)})`;
+}
+
+function bundledAssetUrl(path) {
+    return new URL(`../../../${path.replace(`modules/${MODULE_ID}/`, "")}`, import.meta.url).href;
 }
 
 function customIconPath(directory, filename) {
@@ -39,13 +44,13 @@ function customIconPath(directory, filename) {
 
 export function applyHudAppearance(element) {
     if (!element) return;
-    const darkBackground = cleanPath(getSetting("hudBackgroundDark", "")) || DEFAULT_ASSETS.backgrounds.dark;
-    const lightBackground = cleanPath(getSetting("hudBackgroundLight", "")) || DEFAULT_ASSETS.backgrounds.light;
+    const darkBackground = cleanPath(getSetting("hudBackgroundDark", "")) || bundledAssetUrl(DEFAULT_ASSETS.backgrounds.dark);
+    const lightBackground = cleanPath(getSetting("hudBackgroundLight", "")) || bundledAssetUrl(DEFAULT_ASSETS.backgrounds.light);
     const iconDirectory = cleanPath(getSetting("hudIconDirectory", ""));
     element.style.setProperty("--sf-hud-background-dark", cssUrl(darkBackground));
     element.style.setProperty("--sf-hud-background-light", cssUrl(lightBackground));
     for (const [id, defaultPath] of Object.entries(DEFAULT_ASSETS.icons)) {
-        const path = customIconPath(iconDirectory, ICON_FILENAMES[id]) ?? defaultPath;
+        const path = customIconPath(iconDirectory, ICON_FILENAMES[id]) ?? bundledAssetUrl(defaultPath);
         element.style.setProperty(`--sf-icon-${id.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`, cssUrl(path));
     }
     const motion = getSetting("hudMotion", "system");

@@ -7,17 +7,17 @@ $projectDirectory = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $outputPath = [IO.Path]::GetFullPath($OutputDirectory)
 $moduleId = 'splittermond-smoother-fight'
 $sourcePath = Join-Path $projectDirectory "Modul/$moduleId"
-$stagePath = Join-Path $outputPath "preview-11/$moduleId"
+$stagePath = Join-Path $outputPath "preview-12/$moduleId"
 New-Item -ItemType Directory -Path $stagePath -Force | Out-Null
 Get-ChildItem -LiteralPath $sourcePath | Copy-Item -Destination $stagePath -Recurse -Force
 $manifestPath = Join-Path $stagePath 'module.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-$manifest.version = "$($manifest.version)-character-focus.11"
+$manifest.version = "$($manifest.version)-character-focus.12"
 $manifest.title = 'Splittermond Smoother Fight – Charakterwahl-Vorschau'
 $manifest.PSObject.Properties.Remove('manifest')
 $manifest.PSObject.Properties.Remove('download')
 $manifest | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $manifestPath -Encoding utf8
-$previewZip = Join-Path $outputPath 'smoother-fight-character-focus-preview-11.zip'
+$previewZip = Join-Path $outputPath 'smoother-fight-character-focus-preview-12.zip'
 Compress-Archive -LiteralPath $stagePath -DestinationPath $previewZip -Force
 $archives = @($previewZip)
 if ($InstalledBackupDirectory) {

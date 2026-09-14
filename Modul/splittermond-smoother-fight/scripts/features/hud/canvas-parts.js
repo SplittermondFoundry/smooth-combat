@@ -143,4 +143,5 @@ export function refreshHudVisibilityParts(root, context) {
     bindQuickTargetSearch(inserted);
     restoreQuickTargetViewState(root, quickState);
     restoreQuickTargetViewState(root, focusState, ".sf-focus-picker");
+    services.synchronizeFeedbackAnimations?.(root);
 }

@@ -162,6 +162,25 @@ test('same targets merge independently of different actor tokens',async()=>{
  const f=focusFixture();await setHudFocusTarget(getHudFocusContexts(getHudContext()).personal,f.targetToken.uuid);
  const html=buildFocusedTargetColumn(getHudContext());assert.equal((html.match(/class="sf-portrait /g)??[]).length,1);assert.match(html,/YourTarget/);
 });
+
+test('target cards identify the source characters in separate, empty and merged cards',async()=>{
+ const dictionary={SMOOTHER_FIGHT:{HUD:{PrimaryTarget:'Primärziel',CharacterFocus:{YourTarget:'Dein Ziel',TargetFor:'Für {name}'}}}};
+ const f=focusFixture({gm:true,dictionary});
+ const sources=()=>[...buildFocusedTargetColumn(getHudContext()).matchAll(/class="sf-focus-target-source">([^<]*)</g)].map(match=>match[1]);
+ const personal=getHudFocusContexts(getHudContext()).personal;
+ await setHudFocusTarget(personal,f.targetToken.uuid);
+ assert.deepEqual(sources(),['Für Peritus','Für Geistervarg']);
+ selectHudFocus(getHudContext(),'personal',f.ownToken.uuid);
+ assert.deepEqual(sources(),['Für Peritus','Für Geistervarg']);
+ await setHudFocusTarget(personal,f.targetToken.uuid,{remove:true});
+ assert.deepEqual(sources(),['Für Peritus','Für Geistervarg']);
+ await setHudFocusTarget(personal,getHudContext().target.uuid);
+ assert.deepEqual(sources(),['Für Geistervarg / Peritus']);
+ selectHudFocus(getHudContext(),'personal',f.activeToken.uuid);
+ assert.deepEqual(sources(),['Für Geistervarg']);
+ f.activeToken.name='<Varg & Co.>';
+ assert.deepEqual(sources(),['Für &lt;Varg &amp; Co.&gt;']);
+});
 test('lost target visibility removes its image and name before a later action',async()=>{
  const f=focusFixture();await setHudFocusTarget(getHudFocusContexts(getHudContext()).personal,f.targetToken.uuid);
  f.targetToken.hidden=true;assert.equal(getHudFocusContexts(getHudContext()).personal.target,null);

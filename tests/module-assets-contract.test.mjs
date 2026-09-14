@@ -58,7 +58,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.deepEqual(translationKeys[0], translationKeys[1]);
     assert.equal(
         crypto.createHash("sha256").update(translationKeys[0].join("\n")).digest("hex"),
-        "b7388339478670cf0dbedb25d340074e1c123ee191f680c984f146248f65e50e",
+        "eb98be4053d61ca919ed80c8b7cf6014d269cfc99971d0a036a8e54daa34fa6b",
     );
     const german = JSON.parse(fs.readFileSync(path.join(moduleRoot, "lang", "de.json"), "utf8"));
     assert.equal(german.SMOOTHER_FIGHT.HUD.Focus, "FO");
@@ -338,6 +338,9 @@ test("runtime defaults reference every bundled media file", async () => {
         "icons/ranged.svg",
         "icons/turn.svg",
     ]) {
-        assert.ok(theme.includes(`url("../assets/${relativePath}")`));
+        // Custom-property URLs resolve against the consuming hud/settings CSS.
+        const assetPath = `../assets/${relativePath}`;
+        assert.ok(theme.includes(`url("${assetPath}")`));
+        assert.ok(fs.existsSync(path.resolve(stylesRoot, assetPath)));
     }
 });

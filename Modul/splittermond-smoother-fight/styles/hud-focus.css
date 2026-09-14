@@ -55,6 +55,14 @@
 #splittermond-smoother-fight-hud .sf-focus-locked-option > button[data-sf-start-blocked][aria-disabled="true"] { opacity: .8; cursor: not-allowed; pointer-events: auto; }
 body > .sf-action-tooltip .sf-focus-lock-notice { margin: 0 0 8px; color: var(--sf-gold-bright); }
 #splittermond-smoother-fight-hud .sf-focus-target-column .sf-portrait-header .sf-eyebrow { white-space: normal; line-height: 1.15; }
+#splittermond-smoother-fight-hud .sf-focus-target-heading { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; overflow: hidden; pointer-events: auto; }
+#splittermond-smoother-fight-hud .sf-focus-target-caption,
+#splittermond-smoother-fight-hud .sf-focus-target-source { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#splittermond-smoother-fight-hud .sf-focus-target-source { color: var(--sf-muted); font-size: 10px; line-height: 12px; font-weight: 400; letter-spacing: normal; text-transform: none; }
+#splittermond-smoother-fight-hud .sf-focus-target.is-compact .sf-portrait-header,
+#splittermond-smoother-fight-hud .sf-focus-target.is-compact .sf-focus-target-role { padding: 0 6px; }
+#splittermond-smoother-fight-hud .sf-focus-target.is-compact .sf-focus-target-heading { gap: 0; font-size: 9px; line-height: 9px; }
+#splittermond-smoother-fight-hud .sf-focus-target.is-compact .sf-focus-target-source { font-size: 9px; line-height: 9px; }
 #splittermond-smoother-fight-hud .sf-focus-shell .sf-quick-targets { width: 100%; }
 @media (max-width: 1100px) {
     #splittermond-smoother-fight-hud .sf-focus-context-label { max-width: 150px; }

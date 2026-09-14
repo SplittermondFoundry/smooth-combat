@@ -29,6 +29,7 @@ import {
 const healthCostInvocations = new WeakSet();
 const scopedHealthCostObservers = new WeakMap();
 const HEALTH_COST_METHODS = ["consumeCost", "applyCost"];
+const FEEDBACK_LIFETIME = 1400;
 
 export function announceMessageFeedback(message) {
     if (!message?.id || feedbackState.heardMessageIds.has(message.id)) return;
@@ -291,26 +292,42 @@ export function setLastTurnCombatantId(combatantId) {
 }
 
 function triggerFeedback(kind, { tokenUuid = null, actorUuid = null } = {}) {
-    feedbackState.feedback = { kind, tokenUuid, actorUuid, id: foundry?.utils?.randomID?.() ?? `${Date.now()}` };
+    feedbackState.feedback = { kind, tokenUuid, actorUuid, startedAt: Date.now(), id: foundry?.utils?.randomID?.() ?? `${Date.now()}` };
     clearTimeout(feedbackState.feedbackTimer);
     feedbackState.feedbackTimer = setTimeout(() => {
         feedbackState.feedback = null;
         services.scheduleRender(0);
-    }, 1400);
+    }, FEEDBACK_LIFETIME);
     playFeedbackTone(kind);
     services.scheduleRender(0);
 }
 
 export function feedbackMarkup(token, actor) {
     const feedback = feedbackState.feedback;
-    if (!feedback) return "";
-    const matches = (feedback.tokenUuid && feedback.tokenUuid === token?.uuid)
-        || (feedback.actorUuid && feedback.actorUuid === actor?.uuid);
+    if (!feedback || Date.now() - feedback.startedAt >= FEEDBACK_LIFETIME) return "";
+    const matches = feedback.tokenUuid ? feedback.tokenUuid === token?.uuid
+        : feedback.actorUuid && feedback.actorUuid === actor?.uuid;
     if (!matches) return "";
     const icon = AUDIO_FEEDBACK_EVENTS[feedback.kind]
         ? `<span class="sf-media-icon sf-icon-${escapeAttr(feedback.kind)}" aria-hidden="true"></span>`
         : '<i class="fa-solid fa-burst"></i>';
-    return `<span class="sf-action-feedback is-${escapeAttr(feedback.kind)}">${icon}</span>`;
+    return `<span class="sf-action-feedback is-${escapeAttr(feedback.kind)}" data-sf-feedback-id="${escapeAttr(feedback.id)}">${icon}</span>`;
+}
+
+export function synchronizeFeedbackAnimations(root) {
+    const feedback = feedbackState.feedback;
+    const elapsed = feedback ? Math.max(0, Date.now() - feedback.startedAt) : FEEDBACK_LIFETIME;
+    for (const element of root.querySelectorAll(".sf-action-feedback[data-sf-feedback-id]")) {
+        if (!feedback || element.dataset.sfFeedbackId !== feedback.id || elapsed >= FEEDBACK_LIFETIME) {
+            element.remove();
+            continue;
+        }
+        // A full HUD rebuild creates a new CSS animation. Resume this event's
+        // original timeline instead of replaying the same action from zero.
+        for (const animation of element.getAnimations()) {
+            if (animation.animationName === "sf-action-feedback") animation.currentTime = elapsed;
+        }
+    }
 }
 
 function legacyAudioFeedbackProfile() {

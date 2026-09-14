@@ -248,7 +248,8 @@ function showActionTooltip(anchor, kind, markup) {
 }
 
 function positionTooltip(anchor, tooltip) {
-    const anchorRect = anchor.getBoundingClientRect();
+    // The row includes the adjacent favorite star, which must stay clickable.
+    const anchorRect = (anchor.closest?.(".sf-attack-option") ?? anchor).getBoundingClientRect();
     if (anchor.closest?.(".sf-actions") && !anchor.closest(".sf-action-popover")) {
         positionActionBarTooltip(anchorRect, tooltip);
         return;

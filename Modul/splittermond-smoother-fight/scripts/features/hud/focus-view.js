@@ -61,14 +61,22 @@ export function buildFocusedActorColumn(active) {
         + actorCard(active.concealed ? null : { ...active, focusReference: active.token?.uuid ?? active.actor?.uuid }, { role: activeRole, compact: mode !== "active", mode: "active", selected: mode === "active", attention });
     return `<div class="sf-focus-actor-column" data-sf-inspection="${escapeAttr(action?.focusReference ?? "")}">${html}</div>`;
 }
-function targetCard(context, role, compact, primary, interactive = false) {
+function targetHeading(role, source, distance = "") {
+    const caption = `${role}${distance ? ` · ${distance}` : ""}`;
+    return `<span class="sf-eyebrow sf-focus-target-heading" title="${escapeAttr([caption, source].filter(Boolean).join(" · "))}"><span class="sf-focus-target-caption">${escapeHtml(caption)}</span>${source ? `<small class="sf-focus-target-source">${escapeHtml(source)}</small>` : ""}</span>`;
+}
+function targetCard(context, role, compact, primary, interactive = false, owners = [context]) {
     const target = context?.target;
-    if (!target) return `<div class="sf-portrait sf-focus-target ${compact ? "is-compact" : ""}"><span class="sf-focus-target-role">${escapeHtml(role)}</span>${noTargetPanel()}</div>`;
-    if (compact) return `<aside class="sf-portrait sf-focus-target is-compact" data-sf-token-uuid="${escapeAttr(target.uuid)}"><div class="sf-portrait-header"><span class="sf-eyebrow">${escapeHtml(role)}</span></div><button type="button" class="sf-focus-mini" data-sf-action="open-token-sheet" data-sf-token-uuid="${escapeAttr(target.uuid)}"><img src="${escapeAttr(target.actor?.img || target.texture?.src || "icons/svg/mystery-man.svg")}" alt="">${compactIdentity(target.actor, target.name ?? target.actor?.name)}</button></aside>`;
+    const names = owners.filter(owner => owner?.actor && !owner.concealed).map(nameOf);
+    const source = names.length ? label("TargetFor", { name: names.join(" / ") }) : "";
+    if (!target) return `<div class="sf-portrait sf-focus-target ${compact ? "is-compact" : ""}"><span class="sf-focus-target-role">${targetHeading(role, source)}</span>${noTargetPanel()}</div>`;
+    if (compact) return `<aside class="sf-portrait sf-focus-target is-compact" data-sf-token-uuid="${escapeAttr(target.uuid)}"><div class="sf-portrait-header">${targetHeading(role, source)}</div><button type="button" class="sf-focus-mini" data-sf-action="open-token-sheet" data-sf-token-uuid="${escapeAttr(target.uuid)}"><img src="${escapeAttr(target.actor?.img || target.texture?.src || "icons/svg/mystery-man.svg")}" alt="">${compactIdentity(target.actor, target.name ?? target.actor?.name)}</button></aside>`;
     const distance = targetDistancePresentation(context).text;
-    const card = portraitPanel({ side: "target", token: target, actor: target.actor, eyebrow: `${role}${distance ? ` · ${distance}` : ""}`,
+    const eyebrow = [role, source, distance].filter(Boolean).join(" · ");
+    const card = portraitPanel({ side: "target", token: target, actor: target.actor, eyebrow,
         headerActions: interactive ? buildTargetHeaderActions(context) : "", defeated: isTargetDefeated(context),
-        highlighted: services.isCurrentUserTarget(target), action: "open-token-sheet", primary, showDefenses: canViewDefenseValues(target.actor) });
+        highlighted: services.isCurrentUserTarget(target), action: "open-token-sheet", primary, showDefenses: canViewDefenseValues(target.actor) })
+        .replace(`<span class="sf-eyebrow">${escapeHtml(eyebrow)}</span>`, targetHeading(role, source, distance));
     return `<div class="sf-focus-target-scope" data-focus-target-role="${escapeAttr(role)}" ${interactive ? focusScope(context) : ""}>${interactive ? buildSecondaryTargets(context) : ""}${card}</div>`;
 }
 export function buildFocusedTargetColumn(active) {
@@ -77,7 +85,8 @@ export function buildFocusedTargetColumn(active) {
     const ownRole = label("YourTarget");
     const primaryContext = mode === "active" && action ? action : active;
     const merged = sameHudToken(primaryContext.target, personal?.target);
-    const column = merged ? targetCard(mode === "personal" ? personal : primaryContext, `${primaryRole} + ${ownRole}`, false, true, Boolean(action))
+    const mergedOwners = sameHudToken(primaryContext.token, personal?.token) ? [primaryContext] : [primaryContext, personal];
+    const column = merged ? targetCard(mode === "personal" ? personal : primaryContext, `${primaryRole} + ${ownRole}`, false, true, Boolean(action), mergedOwners)
         : (personal ? targetCard(personal, ownRole, mode !== "personal", false, mode === "personal") : "")
         + targetCard(primaryContext, primaryRole, Boolean(personal && mode !== "active"), true, mode === "active" && Boolean(action));
     return `<div class="sf-target-column sf-focus-target-column">${action ? `<div ${focusScope(action)}>${buildQuickTargets(action)}</div>` : ""}${column}</div>`;
@@ -89,8 +98,12 @@ export function refreshFocusedTargetDistances(root, active) {
         const distance = targetDistancePresentation(context).text;
         const text = `${scope.dataset.focusTargetRole}${distance ? ` · ${distance}` : ""}`;
         const card = scope.querySelector(".sf-portrait"), eyebrow = card?.querySelector(".sf-eyebrow");
-        if (eyebrow) eyebrow.textContent = text;
-        card?.setAttribute("aria-label", `${text}: ${context.target.name ?? context.target.actor?.name ?? "–"}`);
+        const caption = eyebrow?.querySelector(".sf-focus-target-caption") ?? eyebrow;
+        const source = eyebrow?.querySelector(".sf-focus-target-source")?.textContent;
+        if (caption) caption.textContent = text;
+        const description = [text, source].filter(Boolean).join(" · ");
+        eyebrow?.setAttribute("title", description);
+        card?.setAttribute("aria-label", `${description}: ${context.target.name ?? context.target.actor?.name ?? "–"}`);
     }
 }
 export async function buildFocusedHud(active, options, renderers) {

@@ -752,6 +752,7 @@
         "YourActor": "Your actor",
         "GmActor": "GM selection",
         "YourTarget": "Your target",
+        "TargetFor": "For {name}",
         "HiddenActive": "Hidden combatant is active",
         "ChooseCharacter": "Choose character",
         "SearchCharacter": "Search characters",

@@ -752,6 +752,7 @@
         "YourActor": "Dein Charakter",
         "GmActor": "SL-Auswahl",
         "YourTarget": "Dein Ziel",
+        "TargetFor": "Für {name}",
         "HiddenActive": "Verborgener Kämpfer am Zug",
         "ChooseCharacter": "Charakter auswählen",
         "SearchCharacter": "Charaktere durchsuchen",

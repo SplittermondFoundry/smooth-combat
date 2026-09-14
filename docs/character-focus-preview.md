@@ -18,7 +18,7 @@ Der Browser dient zum Prüfen von Layout, Charakterwechsel, Zielauswahl und Men�
 
 ## In einer Foundry-Testwelt
 
-Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-11.zip`. Es trägt im Paket die Version `0.6.6-character-focus.11` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
+Das aktuelle Vorschaupaket liegt unter `dist/character-focus-preview/smoother-fight-character-focus-preview-12.zip`. Es trägt im Paket die Version `0.6.6-character-focus.12` und bietet keine öffentliche Update-URL. Die zuvor installierte Version 0.6.4 ist separat und vollständig als `smoother-fight-installed-backup.zip` gesichert.
 
 Die Charakterwahl ist ab Revision 3 standardmäßig eingeschaltet. Eine bereits ausdrücklich gespeicherte Abschaltung wird respektiert und kann über den Schalter unten geändert werden. Die eigene Figur bzw. SL-Auswahl und deren Ziel stehen oben; der gerade aktive Charakter und sein Primärziel stehen unten. Diese Rollenreihenfolge bleibt beim Umschalten bestehen. Identische Tokens werden weiterhin zusammengefasst.
 
@@ -48,6 +48,12 @@ Revision 11 positioniert Item-Tooltips der direkten Angriffe oberhalb der Aktion
 Zusätzlich können native Splittermond-Wurfdialoge mit vielen Modifikatoren im Fensterinhalt bis zu den Wurfbuttons gescrollt werden. Die CSS-Korrektur gilt ausschließlich für `splittermond.dialog-check`, unabhängig von der Charakterwahl und ohne Versionsschalter. Sie bleibt ausdrücklich auch für 14.2.7 erhalten, selbst wenn neuere Systemversionen eine eigene Lösung bekommen. Felder, Modifikatoren und native Wurfabläufe werden dabei nicht verändert.
 
 Die bestehenden Menüs, Favoriten, Ausrüstungsschalter, vollständigen Bögen und Reaktionsabläufe bleiben vorhanden. Neue Zauber- und Fernkampfvorbereitungen sind außerhalb des eigenen Token-Zuges gesperrt, auch für die SL. Vorhandene Regeln für bereits vorbereitete Aktionen bleiben bestehen.
+
+Revision 12 verankert Tooltips in der Angriffsliste an der gesamten Zeile einschließlich Favoritenstern. Bei ausreichendem Platz beginnt der Tooltip zehn Pixel rechts vom Stern; der bestehende Ausweichplatz links bei engem Bildschirmrand bleibt erhalten. Die Browserprüfung klickt bei geöffnetem Tooltip direkt auf den Stern, sowohl in der klassischen Ansicht als auch bei persönlicher Charakterwahl und gesperrtem Fernkampfangriff.
+
+Zielkarten nennen zusätzlich unter ihrer Rolle den zugehörigen Charakter, etwa „Dein Ziel / Für Peritus“ oder „Primärziel / Für Geistervarg“. Das gilt auch für kleine und leere Karten. Bei einem gemeinsamen Ziel werden beide zugehörigen Figuren genannt; bei identischem Quelltoken nur einmal. Lange Namen sind im Tooltip vollständig lesbar. Die Karten behalten ihre bisherigen Abmessungen. Die bestehende Speicherung der Ziele pro Charakter bleibt unverändert.
+
+Revision 12 korrigiert außerdem die Pfade der Einblendungs-Icons und Medienvariablen. Mitgelieferte Dateien werden relativ zum Modul aufgelöst, eigene Pfade relativ zur Foundry-Seite. Eine laufende Aktionseinblendung behält bei vollständigen oder teilweisen HUD-Aktualisierungen ihren ursprünglichen Animationsfortschritt und endet nach derselben Frist. Tokenbezogene Einblendungen erscheinen nur auf dem betroffenen Token, auch wenn mehrere Tokens denselben Actor verwenden.
 
 Ziele werden pro Benutzer und Token getrennt gehalten. Gleiche Token-UUIDs werden zusammengefasst; unterschiedliche Tokens desselben Actors nicht. Auswahl und persönliche Ziele sind Sitzungsdaten. Der Ansichtswechsel selbst migriert keine Welt-, Actor- oder Token-Daten.
 
