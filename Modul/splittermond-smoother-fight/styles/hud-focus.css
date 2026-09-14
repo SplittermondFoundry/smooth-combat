@@ -6,6 +6,16 @@
 #splittermond-smoother-fight-hud .sf-focus-controls { min-width: 0; }
 #splittermond-smoother-fight-hud .sf-focus-context-label { color: var(--sf-teal); border: 1px solid var(--sf-line); border-radius: 3px; padding: 3px 5px; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #splittermond-smoother-fight-hud .sf-focus-actor.is-selected { border-color: var(--sf-teal); }
+#splittermond-smoother-fight-hud .sf-focus-actor.is-turn-attention { border-color: var(--sf-gold-bright); box-shadow: 0 0 0 1px var(--sf-gold); animation: sf-focus-turn-attention 2s ease-in-out infinite; }
+#splittermond-smoother-fight-hud .sf-focus-actor.is-turn-attention .sf-portrait-header { color: var(--sf-gold-bright); background: rgba(216, 168, 93, .2); }
+@keyframes sf-focus-turn-attention {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(216, 168, 93, .3), 0 0 4px rgba(216, 168, 93, .08); }
+    50% { box-shadow: 0 0 0 2px var(--sf-gold-bright), 0 0 14px rgba(216, 168, 93, .65); }
+}
+@media (prefers-reduced-motion: reduce) {
+    #splittermond-smoother-fight-hud:not(.sf-motion-full) .sf-focus-actor.is-turn-attention { animation: none; }
+}
+#splittermond-smoother-fight-hud.sf-motion-none .sf-focus-actor.is-turn-attention { animation: none; }
 #splittermond-smoother-fight-hud .sf-focus-label { background: none; border: 0; color: inherit; font: inherit; font-size: 10px; line-height: 1.15; text-align: left; flex: 1; min-width: 0; padding: 0; position: relative; z-index: 3; }
 #splittermond-smoother-fight-hud .sf-focus-actor { overflow: visible; }
 #splittermond-smoother-fight-hud .sf-focus-actor .sf-portrait-header { overflow: visible; border-radius: 7px 7px 0 0; }

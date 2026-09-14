@@ -13,6 +13,9 @@ import { buildCombatPositionMenu } from "./combat-position-menu.js";
 
 const label = (key, data) => t(`SMOOTHER_FIGHT.HUD.CharacterFocus.${key}`, data);
 const nameOf = c => c?.token?.name ?? c?.actor?.name ?? "–";
+function isCurrentUsersTurn(active) {
+    return isPlayersTurn({ isGm: game.user.isGM, userId: game.user.id, controllerUserId: active.runtimeController?.id, ownsActor: active.actor?.isOwner });
+}
 export function focusScope(context) {
     return context ? `data-sf-focus-reference="${escapeAttr(context.focusReference)}" data-sf-context-combatant-id="${escapeAttr(context.combatant?.id ?? "")}" data-sf-context-actor-id="${escapeAttr(context.actor.id)}"` : "";
 }
@@ -34,10 +37,11 @@ function compactIdentity(actor, name, hint = "") {
     const bars = resourceBars(actor, { compact: true });
     return `<span class="sf-focus-mini-info"><span class="sf-focus-mini-name">${escapeHtml(name)}</span>${bars || (hint ? `<small>${escapeHtml(hint)}</small>` : "")}</span>`;
 }
-function actorCard(context, { role, compact, mode, chooser = "", selected }) {
+function actorCard(context, { role, compact, mode, chooser = "", selected, attention = false }) {
     if (!context?.actor) return `<aside class="sf-portrait sf-focus-empty ${compact ? "is-compact" : ""}"><span>${escapeHtml(role)}</span>${chooser}</aside>`;
-    const switchButton = `<button type="button" data-sf-action="switch-hud-focus" data-focus-mode="${mode}" class="sf-focus-label" aria-pressed="${selected}">${escapeHtml(role)}</button>`;
-    if (compact) return `<aside class="sf-portrait sf-focus-actor is-compact" data-sf-token-uuid="${escapeAttr(context.token?.uuid ?? "")}"><div class="sf-portrait-header">${switchButton}${chooser}</div><button type="button" class="sf-focus-mini" data-sf-action="switch-hud-focus" data-focus-mode="${mode}" title="${escapeAttr(`${label("Inspect")}: ${nameOf(context)}`)}"><img src="${escapeAttr(context.actor.img || context.token?.texture?.src || "icons/svg/mystery-man.svg")}" alt="">${compactIdentity(context.actor, nameOf(context), label("Inspect"))}</button></aside>`;
+    const hint = `${attention ? `${t("SMOOTHER_FIGHT.HUD.YourTurn")} · ` : ""}${label("Inspect")}: ${nameOf(context)}`;
+    const switchButton = `<button type="button" data-sf-action="switch-hud-focus" data-focus-mode="${mode}" class="sf-focus-label" aria-pressed="${selected}" title="${escapeAttr(hint)}">${attention ? '<i class="fa-solid fa-bolt" aria-hidden="true"></i> ' : ""}${escapeHtml(role)}</button>`;
+    if (compact) return `<aside class="sf-portrait sf-focus-actor ${attention ? "is-turn-attention " : ""}is-compact" data-sf-token-uuid="${escapeAttr(context.token?.uuid ?? "")}"><div class="sf-portrait-header">${switchButton}${chooser}</div><button type="button" class="sf-focus-mini" data-sf-action="switch-hud-focus" data-focus-mode="${mode}" title="${escapeAttr(hint)}" aria-label="${escapeAttr(hint)}"><img src="${escapeAttr(context.actor.img || context.token?.texture?.src || "icons/svg/mystery-man.svg")}" alt="">${compactIdentity(context.actor, nameOf(context), label("Inspect"))}</button></aside>`;
     let html = portraitPanel({ side: "actor", token: context.token, actor: context.actor, eyebrow: role,
         action: context.token ? "open-token-sheet" : "open-sheet", showDefenses: canViewDefenseValues(context.actor) });
     html = html.replace('class="sf-portrait sf-actor ', 'class="sf-portrait sf-actor sf-focus-actor is-selected ')
@@ -48,11 +52,13 @@ export function buildFocusedActorColumn(active) {
     const { mode, personal, action } = getHudFocusContexts(active), chooser = picker(active, personal);
     const ownRole = game.user.isGM && (!personal || personal.actor.id !== game.user.character?.id) ? label("GmActor") : label("YourActor");
     const merged = sameHudToken(active.token, personal?.token);
+    const attention = Boolean(active.combat?.started && !active.concealed && !active.combatant?.isDefeated
+        && mode === "personal" && action?.token && active.token && !merged && isCurrentUsersTurn(active));
     const activeRole = active.concealed ? label("HiddenActive") : t("SMOOTHER_FIGHT.HUD.Active");
     const html = merged
         ? actorCard(personal, { role: `${activeRole} + ${ownRole}`, compact: false, mode: "personal", chooser, selected: true })
         : (personal || chooser ? actorCard(personal, { role: ownRole, compact: mode !== "personal", mode: "personal", chooser, selected: mode === "personal" }) : "")
-        + actorCard(active.concealed ? null : { ...active, focusReference: active.token?.uuid ?? active.actor?.uuid }, { role: activeRole, compact: mode !== "active", mode: "active", selected: mode === "active" });
+        + actorCard(active.concealed ? null : { ...active, focusReference: active.token?.uuid ?? active.actor?.uuid }, { role: activeRole, compact: mode !== "active", mode: "active", selected: mode === "active", attention });
     return `<div class="sf-focus-actor-column" data-sf-inspection="${escapeAttr(action?.focusReference ?? "")}">${html}</div>`;
 }
 function targetCard(context, role, compact, primary, interactive = false) {
@@ -89,7 +95,7 @@ export function refreshFocusedTargetDistances(root, active) {
 }
 export async function buildFocusedHud(active, options, renderers) {
     const { action, personal, mode } = getHudFocusContexts(active);
-    const currentPlayersTurn = isPlayersTurn({ isGm: game.user.isGM, userId: game.user.id, controllerUserId: active.runtimeController?.id, ownsActor: active.actor?.isOwner });
+    const currentPlayersTurn = isCurrentUsersTurn(active);
     const turnNotice = currentPlayersTurn ? `<span class="sf-your-turn"><i class="fa-solid fa-bolt"></i>${escapeHtml(t("SMOOTHER_FIGHT.HUD.YourTurn"))}</span>` : "";
     const turnName = active.concealed ? label("HiddenActive") : nameOf(active);
     const targetLine = active.concealed ? "" : targetLinePresentation(active, targetDistancePresentation(active).text);

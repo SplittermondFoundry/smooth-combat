@@ -251,3 +251,22 @@ test('compact actor and target bars obey observer, GM and reveal permissions',as
  f.player.isGM=true;selectHudFocus(getHudContext(),'personal');
  assert.match(actor(),/sf-resource-health/);assert.match(target(),/sf-resource-focus/);
 });
+
+test('only the responsible user sees an attention cue when inspecting a different token',()=>{
+ for(const gm of [false,true]){
+  const f=focusFixture({gm});selectHudFocus(getHudContext(),'personal',f.ownToken.uuid);
+  f.combat.combatant=f.combat.combatants[2]; // Same actor as the inspected token, but a different token.
+  const render=()=>buildFocusedActorColumn(getHudContext());
+  assert.match(render(),/is-turn-attention is-compact" data-sf-token-uuid="Scene.scene.Token.clone"/);
+  assert.equal((render().match(/is-turn-attention/g)??[]).length,1);
+  selectHudFocus(getHudContext(),'active');assert.doesNotMatch(render(),/is-turn-attention/);
+  selectHudFocus(getHudContext(),'personal',f.cloneToken.uuid);assert.doesNotMatch(render(),/is-turn-attention/);
+  selectHudFocus(getHudContext(),'personal',f.ownToken.uuid);
+  f.combat.combatant.runtimeController=f.other;assert.doesNotMatch(render(),/is-turn-attention/);
+  f.combat.combatant.runtimeController=f.player;assert.match(render(),/is-turn-attention/);
+  f.combat.combatant.isDefeated=true;assert.doesNotMatch(render(),/is-turn-attention/);
+  f.combat.combatant.isDefeated=false;
+  assert.doesNotMatch(buildFocusedActorColumn({...getHudContext(),concealed:true,actor:null,token:null}),/is-turn-attention/);
+  f.combat.combatant=f.combat.combatants[1];assert.doesNotMatch(render(),/is-turn-attention/);
+ }
+});

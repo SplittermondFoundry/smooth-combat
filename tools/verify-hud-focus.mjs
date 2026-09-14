@@ -373,5 +373,42 @@ try{
   assert.equal(await page.evaluate(()=>fixture.calls.pans.at(-1)?.x),950);
  }
  assert.deepEqual(errors,[]);
+ // Draw attention only to a different token whose turn belongs to this user.
+ for(const gm of [false,true]){
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.goto("http://127.0.0.1:"+server.address().port+`/demo/character-focus.html?gm=${Number(gm)}`);
+  await page.waitForFunction(()=>window.ready);
+  await page.evaluate(async gm=>{
+   fixture.combat.combatant=fixture.combat.combatants[gm?0:2];
+   focus.selectHudFocus(services.getHudContext(),'personal',fixture.ownToken.uuid);
+   await hud.render();
+  },gm);
+  const attention=page.locator('.sf-focus-actor.is-turn-attention');
+  assert.equal(await attention.count(),1);
+  assert.equal(await attention.getAttribute('data-sf-token-uuid'),gm?'Scene.scene.Token.active':'Scene.scene.Token.clone');
+  assert.match(await attention.locator('.sf-focus-mini').getAttribute('title'),/bist dran/i);
+  assert.equal(await attention.evaluate(el=>getComputedStyle(el).animationName),'sf-focus-turn-attention');
+  assert.equal(await attention.evaluate(el=>getComputedStyle(el).animationDuration),'2s');
+  assert.equal(await attention.evaluate(el=>el.getBoundingClientRect().height),72);
+  await attention.evaluate(el=>{const animation=el.getAnimations()[0];animation.pause();animation.currentTime=1000;});
+  await page.screenshot({path:path.join(output,`turn-attention-${gm?'gm':'player'}-fullhd.png`)});
+  await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await attention.evaluate(el=>getComputedStyle(el).animationName),'none');
+  assert.equal(await attention.locator('.sf-focus-label .fa-bolt').count(),1);
+  await page.evaluate(async()=>{fixture.settings.hudMotion='full';await hud.render();});
+  assert.equal(await attention.evaluate(el=>getComputedStyle(el).animationName),'sf-focus-turn-attention');
+  await page.evaluate(async()=>{fixture.settings.hudMotion='none';await hud.render();});
+  assert.equal(await attention.evaluate(el=>getComputedStyle(el).animationName),'none');
+  await attention.locator('.sf-focus-mini').click();
+  await page.waitForFunction(()=>document.querySelector('.sf-focus-shell')?.dataset.sfFocusMode==='active');
+  assert.equal(await attention.count(),0);
+  await page.evaluate(async()=>{
+   fixture.settings.hudMotion='system';fixture.combat.combatant.runtimeController=fixture.other;
+   focus.selectHudFocus(services.getHudContext(),'personal',fixture.ownToken.uuid);await hud.render();
+  });
+  assert.equal(await attention.count(),0);
+  assert.deepEqual(await page.evaluate(()=>fixture.calls.ticks),[]);
+ }
+ assert.deepEqual(errors,[]);
  console.log(JSON.stringify({runtimeRoot,version:manifest.version,stylesheetChecks:6,styleFailures}));
 }finally{await browser.close();await new Promise(r=>server.close(r));}
