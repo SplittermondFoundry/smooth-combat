@@ -2103,7 +2103,7 @@
 }
 
 #splittermond-smoother-fight-hud .sf-action-popover button,
-#splittermond-smoother-fight-hud .sf-quick-targets > div button {
+#splittermond-smoother-fight-hud :is(.sf-quick-targets, .sf-focus-picker) > div button {
     width: 100%;
     height: auto;
     min-height: 35px;
@@ -2123,8 +2123,8 @@
 }
 
 #splittermond-smoother-fight-hud .sf-action-popover button:hover:not(:disabled),
-#splittermond-smoother-fight-hud .sf-quick-targets > div button:hover,
-#splittermond-smoother-fight-hud .sf-quick-targets > div button.is-current {
+#splittermond-smoother-fight-hud :is(.sf-quick-targets, .sf-focus-picker) > div button:hover,
+#splittermond-smoother-fight-hud :is(.sf-quick-targets, .sf-focus-picker) > div button.is-current {
     background: rgba(108, 201, 193, 0.14);
     color: var(--sf-gold-bright);
 }
@@ -2340,7 +2340,7 @@
     background: rgba(230, 190, 92, 0.16);
 }
 
-#splittermond-smoother-fight-hud .sf-quick-targets > div .sf-quick-target-remove {
+#splittermond-smoother-fight-hud :is(.sf-quick-targets, .sf-focus-picker) > div .sf-quick-target-remove {
     width: 32px;
     min-height: 35px;
     display: grid;
@@ -2351,32 +2351,32 @@
     background: transparent;
 }
 
-#splittermond-smoother-fight-hud .sf-quick-targets > div .sf-quick-target-remove:hover {
+#splittermond-smoother-fight-hud :is(.sf-quick-targets, .sf-focus-picker) > div .sf-quick-target-remove:hover {
     color: #ffaaa3;
     background: rgba(198, 93, 85, 0.16);
 }
 
-#splittermond-smoother-fight-hud .sf-quick-targets > div button > span {
+#splittermond-smoother-fight-hud :is(.sf-quick-targets, .sf-focus-picker) > div button > span {
     display: flex;
     flex-direction: column;
     min-width: 0;
 }
 
-#splittermond-smoother-fight-hud .sf-quick-targets > div button > span b,
-#splittermond-smoother-fight-hud .sf-quick-targets > div button > span small {
+#splittermond-smoother-fight-hud :is(.sf-quick-targets, .sf-focus-picker) > div button > span b,
+#splittermond-smoother-fight-hud :is(.sf-quick-targets, .sf-focus-picker) > div button > span small {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-#splittermond-smoother-fight-hud .sf-quick-targets > div button > span small {
+#splittermond-smoother-fight-hud :is(.sf-quick-targets, .sf-focus-picker) > div button > span small {
     margin-top: 2px;
     color: var(--sf-muted);
     font-size: var(--sf-font-meta);
 }
 
 #splittermond-smoother-fight-hud .sf-action-popover button img,
-#splittermond-smoother-fight-hud .sf-quick-targets img {
+#splittermond-smoother-fight-hud :is(.sf-quick-targets, .sf-focus-picker) img {
     width: 28px;
     height: 28px;
     object-fit: cover;

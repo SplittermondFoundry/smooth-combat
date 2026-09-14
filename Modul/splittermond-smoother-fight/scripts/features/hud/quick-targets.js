@@ -17,7 +17,7 @@ export function buildQuickTargets(context) {
     const ordered = orderQuickTargetCandidates(candidates, selected, primaryTargetUuid);
     const structured = candidates.length > QUICK_TARGET_STRUCTURE_THRESHOLD;
     const content = structured
-        ? buildStructuredTargets(context, ordered, { labels, selected, primaryTargetUuid })
+        ? buildStructuredTokenChoices(context, ordered, { labels, selected, primaryTargetUuid })
         : buildFlatTargets(ordered, { labels, selected, primaryTargetUuid });
     const label = t("SMOOTHER_FIGHT.HUD.QuickTarget");
     return `<details class="sf-quick-targets${structured ? " is-structured" : ""}">
@@ -30,12 +30,10 @@ export function bindQuickTargetSearch(root) {
     for (const input of root.querySelectorAll("[data-sf-quick-target-search]")) {
         const popover = input.closest(".sf-quick-target-popover");
         const filters = Array.from(popover?.querySelectorAll("[data-sf-quick-target-filter]") ?? []);
-        let actorKind = selectedQuickTargetActorKind(filters);
-        const applyFilters = () => applyQuickTargetFilters(popover, input.value, actorKind);
+        const applyFilters = () => applyQuickTargetFilters(popover, input.value, selectedQuickTargetActorKind(filters));
         input.addEventListener("input", applyFilters);
         for (const filter of filters) {
             filter.addEventListener("click", () => {
-                actorKind = filter.dataset.sfQuickTargetFilter ?? "all";
                 filters.forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate === filter)));
                 applyFilters();
             });
@@ -43,8 +41,8 @@ export function bindQuickTargetSearch(root) {
     }
 }
 
-export function captureQuickTargetViewState(trigger) {
-    const menu = trigger?.closest?.(".sf-quick-targets");
+export function captureQuickTargetViewState(trigger, selector = ".sf-quick-targets") {
+    const menu = trigger?.closest?.(selector);
     if (!menu?.open) return null;
     const popover = menu.querySelector(".sf-quick-target-popover");
     const results = popover?.querySelector(".sf-quick-target-results");
@@ -57,9 +55,9 @@ export function captureQuickTargetViewState(trigger) {
     };
 }
 
-export function restoreQuickTargetViewState(root, state) {
+export function restoreQuickTargetViewState(root, state, selector = ".sf-quick-targets") {
     if (!state) return;
-    const menu = root?.querySelector?.(".sf-quick-targets");
+    const menu = root?.querySelector?.(selector);
     if (!menu) return;
     menu.open = true;
     const popover = menu.querySelector(".sf-quick-target-popover");
@@ -155,18 +153,18 @@ function buildFlatTargets(candidates, state) {
         : `<p>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoCombatants"))}</p>`;
 }
 
-function buildStructuredTargets(context, candidates, state) {
+export function buildStructuredTokenChoices(context, candidates, state) {
     const combatUuids = combatTokenUuids(context.combat);
     const inCombat = candidates.filter((token) => combatUuids.has(token.uuid));
     const otherScene = candidates.filter((token) => !combatUuids.has(token.uuid));
     const characterCount = candidates.filter((token) => quickTargetActorKind(token) === "character").length;
     const npcCount = candidates.length - characterCount;
-    const searchLabel = t("SMOOTHER_FIGHT.HUD.TargetSearch");
+    const searchLabel = state.searchLabel ?? t("SMOOTHER_FIGHT.HUD.TargetSearch");
     return `<label class="sf-quick-target-search">
         <i class="fa-solid fa-magnifying-glass"></i>
         <input type="search" data-sf-quick-target-search autocomplete="off" spellcheck="false" aria-label="${escapeAttr(searchLabel)}" placeholder="${escapeAttr(t("SMOOTHER_FIGHT.HUD.TargetSearchPlaceholder"))}">
     </label>
-    <div class="sf-quick-target-filters" role="group" aria-label="${escapeAttr(t("SMOOTHER_FIGHT.HUD.TargetTypeFilter"))}">
+    <div class="sf-quick-target-filters" role="group" aria-label="${escapeAttr(state.filterLabel ?? t("SMOOTHER_FIGHT.HUD.TargetTypeFilter"))}">
         ${buildTargetFilter("all", t("SMOOTHER_FIGHT.HUD.AllTargets"), candidates.length, true)}
         ${buildTargetFilter("character", t("SMOOTHER_FIGHT.HUD.CharacterTargets"), characterCount)}
         ${buildTargetFilter("npc", t("SMOOTHER_FIGHT.HUD.NpcTargets"), npcCount)}
@@ -174,7 +172,7 @@ function buildStructuredTargets(context, candidates, state) {
     <div class="sf-quick-target-results">
         ${buildTargetGroup("combat", t("SMOOTHER_FIGHT.HUD.TargetsInCombat"), inCombat, state)}
         ${buildTargetGroup("scene", t("SMOOTHER_FIGHT.HUD.OtherSceneTargets"), otherScene, state)}
-        <p class="sf-quick-target-empty" data-sf-quick-target-empty hidden>${escapeHtml(t("SMOOTHER_FIGHT.HUD.NoMatchingTargets"))}</p>
+        <p class="sf-quick-target-empty" data-sf-quick-target-empty hidden>${escapeHtml(state.emptyLabel ?? t("SMOOTHER_FIGHT.HUD.NoMatchingTargets"))}</p>
     </div>`;
 }
 
@@ -193,7 +191,7 @@ function buildActorGroup(kind, label, tokens, state) {
     if (!tokens.length) return "";
     return `<div class="sf-quick-target-actor-group" data-sf-quick-target-actor-group="${kind}">
         <h5><span>${escapeHtml(label)}</span><b>${tokens.length}</b></h5>
-        ${tokens.map((token) => buildQuickTargetRow(token, state)).join("")}
+        ${tokens.map((token) => (state.renderRow ?? buildQuickTargetRow)(token, state)).join("")}
     </div>`;
 }
 

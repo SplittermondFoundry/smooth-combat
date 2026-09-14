@@ -94,15 +94,16 @@ import { buildFocusedActorColumn,buildFocusedTargetColumn } from "../Modul/split
 import { mayStartTurnAction } from "../Modul/splittermond-smoother-fight/scripts/shared/turn-start.js";
 import { performAttack,performSpell } from "../Modul/splittermond-smoother-fight/scripts/features/combat-actions/actions.js";
 
-test('players can select all owned tokens and Actors without gaining access to foreign tokens',()=>{
+test('players can select only owned visible tokens in the viewed scene',()=>{
  const f=focusFixture(),c=getHudFocusCandidates(getHudContext());
- assert.deepEqual(new Set(c.map(c=>c.reference)),new Set([f.ownToken.uuid,f.cloneToken.uuid,f.unplaced.uuid]));
+ assert.deepEqual(new Set(c.map(c=>c.reference)),new Set([f.ownToken.uuid,f.cloneToken.uuid]));
  assert.equal(selectHudFocus(getHudContext(),'personal',f.activeToken.uuid),false);
 });
-test('GM selection includes foreign tokens and unplaced Actors',()=>{
+test('GM selection includes scene NPCs but excludes unplaced Actors',()=>{
  const f=focusFixture({gm:true});assert.ok(getHudFocusCandidates(getHudContext()).some(c=>c.reference===f.activeToken.uuid));
- assert.equal(selectHudFocus(getHudContext(),'personal',f.unplaced.uuid),true);
- const c=getHudFocusContexts(getHudContext()).action;assert.equal(c.actor,f.unplaced);assert.equal(c.token,null);assert.equal(c.combatant,null);assert.equal(mayStartTurnAction(c),false);
+ assert.equal(selectHudFocus(getHudContext(),'personal',f.unplaced.uuid),false);
+ assert.equal(selectHudFocus(getHudContext(),'personal',f.targetToken.uuid),true);
+ const c=getHudFocusContexts(getHudContext()).action;assert.equal(c.actor,f.merc);assert.equal(c.token,f.targetToken);assert.equal(c.combatant,null);assert.equal(mayStartTurnAction(c),false);
 });
 
 test('a GM without a personal selection adopts a controlled NPC without changing the active turn',()=>{
@@ -189,9 +190,24 @@ test('new view reuses complete menus, blocks starts, and renders events from the
  assert.match(html,/data-attack-id="bow"[^>]*disabled/);assert.match(html,/data-spell-id="spell0"[^>]*disabled/);assert.match(html,/inspect-hud-item/);
  assert.equal(f.calls.events.at(-1),active);assert.match(html,/Kampf: Geistervarg/);
 });
-test('Actor-only focus offers its sheet and menus without assuming a combatant',async()=>{
- const f=focusFixture({gm:true});selectHudFocus(getHudContext(),'personal',f.unplaced.uuid);const html=await buildHud(getHudContext());
- assert.match(html,/WithoutToken/);assert.match(html,/data-sf-action="open-sheet"/);assert.match(html,/data-sf-menu="skills"/);
+test('scene token outside combat offers its sheet and menus without assuming a combatant',async()=>{
+ const f=focusFixture({gm:true});selectHudFocus(getHudContext(),'personal',f.targetToken.uuid);const html=await buildHud(getHudContext());
+ assert.match(html,/NotInCombat/);assert.match(html,/data-sf-action="open-token-sheet"/);assert.match(html,/data-sf-menu="skills"/);
+});
+
+test('viewed scene is authoritative even with tokens in other scenes or the tracked combat',()=>{
+ const f=focusFixture({gm:true});const otherScene={id:'other-scene',tokens:[]};
+ const elsewhere={...f.ownToken,id:'elsewhere',uuid:'Scene.other-scene.Token.elsewhere',parent:otherScene};
+ otherScene.tokens.push(elsewhere);game.scenes.push(otherScene);
+ f.combat.combatants.push({id:'elsewhere',actor:f.own,token:elsewhere});
+ selectHudFocus(getHudContext(),'personal',f.ownToken.uuid);
+ const oldContext=getHudFocusContexts(getHudContext()).personal;
+ assert.equal(getHudFocusCandidates(getHudContext()).some(c=>c.reference===elsewhere.uuid),false);
+ assert.equal(selectControlledHudToken(elsewhere,true),false);
+ canvas.scene=otherScene;
+ assert.deepEqual(getHudFocusCandidates(getHudContext()).map(c=>c.reference),[elsewhere.uuid]);
+ assert.equal(resolveHudFocusActionContext(oldContext),null);
+ canvas.scene=null;assert.deepEqual(getHudFocusCandidates(getHudContext()),[]);
 });
 test('turn starts become available for the exact active token and classic layout remains available',async()=>{
  const f=focusFixture();f.combat.combatant=f.combat.combatants[1];const html=await buildHud(getHudContext());assert.doesNotMatch(html,/data-sf-start-blocked/);

@@ -1,6 +1,7 @@
 import { hudState } from "./state.js";
 
 import { services } from "../../core/services.js";
+import { captureQuickTargetViewState, restoreQuickTargetViewState } from "./quick-targets.js";
 
 import {
     resolveCombatEventOpenIds,
@@ -35,12 +36,15 @@ export function captureHudViewState(root) {
         tickActionScrollTop: tickActionPopover?.scrollTop ?? 0,
         spellListActorId: root?.querySelector?.(".sf-focus-controls")?.dataset.sfFocusReference ?? root?.dataset?.activeActorId ?? null,
         focusMenus: captureFocusMenus(root),
+        focusPicker: captureQuickTargetViewState(root?.querySelector?.(".sf-focus-picker"), ".sf-focus-picker"),
+        focusPickerSceneId: globalThis.canvas?.scene?.id,
         spellList,
     };
 }
 
 export function restoreHudViewState(root, state, { forceLatestEvent = false } = {}) {
     if (!state) return;
+    if (state.focusPickerSceneId === globalThis.canvas?.scene?.id) restoreQuickTargetViewState(root, state.focusPicker, ".sf-focus-picker");
     if (state.spellListActorId === (root?.querySelector?.(".sf-focus-controls")?.dataset.sfFocusReference ?? root?.dataset?.activeActorId ?? null)) restoreTickActionReferenceState(root, state);
     restoreFocusMenus(root, state);
     if (state.spellListActorId === (root?.querySelector?.(".sf-focus-controls")?.dataset.sfFocusReference ?? root?.dataset?.activeActorId ?? null)) {

@@ -34,14 +34,14 @@ try{
  assert.match(await page.locator('.sf-turnline').innerText(),/Geistervarg/);
  assert.match(await page.locator('.sf-events').innerText(),/Geistervarg/);
  await page.locator('.sf-focus-picker > summary').click();
- assert.equal(await page.locator('.sf-focus-picker [data-focus-search]:visible').count(),5);
- await page.locator('[data-sf-focus-search]').fill('ohne');
- assert.equal(await page.locator('.sf-focus-picker [data-focus-search]:visible').count(),1);
+ assert.equal(await page.locator('.sf-focus-picker [data-sf-quick-target-row]:visible').count(),4);
+ await page.locator('.sf-focus-picker [data-sf-quick-target-search]').fill('söld');
+ assert.equal(await page.locator('.sf-focus-picker [data-sf-quick-target-row]:visible').count(),1);
  await page.screenshot({path:path.join(output,"picker-fullhd.png")});
- await page.locator('[data-focus-reference="Actor.Bogen ohne Token"]').click();
- await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Actor.Bogen ohne Token");
- await page.locator('.sf-focus-card-scope [data-sf-action="open-sheet"]').click();
- assert.equal(await page.evaluate(()=>fixture.calls.sheets.at(-1)),"Bogen ohne Token");
+ await page.locator('[data-focus-reference="Scene.scene.Token.target"]').click();
+ await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.target");
+ await page.locator('.sf-focus-card-scope [data-sf-action="open-token-sheet"]').click();
+ assert.equal(await page.evaluate(()=>fixture.calls.sheets.at(-1)),"Söldner");
  await page.locator('.sf-focus-picker > summary').click();
  await page.locator('[data-focus-reference="Scene.scene.Token.own"]').click();
  await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.own");
@@ -73,7 +73,7 @@ try{
  await page.waitForFunction(()=>window.ready);
  assert.equal(await page.locator('.sf-focus-controls').getAttribute('data-sf-focus-reference'),"Scene.scene.Token.own");
  await page.locator('.sf-focus-picker > summary').click();
- assert.equal(await page.locator('.sf-focus-picker [data-focus-search]:visible').count(),3);
+ assert.equal(await page.locator('.sf-focus-picker [data-sf-quick-target-row]:visible').count(),2);
  await page.locator('.sf-focus-picker > summary').click();
  await page.locator('[data-sf-menu="spells"] > summary').click();
  await page.locator('[data-sf-spell-search]').fill('Zauber 17');
@@ -137,7 +137,7 @@ try{
    await hud.render();
   });
   await page.locator('.sf-focus-empty .sf-focus-picker > summary').click();
-  const pickerBounds=await page.locator('.sf-focus-empty .sf-action-popover').boundingBox();
+  const pickerBounds=await page.locator('.sf-focus-empty .sf-quick-target-popover').boundingBox();
   const cardBounds=await page.locator('.sf-focus-empty').boundingBox();
   assert.ok(pickerBounds.y<cardBounds.y-50);
   assert.ok(pickerBounds.x>=0 && pickerBounds.x+pickerBounds.width<=viewport.width);
@@ -189,6 +189,49 @@ try{
  await page.locator('.map-token.second').click();
  await page.waitForFunction(()=>document.querySelector('.sf-focus-controls')?.dataset.sfFocusReference==="Scene.scene.Token.own");
  assert.match(await page.locator('.sf-events').innerText(),/Geistervarg/);
+ assert.deepEqual(errors,[]);
+ // A long scene list scrolls independently of the shared search and type controls.
+ await page.goto("http://127.0.0.1:"+server.address().port+"/demo/character-focus.html?gm=1");
+ await page.waitForFunction(()=>window.ready);
+ await page.evaluate(async()=>{
+  for(let i=0;i<20;i++)fixture.scene.tokens.push({...fixture.targetToken,id:`guard${i}`,uuid:`Scene.scene.Token.guard${i}`,name:`Wache ${i+1}`});
+  await hud.render();
+ });
+ await page.locator('.sf-focus-picker > summary').click();
+ const search=page.locator('.sf-focus-picker [data-sf-quick-target-search]');
+ const searchBefore=await search.boundingBox();
+ await page.locator('.sf-focus-picker .sf-quick-target-results').evaluate(el=>{el.scrollTop=el.scrollHeight;});
+ assert.equal((await search.boundingBox()).y,searchBefore.y);
+ assert.equal(await page.locator('.sf-focus-picker [data-sf-quick-target-row]').count(),24);
+ assert.equal(await page.locator('.sf-focus-picker [data-focus-reference^="Actor."]').count(),0);
+ const searchStyle=selector=>page.locator(selector).evaluate(el=>{
+  const style=getComputedStyle(el);return [style.height,style.fontSize,style.padding,style.backgroundColor];
+ });
+ await page.locator('.sf-quick-targets > summary').click();
+ assert.deepEqual(await searchStyle('.sf-focus-picker .sf-quick-target-search input'),await searchStyle('.sf-quick-targets .sf-quick-target-search input'));
+ await page.locator('.sf-quick-targets > summary').click();
+ await search.fill('Peritus');
+ assert.equal(await page.locator('.sf-focus-picker [data-sf-quick-target-row]:visible').count(),2);
+ assert.match(await page.locator('.sf-focus-picker .sf-quick-target-results').innerText(),/Peritus · 1\/2/);
+ await page.locator('.sf-focus-picker [data-sf-quick-target-filter="npc"]').click();
+ assert.equal(await page.locator('.sf-focus-picker [data-sf-quick-target-row]:visible').count(),0);
+ assert.equal(await page.locator('.sf-focus-picker [data-sf-quick-target-empty]').isVisible(),true);
+ await page.evaluate(async()=>{await hud.render();});
+ assert.equal(await search.inputValue(),'Peritus');
+ assert.equal(await page.locator('.sf-focus-picker [data-sf-quick-target-filter="npc"]').getAttribute('aria-pressed'),'true');
+ await search.fill('Wache');
+ assert.equal(await page.locator('.sf-focus-picker [data-sf-quick-target-row]:visible').count(),20);
+ await page.evaluate(async()=>{
+  fixture.scene.tokens.find(token=>token.id==='guard0').name='Umbenannt';
+  const {refreshHudVisibilityParts}=await import('/Modul/splittermond-smoother-fight/scripts/features/hud/canvas-parts.js');
+  refreshHudVisibilityParts(hud.element,services.getHudContext());
+ });
+ assert.equal(await page.locator('.sf-focus-picker [data-sf-quick-target-row]:visible').count(),19);
+ assert.equal(await search.inputValue(),'Wache');
+ await page.locator('.sf-focus-picker [data-sf-quick-target-filter="all"]').click();
+ await search.fill('');
+ await page.locator('.sf-focus-picker .sf-quick-target-results').evaluate(el=>{el.scrollTop=0;});
+ await page.screenshot({path:path.join(output,"scene-character-picker-fullhd.png")});
  assert.deepEqual(errors,[]);
  console.log(JSON.stringify({runtimeRoot,version:manifest.version,stylesheetChecks:6,styleFailures}));
 }finally{await browser.close();await new Promise(r=>server.close(r));}

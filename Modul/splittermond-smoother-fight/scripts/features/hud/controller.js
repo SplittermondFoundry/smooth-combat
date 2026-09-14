@@ -1,5 +1,4 @@
 import { handleHudFocusAction } from "./focus-controls.js";
-import { bindHudFocusSearch } from "./focus-view.js";
 import { hudState } from "./state.js";
 import { hudCanvasContextKey, rememberHudCanvas, refreshHudCanvas, refreshHudCanvasVisibility } from "./canvas-updates.js";
 import { rememberHudMarkup, refreshHudVisibilityParts } from "./canvas-parts.js";
@@ -401,7 +400,6 @@ class SmootherFightHud {
         services.clearHoveredToken();
         clearActionTooltip();
         this.element.innerHTML = html;
-        bindHudFocusSearch(this.element);
         rememberHudMarkup(this.element);
         rememberHudCanvas(context);
         this.element.hidden = false;

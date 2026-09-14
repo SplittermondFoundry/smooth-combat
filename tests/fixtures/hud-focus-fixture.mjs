@@ -13,7 +13,7 @@ export function focusFixture({ gm = false, dictionary = null } = {}) {
     globalThis.game = { user: player, i18n: { lang: "de", localize, format: (key,data) => localize(key).replace(/\{([^}]+)\}/g,(_,k)=>data[k]??k) },
         settings: { get: (_,key) => settings[key] }, actors: [], scenes: [], messages: { contents: [] } };
     function actor(id, own) {
-        const a = { id, uuid: `Actor.${id}`, name: id, isOwner: own, img: 'icons/svg/mystery-man.svg',
+        const a = { id, uuid: `Actor.${id}`, name: id, type: own ? 'character' : 'npc', isOwner: own, img: 'icons/svg/mystery-man.svg',
             skills: Object.fromEntries(['acrobatics','athletics','stealth','perception','endurance'].map(id=>[id,{id,label:id,points:6,value:17}])),
             system: { preparedAction: { attack: null, spell: null }, healthBar:{value:24,max:30}, focusBar:{value:15,max:21} },
             derivedValues: { defense:{value:21},bodyresist:{value:17},mindresist:{value:20},speed:{value:8} },

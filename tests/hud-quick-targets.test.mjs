@@ -72,6 +72,7 @@ test("quick target search filters case-insensitively and hides empty groups", ()
     const filters = ["all", "character", "npc"].map((kind) => ({
         dataset: { sfQuickTargetFilter: kind },
         pressed: null,
+        getAttribute: () => filters.find((entry) => entry.dataset.sfQuickTargetFilter === kind).pressed,
         addEventListener: (_event, listener) => { filters.find((entry) => entry.dataset.sfQuickTargetFilter === kind).click = listener; },
         setAttribute: (_name, value) => { filters.find((entry) => entry.dataset.sfQuickTargetFilter === kind).pressed = value; },
     }));

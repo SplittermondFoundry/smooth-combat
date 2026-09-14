@@ -28,31 +28,14 @@ export function getHudFocusCandidates(active = services.getHudContext?.()) {
     const combat = active?.combat ?? getApplicableCombat();
     const combatants = values(combat?.combatants);
     const tokens = new Map();
-    for (const scene of values(globalThis.game?.scenes)) for (const token of values(scene.tokens)) {
-        if (refOf(token)) tokens.set(refOf(token), documentOf(token));
-    }
     for (const token of values(globalThis.canvas?.scene?.tokens)) if (refOf(token)) tokens.set(refOf(token), documentOf(token));
-    for (const cb of combatants) {
-        const token = documentOf(cb.token ?? services.resolveCombatantToken?.(cb));
-        if (refOf(token)) tokens.set(refOf(token), token);
-    }
     const candidates = [];
-    const represented = new Set();
     for (const token of tokens.values()) {
         if (!canOwn(token.actor) || !tokenVisible(token)) continue;
         const combatant = combatants.find(cb => sameHudToken(cb.token ?? services.resolveCombatantToken?.(cb), token)) ?? null;
         candidates.push({ reference: token.uuid, token, actor: token.actor, combatant, combat });
-        represented.add(token.actor.id);
     }
-    for (const actor of values(globalThis.game?.actors)) {
-        if (!canOwn(actor) || represented.has(actor.id)) continue;
-        candidates.push({ reference: actor.uuid, token: null, actor, combatant: null, combat });
-    }
-    return candidates.sort((a, b) => {
-        const current = token => (token?.parent?.id ?? token?.scene?.id) === globalThis.canvas?.scene?.id;
-        return Number(current(b.token)) - Number(current(a.token))
-            || String(a.token?.name ?? a.actor.name).localeCompare(String(b.token?.name ?? b.actor.name));
-    });
+    return candidates.sort((a, b) => String(a.token.name ?? a.actor.name).localeCompare(String(b.token.name ?? b.actor.name)));
 }
 function preferredCandidate(active) {
     const s = state(), candidates = getHudFocusCandidates(active);

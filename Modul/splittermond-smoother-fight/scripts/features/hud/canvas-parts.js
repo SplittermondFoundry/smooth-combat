@@ -1,5 +1,5 @@
 import { focusEnabled, getHudFocusContexts } from "./focus-context.js";
-import { buildFocusedActorColumn, bindHudFocusSearch } from "./focus-view.js";
+import { buildFocusedActorColumn } from "./focus-view.js";
 import { hudState } from "./state.js";
 import { services } from "../../core/services.js";
 import { getPersonalHudContext } from "./context.js";
@@ -114,6 +114,7 @@ export function refreshHudVisibilityParts(root, context) {
     context = services.prepareCombatEventContext?.(context) ?? context;
     const added = new Set();
     const quickState = captureQuickTargetViewState(root.querySelector(".sf-quick-targets"));
+    const focusState = captureQuickTargetViewState(root.querySelector(".sf-focus-picker"), ".sf-focus-picker");
     const column = root.querySelector(".sf-target-column");
     if (column) patchPart(column, buildTargetColumn(context), added);
 
@@ -140,6 +141,6 @@ export function refreshHudVisibilityParts(root, context) {
     const inserted = { querySelectorAll: (selector) => [...root.querySelectorAll(selector)].filter((node) => added.has(node)) };
     services.bindQuickTargetHover?.(inserted);
     bindQuickTargetSearch(inserted);
-    bindHudFocusSearch(inserted);
     restoreQuickTargetViewState(root, quickState);
+    restoreQuickTargetViewState(root, focusState, ".sf-focus-picker");
 }

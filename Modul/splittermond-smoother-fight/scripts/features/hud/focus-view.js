@@ -6,7 +6,7 @@ import { getHudFocusCandidates, getHudFocusContexts, sameHudToken, resolveHudFoc
 import { portraitPanel, noTargetPanel, canViewDefenseValues, buildSecondaryTargets } from "./portraits.js";
 import { buildTargetHeaderActions, isTargetDefeated } from "./target-status.js";
 import { isPlayersTurn } from "../../combat-rules.js";
-import { buildQuickTargets } from "./quick-targets.js";
+import { buildQuickTargets, buildStructuredTokenChoices, quickTargetLabels, quickTargetActorKind, quickTargetSearchValue } from "./quick-targets.js";
 import { buildMovementTracker, buildSelectedMovementControl } from "./movement.js";
 import { targetDistancePresentation, targetLinePresentation } from "./range.js";
 import { buildCombatPositionMenu } from "./combat-position-menu.js";
@@ -19,12 +19,16 @@ export function focusScope(context) {
 function picker(active, personal) {
     const candidates = getHudFocusCandidates(active);
     if (!candidates.length || (candidates.length === 1 && personal)) return "";
-    const rows = candidates.map(c => {
-        const scene = c.token?.parent?.name ?? c.token?.scene?.name;
-        const where = c.token ? scene ?? label("SceneToken") : label("WithoutToken");
-        return `<button type="button" data-sf-action="choose-hud-character" data-focus-reference="${escapeAttr(c.reference)}" data-focus-search="${escapeAttr(`${nameOf(c)} ${c.actor.name} ${where}`.toLocaleLowerCase())}" aria-pressed="${personal?.focusReference === c.reference}"><img src="${escapeAttr(c.actor.img || c.token?.texture?.src || "icons/svg/mystery-man.svg")}" alt=""><span>${escapeHtml(nameOf(c))}<small>${escapeHtml(where)}${c.token ? ` · ${escapeHtml(c.token.id)}` : ""}</small></span></button>`;
-    }).join("");
-    return `<details class="sf-focus-picker" data-sf-menu="focus-character"><summary title="${escapeAttr(label("ChooseCharacter"))}" aria-label="${escapeAttr(label("ChooseCharacter"))}"><i class="fa-solid fa-chevron-down"></i></summary><div class="sf-action-popover"><input type="search" data-sf-focus-search placeholder="${escapeAttr(label("SearchCharacter"))}" aria-label="${escapeAttr(label("SearchCharacter"))}">${rows}</div></details>`;
+    const tokens = candidates.map(c => c.token);
+    const content = buildStructuredTokenChoices(active, tokens, {
+        labels: quickTargetLabels(tokens), selected: new Set([personal?.focusReference].filter(Boolean)),
+        searchLabel: label("SearchCharacter"), filterLabel: label("TypeFilter"), emptyLabel: label("NoMatches"),
+        renderRow: (token, { labels, selected }) => {
+            const chosen = selected.has(token.uuid), name = labels.get(token.uuid);
+            return `<div class="sf-quick-target-row ${chosen ? "is-selected" : ""}" data-sf-quick-target-row data-sf-actor-kind="${quickTargetActorKind(token)}" data-sf-search="${escapeAttr(quickTargetSearchValue(token))}"><button type="button" data-sf-action="choose-hud-character" data-focus-reference="${escapeAttr(token.uuid)}" class="${chosen ? "is-current" : ""}" aria-pressed="${chosen}" title="${escapeAttr(name)}"><img src="${escapeAttr(token.texture?.src || token.actor?.img || "icons/svg/mystery-man.svg")}" alt=""><span><b>${escapeHtml(name)}</b></span>${chosen ? '<i class="fa-solid fa-check"></i>' : ""}</button></div>`;
+        },
+    });
+    return `<details class="sf-focus-picker is-structured" data-sf-menu="focus-character"><summary title="${escapeAttr(label("ChooseCharacter"))}" aria-label="${escapeAttr(label("ChooseCharacter"))}"><i class="fa-solid fa-chevron-down"></i></summary><div class="sf-quick-target-popover">${content}</div></details>`;
 }
 function actorCard(context, { role, compact, mode, chooser = "", selected }) {
     if (!context?.actor) return `<aside class="sf-portrait sf-focus-empty ${compact ? "is-compact" : ""}"><span>${escapeHtml(role)}</span>${chooser}</aside>`;
@@ -104,11 +108,5 @@ export function decorateFocusActions(html, context) {
         const filters = attrs.match(/\sdata-sf-(?:spell-row|search|enough-focus|spell-school|spell-level)(?:="[^"]*")?/g)?.join("") ?? "";
         const clean = attrs.replace(/\sdata-sf-(?:spell-row|search|enough-focus|spell-school|spell-level)(?:="[^"]*")?/g, "").replace(/\saria-disabled="[^"]*"/g, "");
         return `<div class="sf-focus-locked-option"${filters}><button ${clean} disabled data-sf-start-blocked title="${escapeAttr(label("StartOwnTurn"))}">${body}</button><button type="button" class="sf-focus-item-details" data-sf-action="inspect-hud-item" data-item-kind="${kind}" data-item-id="${escapeAttr(item.id)}" title="${escapeAttr(label("StartOwnTurn"))}"><i class="fa-solid fa-lock"></i>${escapeHtml(label("Details"))}</button></div>`;
-    });
-}
-export function bindHudFocusSearch(root) {
-    for (const input of root.querySelectorAll("[data-sf-focus-search]")) input.addEventListener("input", () => {
-        const terms = input.value.toLocaleLowerCase().split(/\s+/).filter(Boolean);
-        for (const row of input.parentElement.querySelectorAll("[data-focus-search]")) row.hidden = !terms.every(term => row.dataset.focusSearch.includes(term));
     });
 }

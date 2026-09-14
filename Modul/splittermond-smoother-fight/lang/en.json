@@ -755,6 +755,8 @@
         "HiddenActive": "Hidden combatant is active",
         "ChooseCharacter": "Choose character",
         "SearchCharacter": "Search characters",
+        "TypeFilter": "Filter characters by type",
+        "NoMatches": "No matching tokens found.",
         "SceneToken": "Scene token",
         "WithoutToken": "No token in this scene",
         "NotInCombat": "Not in the current combat",

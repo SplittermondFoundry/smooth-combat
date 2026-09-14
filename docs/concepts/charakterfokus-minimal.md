@@ -14,13 +14,15 @@ Je Seite bleibt eine große Karte im bisherigen Format von 172 × 246 Pixeln erh
 
 Sind aktiver und persönlich gewählter Token identisch, erscheint eine einzige große Karte mit „Gerade aktiv + dein Charakter“ bzw. „Gerade aktiv + SL-Auswahl“. Sind die Ziele identisch, erscheint eine einzige Karte mit „Primärziel + dein Ziel“. Beide Zusammenführungen erfolgen unabhängig voneinander.
 
-Verglichen wird die **Token-UUID einschließlich Szene**, nicht der Anzeigename und nicht allein die Actor-ID. Zwei Tokens desselben Actors sind zwei verschiedene Figuren im Kampf. Ohne Szenentoken wird die Actor-UUID nur für den persönlichen Zugriff verwendet; daraus entsteht keine Gleichheit mit einem aktiven Kampftoken.
+Verglichen wird die **Token-UUID einschließlich Szene**, nicht der Anzeigename und nicht allein die Actor-ID. Zwei Tokens desselben Actors sind zwei verschiedene Figuren im Kampf. In der Charakterauswahl stehen ausschließlich Tokens der aktuell geöffneten Szene; Actors ohne Token werden nicht angeboten.
 
 Die großen Karten verwenden die bisherigen Originalbilder. Die kleinen Karten enthalten einen Bildbereich von 48 × 48 Pixeln. Werte und Ressourcen erscheinen nur bei ausreichenden Sichtrechten. Die Vorschau verwendet aus der vorhandenen Aufnahme ausgeschnittene Bilder; deren begrenzte Qualität und die beispielhaften Werte sind keine Vorgabe für die Umsetzung.
 
 ## Umschalten und Charakterwahl
 
-Ein Klick auf die Kopfzeile bzw. den auswählbaren Bildbereich der linken Karte macht diese Figur zum Bedienkontext. Der vorhandene Bogenknopf öffnet weiterhin den zugehörigen vollständigen Systembogen. Ein kleiner Pfeil bei „Dein Charakter“ bzw. „SL-Auswahl“ öffnet die Auswahl. Spieler erhalten ihre berechtigten Figuren, die SL alle Actors, mit konkreter Tokenauswahl, falls mehrere Instanzen vorhanden sind. Bei nur einer eigenen Figur entfällt ein überflüssiger Auswahlpfeil.
+Ein Klick auf die Kopfzeile bzw. den auswählbaren Bildbereich der linken Karte macht diese Figur zum Bedienkontext. Der vorhandene Bogenknopf öffnet weiterhin den zugehörigen vollständigen Systembogen. Ein kleiner Pfeil bei „Dein Charakter“ bzw. „SL-Auswahl“ öffnet die Auswahl. Spieler erhalten ihre berechtigten sichtbaren Tokens der geöffneten Szene, die SL alle Tokens dieser Szene. Bei nur einer eigenen Figur entfällt ein überflüssiger Auswahlpfeil.
+
+Die Auswahl verwendet Suche, Typfilter und Gruppen aus „Ziel wechseln“. Suchfeld und „Alle / Charaktere / NSC“ bleiben über der scrollenden Liste sichtbar. Unter „Im Kampf“ und „Weitere Tokens der Szene“ werden die Figuren nach Namen sortiert angezeigt. Gleiche Namen erhalten eine kurze Nummerierung statt sichtbarer technischer Token-IDs. Suche und Filter bleiben bei Kampfaktualisierungen erhalten.
 
 Eine neue Tokenauswahl auf der Kampfkarte übernimmt die Figur ebenfalls in die persönliche HUD-Auswahl. Die SL kann jedes Token wählen; Spieler nur eigene sichtbare Tokens. Bei Mehrfachauswahl gilt das zuletzt hinzugenommene berechtigte Token. Abwählen lässt die persönliche Auswahl bestehen. Das Auswahlmenü bleibt auch bei leerer SL-Auswahl frei außerhalb der kleinen Karte bedienbar.
 
@@ -28,7 +30,7 @@ Eine kleine Angabe **„Bedienung: [Name]“** in der bestehenden Kopfzeile mach
 
 Die persönliche Auswahl bleibt bei Tickwechseln erhalten. Die Auswahl „Gerade aktiv“ folgt dem Kampf. Die Kamera, Foundrys aktiver Combatant und fremde Benutzerziele ändern sich durch das Umschalten nicht. Ein Klick auf eine Zielkarte öffnet deren erlaubte Informationen, ohne den Bedienkontext auf das Ziel umzulenken.
 
-Persönliche Zielwahl und Zugriff der SL bleiben pro Benutzer und gewähltem Token getrennt vom Ziel des aktuellen Zuges. Es wird keine Zielwahl eines anderen Benutzers überschrieben. Ohne Ziel erscheint der entsprechende bisherige Leerzustand. Verborgene Ziele verraten weder Namen noch Bilder. Ein Actor ohne Szenentoken bietet Bogen und erlaubte Actor-Aktionen; tokenabhängige Entfernung und Kampfsteuerung nennen den fehlenden Token als Grund.
+Persönliche Zielwahl und Zugriff der SL bleiben pro Benutzer und gewähltem Token getrennt vom Ziel des aktuellen Zuges. Es wird keine Zielwahl eines anderen Benutzers überschrieben. Ohne Ziel erscheint der entsprechende bisherige Leerzustand. Verborgene Ziele verraten weder Namen noch Bilder. Ein Szenentoken außerhalb des Kampfes bietet Bogen und erlaubte Actor-Aktionen.
 
 ## Bestehende Menüs und Ausführung
 
