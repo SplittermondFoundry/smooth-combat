@@ -1,6 +1,7 @@
 import { configureServices, services } from "./core/services.js";
 import { getApplicableCombat, installCombatantSortCompatibility } from "./core/combat-compatibility.js";
 import { registerHooks, registerSocket } from "./core/lifecycle.js";
+import { initializeModuleLocalization } from "./core/localization.js";
 import { registerSettings } from "./core/settings.js";
 import * as activeDefenseApi from "./features/active-defense/api.js";
 import * as assignmentsApi from "./features/assignments/api.js";
@@ -55,10 +56,15 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", async () => {
-    // Player actions need the GM receiver even if later migration or UI setup
-    // is delayed or fails on that client.
+    // Player actions need the GM receiver even if later migration, localization,
+    // or UI setup is delayed or fails on that client.
     registerSocket();
-    await migrateAudioFeedbackSettings();
+    const localizationReady = initializeModuleLocalization().catch((error) => {
+        console.error("splittermond-smoother-fight | Failed to initialize module localization", error);
+    });
+    const audioMigrationReady = migrateAudioFeedbackSettings();
+    await localizationReady;
+    await audioMigrationReady;
     services.installGmCheatRollInterceptor();
     services.installSystemActionBarActiveDefenseInterceptor();
     installHealthCostFeedbackInterceptor();

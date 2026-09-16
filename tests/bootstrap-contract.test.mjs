@@ -9,12 +9,15 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     const keybindings = [];
     const appendedElements = [];
     const socketRegistrations = [];
+    const localizationRequests = [];
 
     globalThis.Hooks = {
         once: (name, callback) => onceCallbacks.set(name, callback),
         on: (name, callback) => hookCallbacks.push({ name, callback }),
     };
     globalThis.game = {
+        i18n: { translations: {} },
+        modules: new Map([["splittermond-smoother-fight", { version: "0.7.1" }]]),
         settings: {
             get: (moduleId, key) => {
                 if (moduleId === "core" && key === "keybindings") {
@@ -32,6 +35,10 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
         socket: {
             on: (channel, callback) => socketRegistrations.push({ channel, callback }),
         },
+    };
+    globalThis.fetch = async (url) => {
+        localizationRequests.push(url);
+        return { ok: true, json: async () => ({ SMOOTHER_FIGHT: {} }) };
     };
     class TestDie {
         randomFace() {
@@ -84,6 +91,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     assert.ok(keybindings.every((entry) => entry.moduleId === moduleId));
     assert.deepEqual(settings.map(({ key }) => key), [
         "enabled",
+        "language",
         "characterFocusHud",
         "hideSystemBar",
         "showCards",
@@ -122,6 +130,14 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     ]);
 
     const settingByKey = Object.fromEntries(settings.map(({ key, options }) => [key, options]));
+    assert.deepEqual(
+        [settingByKey.language.scope, settingByKey.language.config, settingByKey.language.type, settingByKey.language.default],
+        ["client", true, String, "de"],
+    );
+    assert.deepEqual(settingByKey.language.choices, {
+        de: "SMOOTHER_FIGHT.Settings.LanguageGerman",
+        en: "SMOOTHER_FIGHT.Settings.LanguageEnglish",
+    });
     assert.equal(settingByKey.characterFocusHud.default, true);
     assert.equal(settingByKey.characterFocusHud.scope, "client");
     assert.deepEqual(
@@ -236,6 +252,7 @@ test("bootstrap preserves settings, menus, and keybinding contracts", async () =
     await assert.doesNotReject(() => ready);
     assert.equal(socketsDuringMigration, 1, "player requests must not depend on audio migration or HUD startup");
     assert.equal(socketRegistrations[0].channel, "module.splittermond-smoother-fight");
+    assert.deepEqual(localizationRequests, ["modules/splittermond-smoother-fight/lang/de.json?module=0.7.1"]);
     assert.equal(appendedElements.length, 1, "the ready hook must mount the HUD without a runtime error");
     assert.equal(appendedElements[0].id, "splittermond-smoother-fight-hud");
     assert.ok(hookCallbacks.length > 0, "the ready hook must register runtime hooks");

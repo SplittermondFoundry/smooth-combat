@@ -12,6 +12,10 @@ import {
     DEFAULT_MELEE_RANGE,
 } from "../domain/combat/range.js";
 
+import {
+    applyModuleLanguage,
+} from "./localization.js";
+
 export function registerSettings() {
     const rerender = () => {
         services.scheduleRender();
@@ -25,6 +29,24 @@ export function registerSettings() {
         type: Boolean,
         default: true,
         onChange: rerender,
+    });
+    game.settings.register(MODULE_ID, "language", {
+        name: "SMOOTHER_FIGHT.Settings.LanguageName",
+        hint: "SMOOTHER_FIGHT.Settings.LanguageHint",
+        scope: "client",
+        config: true,
+        type: String,
+        choices: {
+            de: "SMOOTHER_FIGHT.Settings.LanguageGerman",
+            en: "SMOOTHER_FIGHT.Settings.LanguageEnglish",
+        },
+        default: "de",
+        onChange: (language) => {
+            void applyModuleLanguage(language).then(() => {
+                rerender();
+                globalThis.ui?.chat?.render?.({ force: true });
+            }).catch((error) => console.error(`${MODULE_ID} | Failed to change module language`, error));
+        },
     });
     game.settings.register(MODULE_ID, "characterFocusHud", {
         name: "SMOOTHER_FIGHT.Settings.CharacterFocusName",

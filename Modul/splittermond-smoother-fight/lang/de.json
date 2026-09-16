@@ -41,6 +41,10 @@
       "OpenLatestCombatActionHint": "Klappt ausschließlich die neueste Kampfaktion auf und bringt sie in den sichtbaren Bereich. Y und die physische QWERTZ-Entsprechung werden als Standardbelegungen registriert."
     },
     "Settings": {
+      "LanguageName": "Modulsprache",
+      "LanguageHint": "Legt die Sprache von Smoother Fight unabhängig von der in Foundry eingestellten Sprache fest. Standard ist Deutsch.",
+      "LanguageGerman": "Deutsch",
+      "LanguageEnglish": "Englisch",
       "EnabledName": "Kampf-HUD aktivieren",
       "EnabledHint": "Blendet das Smoother-Fight-HUD automatisch ein, sobald ein Kampf gestartet wurde.",
       "HideSystemBarName": "Splittermond-Aktionsleiste im Kampf ausblenden",

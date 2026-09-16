@@ -2,6 +2,10 @@
 
 ## Unveröffentlicht
 
+## 0.7.1 – 16. September 2026
+
+- Die Sprache von Smoother Fight ist nicht mehr an Foundrys Systemsprache gekoppelt. Sie ist pro Client standardmäßig Deutsch und kann in den Moduleinstellungen auf Englisch umgestellt werden.
+
 ## 0.7.0 – 14. September 2026
 
 Änderungen seit **0.6.6**. Version **0.7.0** ergänzt das bestehende Kampf-HUD um eine eigene Charakterwahl. Spieler können ihre Figuren bedienen, die Spielleitung kann zwischen Szenentokens wechseln – während der aktive Kämpfer und der Kampfverlauf sichtbar bleiben.

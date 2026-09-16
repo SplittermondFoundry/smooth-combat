@@ -4,7 +4,7 @@ Smoother Fight ist ein Foundry-VTT-Modul für Splittermond. Es ergänzt laufende
 
 Versionshinweise stehen im [Changelog](CHANGELOG.md).
 
-Version **0.7.0** ergänzt die Charakterwahl und persönliche Ziele im laufenden Kampf und verbessert die Bedienung des HUDs.
+Version **0.7.1** entkoppelt die Sprache des Moduls von Foundrys Systemsprache. Smoother Fight startet auf Deutsch und kann pro Client auf Englisch umgestellt werden.
 
 ## Voraussetzungen
 
@@ -51,7 +51,7 @@ Alternativ kann das ZIP der gewünschten Version unter [Releases](https://github
 - Rechteprüfung für Ressourcen, Verteidigungswerte und ausführbare Chatkarten-Aktionen
 - Dark-/Lightmode, anpassbare Hintergründe und Icons sowie optionale Audiohinweise
 - konfigurierbare Tastenkürzel zum Einblenden und Einklappen des HUDs und seiner Ereignisse
-- deutsche und englische Benutzeroberfläche
+- standardmäßig deutsche Benutzeroberfläche mit einer von Foundrys Systemsprache unabhängigen, persönlichen Umschaltoption auf Englisch
 
 ## Ersteinrichtung
 

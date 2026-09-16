@@ -41,6 +41,10 @@
       "OpenLatestCombatActionHint": "Opens only the latest combat action and brings it into view."
     },
     "Settings": {
+      "LanguageName": "Module language",
+      "LanguageHint": "Sets the language used by Smoother Fight independently of the language selected in Foundry. The default is German.",
+      "LanguageGerman": "German",
+      "LanguageEnglish": "English",
       "EnabledName": "Enable combat HUD",
       "EnabledHint": "Automatically shows the Smoother Fight HUD while a combat is running.",
       "HideSystemBarName": "Hide Splittermond action bar during combat",
