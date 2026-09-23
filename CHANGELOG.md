@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+## 0.7.2 – 23. September 2026
+
+- Unter **Splittermond 14.2.7** sind bei **Angsterfüllt** Risiko- und Standardwurf ausgegraut. Die bestehende Bestätigung für eine Ausnahme bleibt erreichbar; der Sicherheitswurf bleibt vorausgewählt.
+- Das Schließen einer Aktiven Abwehr gegen **KW/GW** beendet den ausstehenden Abwehrvorgang zuverlässig, auch wenn der Systemdialog keine Abbruchrückmeldung liefert. Dasselbe gilt für den Wurfdialog nach der VTD-Auswahl und für Verteidiger. Ein erneuter Versuch oder ein Verzicht auf Abwehr ist sofort möglich; bereits bestätigte Würfe warten weiter auf ihr Ergebnis.
+- Die Abbrucherkennung unterstützt auch die verkürzten Dialogklassennamen von **Splittermond 14.3.0-beta5**. Bestätigte Würfe werden anhand ihrer tatsächlichen Formulareingabe erkannt, einschließlich verzögerter Ausnahmebestätigungen bei **Angsterfüllt**; das anschließende Schließen beendet keinen bereits laufenden Wurf.
+
 ## 0.7.1 – 16. September 2026
 
 - Die Sprache von Smoother Fight ist nicht mehr an Foundrys Systemsprache gekoppelt. Sie ist pro Client standardmäßig Deutsch und kann in den Moduleinstellungen auf Englisch umgestellt werden.

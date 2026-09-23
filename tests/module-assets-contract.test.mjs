@@ -21,7 +21,7 @@ test("Foundry manifest entry points remain stable", () => {
     const manifest = readManifest();
     const packageMetadata = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.7.1");
+    assert.equal(manifest.version, "0.7.2");
     assert.equal(packageMetadata.version, manifest.version);
     assert.equal(manifest.download, `${manifest.url}/releases/download/v${manifest.version}/${manifest.id}-v${manifest.version}.zip`);
     const releaseNotes = fs.readFileSync(path.join(projectRoot, "RELEASE_NOTES.md"), "utf8");
@@ -225,8 +225,8 @@ test("the previously installed stylesheet URL forwards to the current styles", (
         .filter((name) => /^smoother-fight-\d+\.\d+\.\d+\.css$/u.test(name))
         .sort();
     assert.equal(expectedWrapper, `smoother-fight-${manifest.version}.css`);
-    assert.deepEqual(versionedWrappers, ["smoother-fight-0.6.4.css", "smoother-fight-0.6.6.css", "smoother-fight-0.7.0.css", expectedWrapper]);
-    for (const previous of ["smoother-fight-0.6.4.css", "smoother-fight-0.6.6.css", "smoother-fight-0.7.0.css"]) {
+    assert.deepEqual(versionedWrappers, ["smoother-fight-0.6.4.css", "smoother-fight-0.6.6.css", "smoother-fight-0.7.0.css", "smoother-fight-0.7.1.css", expectedWrapper]);
+    for (const previous of ["smoother-fight-0.6.4.css", "smoother-fight-0.6.6.css", "smoother-fight-0.7.0.css", "smoother-fight-0.7.1.css"]) {
         const upgradeWrapper = fs.readFileSync(path.join(stylesRoot, previous), "utf8");
         assert.equal(upgradeWrapper.trim(), `@import url("./${expectedWrapper}?module=${manifest.version}");`);
     }
@@ -272,7 +272,7 @@ test("split styles flatten in the verified cascade order", () => {
     assert.match(flattenedCss, /\.sf-action-tooltip\.is-spell\s*\{[^}]*width:\s*min\(500px,/su);
     assert.equal(
         crypto.createHash("sha256").update(flattened).digest("hex"),
-        "3206bef6cc16cc599dfb543ff2055e2bc9aef4e8ca5f6888449cf850b5a38378",
+        "9710cb04d20ddaa88b2c01d20101bf1f98461f22e305a087317d1143dd2f17a9",
     );
 });
 

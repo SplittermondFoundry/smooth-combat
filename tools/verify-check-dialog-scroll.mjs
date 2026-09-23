@@ -67,7 +67,7 @@ const server = http.createServer(async (req, res) => {
         const base = match[1] === "foundry" ? path.join(appRoot, "public") : match[1] === "module" ? runtimeRoot : systemRoots[Number(match[2])];
         const file = path.resolve(base, decodeURIComponent(match[3]));
         if (!file.startsWith(path.resolve(base) + path.sep)) { res.writeHead(403).end(); return; }
-        const types = { ".css": "text/css", ".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".ttf": "font/ttf", ".woff2": "font/woff2" };
+        const types = { ".js": "text/javascript", ".css": "text/css", ".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".ttf": "font/ttf", ".woff2": "font/woff2" };
         res.setHeader("content-type", types[path.extname(file)] ?? "application/octet-stream");
         res.end(await fs.readFile(file));
     } catch { res.writeHead(404).end(); }
@@ -143,6 +143,42 @@ try {
         assert.ok(await page.locator('.window-content').evaluate(el => el.scrollHeight <= el.clientHeight + 1));
         await page.locator('dialog').evaluate(el => el.classList.remove('dialog-check'));
         assert.equal(await page.locator('.window-content').evaluate(el => getComputedStyle(el).overflowY), 'hidden');
+        // Exercise the 14.2.7 fear preset with the native template and styles.
+        // The buttons remain actionable because exceptions require confirmation.
+        await page.locator('dialog').evaluate(el => el.classList.add('dialog-check'));
+        const fearButtons = await page.evaluate(async version => {
+            const { prepareFearRollDialog } = await import('/module/scripts/features/combat-actions/fear-roll-compatibility.js');
+            window.game = { system: { id: 'splittermond', version }, i18n: { localize: () =>
+                'Angsterfüllt: Sicherheitswurf vorgegeben. Andere Wurfarten erfordern eine Bestätigung.' } };
+            class CheckDialog {
+                static _prepareFormData() { return {}; }
+                _onSubmit() {}
+            }
+            const application = new CheckDialog();
+            application.element = document.querySelector('dialog');
+            application.options = { classes: ['splittermond', 'dialog-check'], buttons: { risk: {}, standard: {}, safety: {} } };
+            application.checkData = { skill: { actor: { items: [{ type: 'statuseffect', name: 'Angsterfüllt', system: { level: 1 } }] } } };
+            prepareFearRollDialog(application);
+            window.fearApplication = application;
+            return ['risk', 'standard', 'safety'].map(action => {
+                const button = application.element.querySelector(`[data-action="${action}"]`);
+                const style = getComputedStyle(button);
+                return { action, opacity: Number(style.opacity), filter: style.filter, disabled: button.disabled };
+            });
+        }, version);
+        const fearful = version === '14.2.7';
+        for (const button of fearButtons) {
+            assert.equal(button.disabled, false);
+            assert.equal(button.opacity, fearful && button.action !== 'safety' ? 0.45 : 1);
+            if (fearful && button.action !== 'safety') assert.equal(button.filter, 'grayscale(1)');
+        }
+        await page.screenshot({ path: path.join(output, `${version}-fear-buttons.png`) });
+        await page.evaluate(async () => {
+            fearApplication.checkData.skill.actor.items = [];
+            const { prepareFearRollDialog } = await import('/module/scripts/features/combat-actions/fear-roll-compatibility.js');
+            prepareFearRollDialog(fearApplication);
+        });
+        assert.ok(await page.locator('footer button').evaluateAll(buttons => buttons.every(button => getComputedStyle(button).opacity === '1')));
     }
     assert.deepEqual(errors, []);
     await fs.writeFile(path.join(output, 'results.json'), JSON.stringify(measurements, null, 2));

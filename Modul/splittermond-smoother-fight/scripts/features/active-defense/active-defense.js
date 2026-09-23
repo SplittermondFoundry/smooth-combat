@@ -1,4 +1,5 @@
 import { activeDefenseState } from "./state.js";
+import { withDefenseDialogCancellation } from "./roll-dialog.js";
 
 import {
     activeDefenseDifficultyForOffense,
@@ -273,11 +274,11 @@ function watchPendingDefenseRoll(result, pending) {
     );
 }
 
-async function runPendingDefenseRoll(pending, operation) {
+async function runPendingDefenseRoll(pending, operation, skillId = pending.defenseSkillId) {
     if (!startPendingDefenseRoll(pending)) return null;
     try {
         await interruptContinuousActionForDefense(pending, pending.defenseSkillId);
-        return await operation();
+        return await withDefenseDialogCancellation(pending, operation, skillId);
     } finally {
         clearPendingDefense(pending.pendingDefenseId);
     }
@@ -303,12 +304,12 @@ function interceptPendingDefenseActorRoll(actor, pending) {
         restore();
         if (!startPendingDefenseRoll(pending)) return originalActorRoll.apply(this, rollArgs);
         try {
-            const result = Promise.resolve(interruptContinuousActionForDefense(
-                pending,
-                defenseSkillIdFromRollArguments(rollArgs, pending.defenseSkillId)
-            )).then(() => (pending.distractingFeatureValue > 0
+            const skillId = defenseSkillIdFromRollArguments(rollArgs, pending.defenseSkillId);
+            const operation = () => (pending.distractingFeatureValue > 0
                 ? invokeActiveDefenseRoll(originalActorRoll, this, rollArgs, pending.activeDefenseDifficulty)
-                : originalActorRoll.apply(this, rollArgs)));
+                : originalActorRoll.apply(this, rollArgs));
+            const result = Promise.resolve(interruptContinuousActionForDefense(pending, skillId))
+                .then(() => withDefenseDialogCancellation(pending, operation, skillId));
             watchPendingDefenseRoll(result, pending);
             return result;
         } catch (error) {
@@ -345,7 +346,9 @@ function observeActiveDefenseDialog(dialog, pending, actorRollInterceptor) {
 async function launchActorActiveDefense(actor, type, pending) {
     const normalizedType = String(type ?? "defense").toLocaleLowerCase();
     if (!["defense", "vtd"].includes(normalizedType)) {
-        return runPendingDefenseRoll(pending, () => launchDirectActiveDefense(actor, type, pending));
+        const defenseType = { kw: "bodyresist", gw: "mindresist" }[normalizedType] ?? normalizedType;
+        const skillId = actor.activeDefense?.[defenseType]?.[0]?.skill?.id;
+        return runPendingDefenseRoll(pending, () => launchDirectActiveDefense(actor, type, pending), skillId);
     }
     const actorRollInterceptor = interceptPendingDefenseActorRoll(actor, pending);
     if (!actorRollInterceptor) {

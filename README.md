@@ -4,7 +4,7 @@ Smoother Fight ist ein Foundry-VTT-Modul für Splittermond. Es ergänzt laufende
 
 Versionshinweise stehen im [Changelog](CHANGELOG.md).
 
-Version **0.7.1** entkoppelt die Sprache des Moduls von Foundrys Systemsprache. Smoother Fight startet auf Deutsch und kann pro Client auf Englisch umgestellt werden.
+Version **0.7.2** behebt hängenbleibende Aktive Abwehren nach dem Schließen des Wurfdialogs, einschließlich der Dialoge aus Splittermond 14.3.0-beta5. Unter 14.2.7 sind Risiko- und Standardwurf bei **Angsterfüllt** ausgegraut.
 
 ## Voraussetzungen
 

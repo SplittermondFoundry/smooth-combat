@@ -2943,3 +2943,10 @@ body > .sf-action-tooltip footer {
     outline-offset: 1px;
     font-weight: 700;
 }
+
+/* Keep the confirmation available while visually marking restricted rolls. */
+.dialog-check.sf-fear-roll-compat button[data-action="risk"],
+.dialog-check.sf-fear-roll-compat button[data-action="standard"] {
+    filter: grayscale(1);
+    opacity: 0.45;
+}

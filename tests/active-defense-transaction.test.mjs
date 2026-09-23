@@ -7,6 +7,7 @@ import {
     canUserSubmitDefense,
     claimPendingDefenseForMessage,
     getEligibleDefenderChoices,
+    getRunningActiveDefense,
     processDefenseMessage,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/active-defense.js";
 import {
@@ -35,6 +36,7 @@ import {
     reopenDefensePhaseAfterOutcomeChange,
 } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/phase.js";
 import { activeDefenseState } from "../Modul/splittermond-smoother-fight/scripts/features/active-defense/state.js";
+import { analyzeCombatEventGroups } from "../Modul/splittermond-smoother-fight/scripts/features/combat-events/workflow.js";
 import { setRequiredFlag } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 
 const MODULE_ID = "splittermond-smoother-fight";
@@ -200,6 +202,7 @@ function installGlobals() {
 }
 
 configureServices({
+    defenseAwaitsResponse,
     checkResultMessage: (report) => report.succeeded ? "Erfolg" : "Fehlschlag",
     createDefenseSplinterpointChatCard: async (data) => {
         harness.splinterpointCards.push(data);
@@ -1507,6 +1510,250 @@ test("a failed splinterpoint refund becomes uncertain until a GM resolves it", a
     assert.deepEqual(getDefenseSplinterpointActions(root, game.user), [
         { kind: "primary", actorUuid: target.uuid },
     ]);
+});
+
+function installDefenseDialogHooks(t) {
+    const handlers = new Map();
+    globalThis.Hooks = {
+        on(name, callback) { handlers.set(callback, name); return callback; },
+        off(name, callback) { if (handlers.get(callback) === name) handlers.delete(callback); },
+        callAll(name, ...args) {
+            for (const [callback, hook] of [...handlers]) if (hook === name) callback(...args);
+        },
+    };
+    t.after(() => { resetHarness(); delete globalThis.Hooks; });
+    return handlers;
+}
+
+function resistanceDefenseFixture(type, { minified = false, confirmation = false } = {}) {
+    const dialogs = [];
+    const skillId = ["bodyresist", "KW"].includes(type) ? "endurance" : "determination";
+    const DialogClass = class CheckDialog {
+        static _prepareFormData() { return { rollType: "standard" }; }
+    };
+    if (minified) Object.defineProperty(DialogClass, "name", { value: "e" });
+    const actor = {
+        id: "target", uuid: "Scene.test.Token.target.Actor.target", isOwner: true,
+        activeDefense: {
+            bodyresist: [{ skill: { id: "endurance" } }],
+            mindresist: [{ skill: { id: "determination" } }],
+        },
+        activeDefenseDialog() {
+            return new Promise(resolve => {
+                const dialog = {
+                    constructor: DialogClass,
+                    checkData: { skill: { actor: this, id: skillId } },
+                    // Splittermond 14.2.7 passes this option to new CheckDialog.
+                    // Foundry DialogV2 only uses close callbacks in its wait factory.
+                    options: Object.freeze({ classes: ["splittermond", "dialog-check"], close: () => resolve(null) }),
+                    element: {},
+                    rendered: true,
+                    async close() { this.rendered = false; Hooks.callAll("closeCheckDialog", this); return this; },
+                    async submit() {
+                        const data = DialogClass._prepareFormData(this.element, this.checkData);
+                        this.accept = () => {
+                            queueMicrotask(() => Hooks.callAll("splittermond.check.onBeforeCheck", this.checkData.skill, data));
+                            // 14.3 beta5 calls close() from its submit callback,
+                            // including after accepting a deferred fear confirmation.
+                            return this.close(minified ? {} : { submitted: true });
+                        };
+                        if (!confirmation) await this.accept();
+                    },
+                    complete: resolve,
+                };
+                dialogs.push(dialog);
+                Hooks.callAll(`render${DialogClass.name}`, dialog);
+                Hooks.callAll("renderApplicationV2", dialog);
+            });
+        },
+    };
+    const token = { uuid: "Scene.test.Token.target", name: "Ziel", actor };
+    harness.tokens.set(token.uuid, token);
+    const spell = createAttack(`spell-${type}`, attackReport({ defenseType: type }), {
+        primaryTargetTokenUuid: token.uuid,
+    });
+    spell.type = "spellRollMessage";
+    return { actor, spell, dialogs };
+}
+
+for (const type of ["bodyresist", "mindresist", "KW", "GW"]) {
+    test(`closing a hanging ${type} spell defense clears the pending state without another roll`, async t => {
+        resetHarness();
+        const handlers = installDefenseDialogHooks(t);
+        const { spell, dialogs } = resistanceDefenseFixture(type);
+        const attempt = beginActiveDefense(spell);
+        await new Promise(setImmediate);
+        assert.equal(activeDefenseState.rollingDefenses.size, 1);
+        const pendingId = activeDefenseState.pendingDefense.pendingDefenseId;
+
+        await dialogs[0].close();
+        await new Promise(setImmediate);
+        assert.equal(activeDefenseState.pendingDefense, null);
+        assert.equal(activeDefenseState.rollingDefenses.size, 0);
+        assert.equal(activeDefenseState.pendingDefenseTimers.size, 0);
+        assert.equal(handlers.size, 0);
+        assert.ok(harness.socketPayloads.some(payload => payload.active === false
+            && payload.pending.pendingDefenseId === pendingId), "other clients receive the cancellation");
+        assert.equal(defensePhaseForOffense(spell), "open", "cancelling still allows a retry or declining defense");
+        assert.equal(await claimPendingDefenseForMessage(createDefense("unrelated", 23, "target")), null);
+        await attempt;
+
+        const retry = beginActiveDefense(spell);
+        await new Promise(setImmediate);
+        await dialogs[1].close();
+        await retry;
+        assert.equal(activeDefenseState.pendingDefense, null);
+    });
+}
+
+for (const type of ["bodyresist", "mindresist"]) {
+    test(`14.3 beta5: closing a minified ${type} dialog clears the pending HUD defense`, async t => {
+        resetHarness();
+        const handlers = installDefenseDialogHooks(t);
+        const { spell, dialogs } = resistanceDefenseFixture(type, { minified: true });
+        const groups = [{ kind: "spell", primary: spell, defenses: [], damages: [], fumbles: [] }];
+        const hudFocus = () => analyzeCombatEventGroups(groups, { pendingDefense: getRunningActiveDefense() }).focus;
+        const attempt = beginActiveDefense(spell);
+        await new Promise(setImmediate);
+        assert.equal(hudFocus().step, "defense-roll");
+        assert.equal(hudFocus().synthetic, true);
+        await dialogs[0].close();
+        await new Promise(resolve => setTimeout(resolve, 10));
+        assert.equal(activeDefenseState.pendingDefense, null);
+        await attempt;
+        assert.equal(handlers.size, 0);
+        assert.equal(hudFocus().step, "defense-decision");
+        assert.equal(hudFocus().synthetic, false, "the HUD stops displaying the running-defense placeholder");
+        assert.equal(hudFocus().messageId, spell.id, "the spell card is accessible again");
+    });
+}
+
+test("14.3 beta5: a submitted roll without Foundry's submitted flag remains pending until its result", async t => {
+    resetHarness();
+    installDefenseDialogHooks(t);
+    const { spell, dialogs } = resistanceDefenseFixture("bodyresist", { minified: true });
+    const attempt = beginActiveDefense(spell);
+    await new Promise(setImmediate);
+    await dialogs[0].submit();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(activeDefenseState.rollingDefenses.size, 1);
+    const message = createDefense("beta5-completed", 23, "target");
+    assert.equal((await claimPendingDefenseForMessage(message)).attackMessageId, spell.id);
+    dialogs[0].complete(message);
+    await attempt;
+});
+
+for (const accepted of [false, true]) {
+    test(`14.3 beta5: ${accepted ? "accepting" : "dismissing"} a deferred fear confirmation handles cancellation correctly`, async t => {
+        resetHarness();
+        installDefenseDialogHooks(t);
+        const { spell, dialogs } = resistanceDefenseFixture("mindresist", { minified: true, confirmation: true });
+        const attempt = beginActiveDefense(spell);
+        await new Promise(setImmediate);
+        await dialogs[0].submit();
+        assert.equal(activeDefenseState.rollingDefenses.size, 1);
+        if (accepted) await dialogs[0].accept();
+        else {
+            // A different check with the same skill must not masquerade as this submission.
+            Hooks.callAll("splittermond.check.onBeforeCheck", dialogs[0].checkData.skill, { rollType: "risk" });
+            await dialogs[0].close();
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+        assert.equal(activeDefenseState.rollingDefenses.size, accepted ? 1 : 0);
+        if (accepted) dialogs[0].complete(createDefense("fear-completed", 23, "target"));
+        await attempt;
+    });
+}
+
+test("a submitted resistance defense remains pending while its result is still being created", async t => {
+    resetHarness();
+    const handlers = installDefenseDialogHooks(t);
+    const { spell, dialogs } = resistanceDefenseFixture("mindresist");
+    const attempt = beginActiveDefense(spell);
+    await new Promise(setImmediate);
+    await dialogs[0].submit();
+    await new Promise(resolve => setTimeout(resolve, 550));
+    assert.equal(activeDefenseState.rollingDefenses.size, 1, "no close timeout may discard a submitted roll");
+    const message = createDefense("completed", 23, "target");
+    assert.equal((await claimPendingDefenseForMessage(message)).attackMessageId, spell.id);
+    dialogs[0].complete(message);
+    await attempt;
+    assert.equal(handlers.size, 0);
+});
+
+test("unrelated skills, confirmation dialogs and same-id synthetic actors cannot cancel a defense", async t => {
+    resetHarness();
+    installDefenseDialogHooks(t);
+    const { actor, spell, dialogs } = resistanceDefenseFixture("bodyresist");
+    const originalLaunch = actor.activeDefenseDialog;
+    actor.activeDefenseDialog = async function () {
+        for (const skill of [
+            { actor: { ...actor, uuid: "Scene.test.Token.other.Actor.target" }, id: "endurance" },
+            { actor, id: "determination" },
+            undefined,
+        ]) {
+            const unrelated = { options: { classes: ["dialog-check"] }, checkData: { skill }, async close() {} };
+            const close = unrelated.close;
+            Hooks.callAll("renderApplicationV2", unrelated);
+            await unrelated.close();
+            assert.equal(unrelated.close, close);
+        }
+        return originalLaunch.call(this);
+    };
+    const attempt = beginActiveDefense(spell);
+    await new Promise(setImmediate);
+    assert.equal(activeDefenseState.rollingDefenses.size, 1);
+    await dialogs[0].close();
+    await attempt;
+    assert.equal(activeDefenseState.pendingDefense, null);
+});
+
+test("closing an old resistance dialog cannot clear a newer defense attempt", async t => {
+    resetHarness();
+    const handlers = installDefenseDialogHooks(t);
+    const { spell, dialogs } = resistanceDefenseFixture("mindresist");
+    const first = beginActiveDefense(spell);
+    await new Promise(setImmediate);
+    const second = beginActiveDefense(spell);
+    await new Promise(setImmediate);
+    const currentId = activeDefenseState.pendingDefense.pendingDefenseId;
+    await dialogs[0].close();
+    dialogs[0].complete(null);
+    await first;
+    assert.equal(activeDefenseState.pendingDefense.pendingDefenseId, currentId);
+    await dialogs[1].close();
+    await second;
+    assert.equal(handlers.size, 0);
+    assert.equal(activeDefenseState.pendingDefense, null);
+});
+
+test("cancelling the check after VTD selection clears its captured defense", async t => {
+    resetHarness();
+    const handlers = installDefenseDialogHooks(t);
+    const { actor, spell, dialogs } = resistanceDefenseFixture("bodyresist");
+    spell.system.checkReport.defenseType = "defense";
+    actor.rollActiveDefense = actor.activeDefenseDialog;
+    const selection = { async close() { return this; } };
+    actor.activeDefenseDialog = async () => selection;
+    await beginActiveDefense(spell);
+    const attempt = actor.rollActiveDefense("defense", { skill: { id: "endurance" } });
+    await selection.close();
+    await new Promise(setImmediate);
+    assert.equal(activeDefenseState.rollingDefenses.size, 1);
+    await dialogs[0].close();
+    await attempt;
+    assert.equal(activeDefenseState.pendingDefense, null);
+    assert.equal(handlers.size, 0);
+});
+
+test("a failed defense roll removes its dialog observer and propagates the error", async t => {
+    resetHarness();
+    const handlers = installDefenseDialogHooks(t);
+    const { actor, spell } = resistanceDefenseFixture("mindresist");
+    actor.activeDefenseDialog = () => { throw new Error("roll failed"); };
+    await assert.rejects(beginActiveDefense(spell), /roll failed/u);
+    assert.equal(activeDefenseState.pendingDefense, null);
+    assert.equal(handlers.size, 0);
 });
 
 test("dialog nonces isolate stale and cancelled active-defense workflows", async () => {
