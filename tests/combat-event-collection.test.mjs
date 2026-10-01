@@ -35,6 +35,16 @@ function attack(id, timestamp, context = {}) {
         context: { combatId: "combat", ...context } };
 }
 
+test("a missing combat produces an empty presentation without collecting messages", (t) => {
+    const harness = fixture(t, [attack("attack", 1)]);
+    for (const context of [undefined, null, {}, { combat: null }, { combat: undefined }]) {
+        assert.deepEqual(collectCombatEventPresentation(context), {
+            groups: [], workflows: [], candidates: [], focus: null,
+        });
+    }
+    assert.equal(harness.reads(), 0);
+});
+
 test("collecting a long combat keeps explicit defense links with bounded context reads", (t) => {
     const count = 200;
     const messages = Array.from({ length: count }, (_, i) => [

@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- Angriffs- und Zauberkarten werden auch ohne aktuell verfügbaren Kampf fehlerfrei dargestellt. Das behebt den gemeldeten `combatants`-Fehler beim erneuten Rendern nach dem Ausgeben eines Splitterpunkts für eine Aktive Abwehr. Ein vorhandener Szenenkampf wird zuverlässig ermittelt; bereits zugeordnete Schadenskarten werden auch ohne Kampf weiterhin erkannt.
+
 ## 0.7.2 – 23. September 2026
 
 - Unter **Splittermond 14.2.7** sind bei **Angsterfüllt** Risiko- und Standardwurf ausgegraut. Die bestehende Bestätigung für eine Ausnahme bleibt erreichbar; der Sicherheitswurf bleibt vorausgewählt.

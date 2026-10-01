@@ -5,6 +5,8 @@ import {
 
 import { services } from "../../core/services.js";
 
+import { getApplicableCombat } from "../../core/combat-compatibility.js";
+
 export function isOutgoingDamageControl(control) {
     const action = String(control?.dataset?.action ?? control?.dataset?.localaction ?? control?.dataset?.localAction ?? "")
         .trim();
@@ -33,7 +35,7 @@ export function getAssociatedDamageMessages(element, message) {
         .map((damageElement) => game.messages.get(damageElement.dataset.messageId))
         .filter((damageMessage) => damageMessage && services.isDamageMessage?.(damageMessage))
         : [];
-    const collected = services.collectCombatEventGroups?.({ combat: globalThis.game?.combat })
+    const collected = services.collectCombatEventGroups?.({ combat: getApplicableCombat() })
         ?.find((candidate) => candidate?.primary?.id === message?.id)?.damages ?? [];
     const linked = messageCollection().filter((candidate) => (
         services.isDamageMessage?.(candidate)

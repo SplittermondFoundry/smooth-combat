@@ -59,6 +59,7 @@ export function canAdvanceCombatWorkflowTicks(message, contextOrCombat = getAppl
 }
 
 function collectAllCombatEventGroups(context) {
+    if (!context?.combat) return [];
     const messages = Array.from(game.messages?.contents ?? game.messages ?? [])
         .filter((message) => message.visible !== false);
     const combatActorIds = new Set(Array.from(context.combat.combatants ?? []).map((c) => c.actorId).filter(Boolean));
