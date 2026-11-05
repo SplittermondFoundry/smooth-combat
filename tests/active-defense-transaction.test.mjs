@@ -317,6 +317,39 @@ function pendingFor(attack, defense, index) {
     };
 }
 
+for (const limitedTo of [999, 0, 2]) {
+    test(`active defense successor persists the system degree limit ${limitedTo}`, async () => {
+        resetHarness();
+        const report = attackReport({
+            roll: { total: 23 }, skill: { id: "blades", points: 8 }, difficulty: 22,
+            degreeOfSuccess: { fromRoll: 0, modification: 1, limitedTo },
+        });
+        const root = createAttack("current-attack", report);
+        const defense = createDefense("current-defense", 26, "defender");
+        const next = await queueDefenseForAttack(root.id, defense, harness.checks.get(defense.id), 26,
+            pendingFor(root, defense, 0));
+        assert.notEqual(next.id, root.id);
+        const persisted = new TestMessage(JSON.parse(JSON.stringify(next.toObject())));
+        assert.deepEqual(persisted.system.checkReport.degreeOfSuccess, { fromRoll: -1, modification: 1, limitedTo });
+        assert.equal(persisted.system.openDegreesOfSuccess, 0);
+        assert.deepEqual(root.system.checkReport, report);
+    });
+}
+
+for (const kind of ["primary", "resonance"]) {
+    test(`${kind} defense bonus retains the degree limit in the successor`, async () => {
+        resetHarness();
+        const root = createAttack("current-defense-bonus", attackReport({
+            degreeOfSuccess: { fromRoll: 3, modification: 1, limitedTo: 999 },
+        }));
+        const next = await recreateOffenseAfterSplinterpoint(root, root, { actorUuid: "Actor.defender", kind });
+        assert.notEqual(next.id, root.id);
+        const persisted = new TestMessage(JSON.parse(JSON.stringify(next.toObject())));
+        assert.deepEqual(persisted.system.checkReport.degreeOfSuccess, { fromRoll: 2, modification: 1, limitedTo: 999 });
+        assert.equal(persisted.system.openDegreesOfSuccess, 3);
+    });
+}
+
 function createSplinterpointActor(id, { heroLevel = 2, points = 2, owners = [] } = {}) {
     const actor = {
         id,

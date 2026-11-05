@@ -21,7 +21,7 @@ test("Foundry manifest entry points remain stable", () => {
     const manifest = readManifest();
     const packageMetadata = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
     assert.equal(manifest.id, "splittermond-smoother-fight");
-    assert.equal(manifest.version, "0.7.2");
+    assert.equal(manifest.version, "0.7.3");
     assert.equal(packageMetadata.version, manifest.version);
     assert.equal(manifest.download, `${manifest.url}/releases/download/v${manifest.version}/${manifest.id}-v${manifest.version}.zip`);
     const releaseNotes = fs.readFileSync(path.join(projectRoot, "RELEASE_NOTES.md"), "utf8");
@@ -32,7 +32,7 @@ test("Foundry manifest entry points remain stable", () => {
     assert.equal(manifest.socket, true);
     assert.deepEqual(manifest.compatibility, {
         minimum: "14.359",
-        verified: "14.363",
+        verified: "14.367",
         maximum: "14",
     });
     assert.deepEqual(manifest.relationships.systems, [{
@@ -225,8 +225,8 @@ test("the previously installed stylesheet URL forwards to the current styles", (
         .filter((name) => /^smoother-fight-\d+\.\d+\.\d+\.css$/u.test(name))
         .sort();
     assert.equal(expectedWrapper, `smoother-fight-${manifest.version}.css`);
-    assert.deepEqual(versionedWrappers, ["smoother-fight-0.6.4.css", "smoother-fight-0.6.6.css", "smoother-fight-0.7.0.css", "smoother-fight-0.7.1.css", expectedWrapper]);
-    for (const previous of ["smoother-fight-0.6.4.css", "smoother-fight-0.6.6.css", "smoother-fight-0.7.0.css", "smoother-fight-0.7.1.css"]) {
+    assert.deepEqual(versionedWrappers, ["smoother-fight-0.6.4.css", "smoother-fight-0.6.6.css", "smoother-fight-0.7.0.css", "smoother-fight-0.7.1.css", "smoother-fight-0.7.2.css", expectedWrapper]);
+    for (const previous of ["smoother-fight-0.6.4.css", "smoother-fight-0.6.6.css", "smoother-fight-0.7.0.css", "smoother-fight-0.7.1.css", "smoother-fight-0.7.2.css"]) {
         const upgradeWrapper = fs.readFileSync(path.join(stylesRoot, previous), "utf8");
         assert.equal(upgradeWrapper.trim(), `@import url("./${expectedWrapper}?module=${manifest.version}");`);
     }

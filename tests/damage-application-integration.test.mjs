@@ -48,7 +48,7 @@ function deferred() {
 }
 
 function installFixture(t, action = "applyDamageToUserTargets", {
-    hook = "installed", damage = 3, cancelled = false, fails = false, method = "consumeCost",
+    hook = "installed", damage = 3, cancelled = false, fails = false, method = "consumeCost", bonus = 0,
 } = {}) {
     const previous = Object.fromEntries(["game", "CONFIG", "canvas", "foundry", "ui"].map((key) => [key, globalThis[key]]));
     t.after(() => Object.assign(globalThis, previous));
@@ -60,13 +60,17 @@ function installFixture(t, action = "applyDamageToUserTargets", {
         : String(damage);
     class Actor {
         uuid = "Scene.scene.Token.target.Actor.target";
+        bonusGrants = { healthpoints: bonus > 0 ? [{ sourceId: "bonus-effect", value: bonus }] : [] };
         system = { health: { consumed: { value: 0 }, exhausted: { value: 0 }, channeled: { value: 0 } } };
         async [method](resource, cost) {
             assert.equal(resource, "health");
             assert.equal(cost, costArgument, "preserve the native cost object or legacy string");
             costStarted.resolve();
             await costFinished.promise;
-            this.system.health.consumed.value += method === "applyCost" ? cost.consumed : Number(cost);
+            const charged = method === "applyCost" ? cost.consumed : Number(cost);
+            const absorbed = Math.min(bonus, charged);
+            if (bonus > 0) this.system.health.bonus = { entries: [{ sourceId: "bonus-effect", value: bonus - absorbed }] };
+            this.system.health.consumed.value += charged - absorbed;
             if (fails) throw new Error("Health updated, later operation failed");
         }
     }
@@ -123,6 +127,29 @@ function installFixture(t, action = "applyDamageToUserTargets", {
     fixture.click = () => handleChatCardAction({ preventDefault() {} }, button);
     fixture.focus = () => analyzeCombatEventGroups([fixture.group]).focus;
     return fixture;
+}
+
+for (const damage of [5, 7]) {
+    for (const fails of [false, true]) {
+        test(`bonus health: ${damage} damage at 5 bonus points, failure=${fails}`, async (t) => {
+            t.mock.method(console, "error", () => {});
+            const f = installFixture(t, "applyDamageToUserTargets", { method: "applyCost", damage, bonus: 5, fails });
+            const feedback = [];
+            game.socket = { emit: (_channel, data) => feedback.push(data.kind) };
+            const operation = f.click();
+            await f.costStarted.promise;
+            f.costFinished.resolve();
+            await operation;
+            assert.equal(f.actor.system.health.consumed.value, damage - 5);
+            assert.equal(f.actor.system.health.bonus.entries[0].value, 0);
+            assert.equal(f.interruptions.length, 1);
+            assert.equal(f.interruptions[0].damage, damage);
+            assert.equal(getDamageApplicationState(f.message), fails ? "uncertain" : "completed");
+            assert.ok(!feedback.includes("damageBlocked"));
+            await f.click();
+            assert.equal(f.interruptions.length, 1, "cannot charge again after completion or partial failure");
+        });
+    }
 }
 
 for (const action of ["applyDamageToTargets", "applyDamageToUserTargets"]) {

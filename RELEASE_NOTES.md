@@ -1,27 +1,28 @@
-# Splittermond Smoother Fight 0.7.2
+# Splittermond Smoother Fight 0.7.3
 
-Version **0.7.2** behebt hängenbleibende Aktive Abwehren nach einem abgebrochenen Wurf und ergänzt die Darstellung von **Angsterfüllt** unter Splittermond 14.2.7.
+Version **0.7.3** behebt Kompatibilitätsfehler mit Splittermond 14.3.1 bei Splitterpunkteinsatz, Abwehr- und Patzerschaden sowie Bonus-Lebenspunkten. Die Unterstützung für 14.2.7 bleibt erhalten.
 
-## Aktive Abwehr
+## Splitterpunkte und Chatkarten
 
-- Das Schließen des Wurfdialogs über **X**, **Escape** oder einen programmatischen Aufruf beendet den ausstehenden Abwehrvorgang gegen **KW und GW**. Das HUD zeigt wieder die Zauber- beziehungsweise Angriffskarte; ein zusätzlicher Wurf ist nicht mehr nötig.
-- Die Korrektur erfasst auch den Wurfdialog nach der VTD-Auswahl und die Abwehr durch einen Verteidiger. Ein erneuter Versuch oder ein ausdrücklicher Verzicht auf Abwehr bleibt möglich.
-- Die Erkennung unterstützt die Dialoge aus **14.2.7** sowie die verkürzten Dialogklassennamen aus **14.3.0-beta5**.
-- Bereits bestätigte Würfe warten weiter auf ihr Ergebnis, auch bei langsamer Verarbeitung oder einer verzögerten Ausnahmebestätigung für Angsterfüllt. Fremde Dialoge und andere Tokens mit derselben Actor-ID beeinflussen den Vorgang nicht.
+- Nach Aktiver Abwehr oder einem verteidigungsseitigen Splitterpunkt-/Resonanzbonus bleibt die Erfolgsgradgrenze in neu berechneten Angriffskarten erhalten. Ein anschließender Splitterpunkteinsatz erzeugt keinen `NaN`-Fehler mehr.
+- Begrenzte und ungelernte Proben beachten ihre Grenze auch bei einem Triumph.
+- Angriffs- und Zauberkarten lassen sich auch ohne verfügbaren Kampf darstellen, einschließlich der Initialisierung beim Modulstart. Zugeordnete Schadenskarten werden weiterhin erkannt.
 
-## Angsterfüllt
+## Schaden und Bonus-Lebenspunkte
 
-- Unter **Splittermond 14.2.7** erscheinen Risiko- und Standardwurf ausgegraut; der Sicherheitswurf bleibt hervorgehoben und vorausgewählt.
-- Die vorhandene Bestätigung für eine Ausnahme bleibt erreichbar. Andere Systemversionen behalten ihre eigene Behandlung des Zustands.
+- Betäubungsschaden aus Aktiver Abwehr und Patzer-Eigenschaden verwenden die passende Kosten-Schnittstelle für 14.2.7 beziehungsweise 14.3.1.
+- Verbrauchte Bonus-Lebenspunkte zählen bei Schadensfeedback und Unterbrechungsprüfungen vollständig mit: 7 Schaden bei 5 Bonus-Lebenspunkten werden als 7 Schaden erkannt.
+- Neue, entfernte oder in ihrer Stärke veränderte Bonus-Effekte gelten nicht als Schaden.
+- Nach einem Fehler mit bereits verbrauchten Bonus-Lebenspunkten verhindert die Anwendungssperre einen versehentlichen doppelten Abzug.
 
 ## Aktualisierung und Kompatibilität
 
-Die Mindestanforderungen bleiben unverändert: **Foundry VTT 14 ab Build 14.359** und **Splittermond ab 14.2.0**. Einstellungen und Weltdaten benötigen keine Migration.
+Die Mindestanforderungen bleiben unverändert: **Foundry VTT 14 ab Build 14.359** und **Splittermond ab 14.2.0**. Die Live-Prüfung erfolgte mit Foundry **14.367** und Splittermond **14.3.1**; die Kompatibilität mit **14.2.7** wurde anhand des Systemcodes und automatisierter Tests abgesichert.
 
-Nach dem Update die Browserseiten aller Beteiligten mit **Strg+F5** neu laden. Dadurch werden auch bereits hängengebliebene lokale Abwehrvorgänge entfernt.
+Einstellungen und Weltdaten benötigen keine Migration. Die Korrektur der Erfolgsgradgrenze gilt für neu berechnete Karten; alte Chatkarten werden nicht nachträglich umgeschrieben. Nach dem Update die Browserseiten aller Beteiligten mit **Strg+F5** neu laden.
 
 ## Prüfung
 
-- **722 automatisierte Tests** und zusätzlich **80 Regeltests** samt Coverage-Vorgaben in einem sauberen Export des Release-Stands erfolgreich. Regressionstests prüfen Abbruch, erfolgreiche Würfe, Ausnahmebestätigungen und die Rückkehr des HUDs zur Zauberkarte.
-- Prüfung mit den lokal vorliegenden Original-Dialogklassen von **14.2.7** und **14.3.0-beta5**, letztere zusammen mit **Foundry 14.367**. Diese Prüfung verwendet eine lokale Testumgebung für den Anwendungslebenszyklus.
-- Chromium-Browserprüfung mit den originalen 14.2.7-Templates und Styles: ausgegraute Buttons sowie weiterhin erreichbare Wurfbuttons bei langen Dialogen.
+- **2.328 automatisierte Tests** und zusätzlich **93 Regeltests** samt Coverage-Vorgaben erfolgreich.
+- Live-Test in der Testwelt: alle **8 Kompatibilitätsprüfungen** bestanden, darunter Abwehr- und Patzerschaden, vollständige und teilweise Bonusabsorption, deaktivierte Effekte sowie Vorbereitungs- und Status-Timer-Adapter.
+- Erfolgsgradkorrektur mit echten Systemwürfen und anschließendem Splitterpunkteinsatz geprüft.

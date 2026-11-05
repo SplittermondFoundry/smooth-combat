@@ -66,16 +66,19 @@ export function recalculateAttackReport(report, difficulty, config = {}) {
     const difference = numberOr(cloned?.roll?.total) - numberOr(difficulty);
     let fromRoll = Math.sign(difference) * Math.floor(Math.abs(difference / 3));
 
-    if (numberOr(cloned?.skill?.points) < 1) fromRoll = Math.min(fromRoll, 0);
-
     const succeeded = difference >= 0 && !cloned.isFumble;
     if (cloned.isFumble) fromRoll = Math.min(fromRoll + settings.fumblePenalty, -1);
     if (cloned.isCrit && succeeded) fromRoll += settings.triumphBonus;
+    // Respect the system's limit after triumph/fumble; use skill points for older reports.
+    const limitedTo = cloned.degreeOfSuccess?.limitedTo
+        ?? (numberOr(cloned?.skill?.points) < 1 ? 0 : Infinity);
+    fromRoll = Math.min(fromRoll, limitedTo);
     if (Object.is(fromRoll, -0)) fromRoll = 0;
 
     cloned.difficulty = numberOr(difficulty);
     cloned.succeeded = succeeded;
     cloned.degreeOfSuccess = {
+        ...cloned.degreeOfSuccess,
         fromRoll,
         modification: numberOr(cloned?.degreeOfSuccess?.modification),
     };

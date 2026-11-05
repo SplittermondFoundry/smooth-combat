@@ -4,12 +4,12 @@ Smoother Fight ist ein Foundry-VTT-Modul für Splittermond. Es ergänzt laufende
 
 Versionshinweise stehen im [Changelog](CHANGELOG.md).
 
-Version **0.7.2** behebt hängenbleibende Aktive Abwehren nach dem Schließen des Wurfdialogs, einschließlich der Dialoge aus Splittermond 14.3.0-beta5. Unter 14.2.7 sind Risiko- und Standardwurf bei **Angsterfüllt** ausgegraut.
+Version **0.7.3** behebt Kompatibilitätsfehler mit Splittermond 14.3.1 bei Splitterpunkteinsatz, Abwehr- und Patzerschaden sowie Bonus-Lebenspunkten. Chatkarten funktionieren auch ohne verfügbaren Kampf.
 
 ## Voraussetzungen
 
-- Foundry Virtual Tabletop ab Version 14.359 (verifiziert bis 14.363)
-- Splittermond-System ab Version 14.2.0 (geprüft mit 14.2.7 und 14.3.0-beta4)
+- Foundry Virtual Tabletop ab Version 14.359 (verifiziert bis 14.367)
+- Splittermond-System ab Version 14.2.0 (Kompatibilität mit 14.2.7 automatisiert geprüft; Live-Prüfung unter 14.3.1)
 
 ## Installation
 

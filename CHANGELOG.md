@@ -1,8 +1,11 @@
 # Changelog
 
-## Unveröffentlicht
+## 0.7.3 – 5. November 2026
 
-- Angriffs- und Zauberkarten werden auch ohne aktuell verfügbaren Kampf fehlerfrei dargestellt. Das behebt den gemeldeten `combatants`-Fehler beim erneuten Rendern nach dem Ausgeben eines Splitterpunkts für eine Aktive Abwehr. Ein vorhandener Szenenkampf wird zuverlässig ermittelt; bereits zugeordnete Schadenskarten werden auch ohne Kampf weiterhin erkannt.
+- Patzer-Eigenschaden und Betäubungsschaden aus Aktiver Abwehr verwenden die passende Kosten-Schnittstelle für **Splittermond 14.2.7 und 14.3.1**. Unter 14.3 wird das native Kostenmodell genutzt; die entfernte Methode `consumeCost` verursacht keinen Abbruch mehr.
+- Verbrauchte Bonus-Lebenspunkte aus ActiveEffects zählen bei Schadensfeedback und Unterbrechungsprüfungen vollständig mit. Neue, entfernte oder in ihrer Stärke veränderte Effekte werden nicht als Schaden gewertet. Fehler nach dem Verbrauch von Bonus-Lebenspunkten verhindern eine versehentliche doppelte Anwendung.
+- Nach Aktiver Abwehr oder einem verteidigungsseitigen Splitterpunkt-/Resonanzbonus behalten neu berechnete Angriffskarten die Erfolgsgradgrenze des Systems. Dadurch verursacht der anschließende Splitterpunkteinsatz keinen `NaN`-Fehler mehr. Begrenzte und ungelernte Proben beachten ihre Grenze auch bei einem Triumph; bestehende Chatkarten werden nicht verändert.
+- Angriffs- und Zauberkarten werden auch ohne aktuell verfügbaren Kampf fehlerfrei dargestellt. Das behebt den gemeldeten `combatants`-Fehler beim erneuten Rendern nach dem Ausgeben eines Splitterpunkts für eine Aktive Abwehr sowie beim Initialisieren vorhandener Chatkarten während des Modulstarts. Ein vorhandener Szenenkampf wird zuverlässig ermittelt; bereits zugeordnete Schadenskarten werden auch ohne Kampf weiterhin erkannt.
 
 ## 0.7.2 – 23. September 2026
 

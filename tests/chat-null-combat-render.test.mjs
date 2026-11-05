@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { services } from "../Modul/splittermond-smoother-fight/scripts/core/services.js";
 import { collectCombatEventGroups } from "../Modul/splittermond-smoother-fight/scripts/features/combat-events/service.js";
-import { prepareRenderedChatMessage, isDiceAnimationPending } from "../Modul/splittermond-smoother-fight/scripts/features/chat/lifecycle.js";
+import { prepareRenderedChatMessage, prepareExistingRenderedChatMessages, isDiceAnimationPending } from "../Modul/splittermond-smoother-fight/scripts/features/chat/lifecycle.js";
 import { getAssociatedDamageMessages } from "../Modul/splittermond-smoother-fight/scripts/features/chat/completed-offense-controls.js";
 import { getMessageContext, isDamageMessage, isDefenseMessage, isSpellMessage } from "../Modul/splittermond-smoother-fight/scripts/features/chat/messages.js";
 
@@ -72,6 +72,27 @@ for (const type of ["attackRollMessage", "spellRollMessage"]) {
         assert.equal(f.degreeControl.removed, false);
     });
 }
+
+test("startup initializes existing attack and spell cards without a combat", (t) => {
+    const f = fixture(t);
+    const spell = { ...f.offense, id: "spell", type: "spellRollMessage" };
+    f.messages.push(spell);
+    const cards = [f.offense, spell].map((message) => ({
+        ...f.html, dataset: { messageId: message.id },
+    }));
+    const root = {
+        querySelectorAll: (selector) => {
+            assert.equal(selector, '.message[data-message-id]');
+            return cards;
+        },
+    };
+
+    prepareExistingRenderedChatMessages(root);
+
+    assert.equal(f.completedRenders, 2, "initialization must finish both cards instead of aborting on the first");
+    assert.equal(f.damageControl.removed, false);
+    assert.equal(f.degreeControl.removed, false);
+});
 
 for (const association of ["linked", "rendered"]) {
     test(`${association} damage still suppresses completed offense controls without a combat`, (t) => {

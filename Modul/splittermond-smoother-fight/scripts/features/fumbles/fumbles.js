@@ -1,8 +1,6 @@
 import { services } from "../../core/services.js";
 
 import {
-    fullyConsumedCost,
-    healthCostTotal,
     isOffensiveCombatMessage,
     parseStatusEffectLabel,
 } from "../../combat-rules.js";
@@ -13,6 +11,7 @@ import {
 } from "../../core/constants.js";
 
 import { getApplicableCombat } from "../../core/combat-compatibility.js";
+import { applyHealthDamage, snapshotActorHealthCosts } from "../../shared/health-cost-compatibility.js";
 
 import {
     APPLICATION_STALE_AFTER_MS,
@@ -412,7 +411,7 @@ async function applyFumbleAction(message, actor, fumble, action, definition) {
             notification = t("SMOOTHER_FIGHT.HUD.FumbleWeaponDamageApplied", { item: item.name });
         }
         if (action === "damage") {
-            await actor.consumeCost("health", fullyConsumedCost(updated.damage), fumbleLabel);
+            await applyHealthDamage(actor, updated.damage, fumbleLabel, { consumed: true });
             notification = t("SMOOTHER_FIGHT.HUD.FumbleDamageApplied", { damage: updated.damage, name: actor.name });
         }
         if (action === "conditions" || action.startsWith("condition:")) {
@@ -551,7 +550,7 @@ async function persistFumbleFailureState(message, fumble, definition, state) {
 }
 
 function fumbleEffectSnapshot(actor, action, item) {
-    if (action === "damage") return healthCostTotal(actor.system?.health);
+    if (action === "damage") return snapshotActorHealthCosts(actor);
     if (action === "weapon") return getWeaponDamageSnapshot(item);
     if (action === "conditions" || action.startsWith("condition:")) {
         return Array.from(actor.items ?? [])

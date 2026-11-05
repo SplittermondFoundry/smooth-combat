@@ -7,6 +7,36 @@ export function healthCostTotal(health) {
         .reduce((total, value) => total + Math.max(0, numberOr(value)), 0);
 }
 
+export function snapshotHealthCosts(health, grants = []) {
+    const entries = new Map(Array.from(health?.bonus?.entries ?? [], (entry) => [entry.sourceId, entry.value]));
+    return {
+        total: healthCostTotal(health),
+        bonuses: Array.from(grants ?? [])
+            .filter((grant) => grant?.sourceId && numberOr(grant.value) > 0)
+            .map((grant) => {
+                const granted = numberOr(grant.value);
+                return {
+                    sourceId: grant.sourceId,
+                    granted,
+                    remaining: Math.max(0, Math.min(granted, numberOr(entries.get(grant.sourceId), granted))),
+                };
+            }),
+    };
+}
+
+export function healthDamageTaken(previous, current) {
+    if (!previous || !current) return 0;
+    const beforeBySource = new Map(previous.bonuses.map((bonus) => [bonus.sourceId, bonus]));
+    const bonusDamage = current.bonuses.reduce((total, bonus) => {
+        const before = beforeBySource.get(bonus.sourceId);
+        // Changed/expired/new grants are not damage. A first withdrawal creates
+        // its ledger entry, so snapshots also include the previously implicit pool.
+        if (!before || before.granted !== bonus.granted) return total;
+        return total + before.remaining - bonus.remaining;
+    }, 0);
+    return Math.max(0, current.total - previous.total + bonusDamage);
+}
+
 export function healthCostFeedbackKind(previous, current, confirmed = false) {
     const before = numberOr(previous, Number.NaN);
     const after = numberOr(current, Number.NaN);

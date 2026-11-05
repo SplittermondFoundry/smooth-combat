@@ -2,12 +2,12 @@
 
 Smoother Fight ist ein Foundry-VTT-Modul für Splittermond. Es ergänzt laufende Kämpfe um ein kompaktes HUD für den aktiven Kämpfer, eigene Charaktere und ihre Ziele, häufige Systemaktionen, Chatkarten und die Aktive Abwehr.
 
-Versionshinweise stehen im [Changelog](https://github.com/SplittermondFoundry/smooth-combat/blob/v0.7.2/CHANGELOG.md).
+Versionshinweise stehen im [Changelog](https://github.com/SplittermondFoundry/smooth-combat/blob/v0.7.3/CHANGELOG.md).
 
 ## Voraussetzungen
 
-- Foundry Virtual Tabletop ab Version 14.359 (verifiziert bis 14.363)
-- Splittermond-System ab Version 14.2.0 (geprüft mit 14.2.7 und 14.3.0-beta4)
+- Foundry Virtual Tabletop ab Version 14.359 (verifiziert bis 14.367)
+- Splittermond-System ab Version 14.2.0 (Kompatibilität mit 14.2.7 automatisiert geprüft; Live-Prüfung unter 14.3.1)
 
 ## Installation
 

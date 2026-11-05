@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { snapshotHealthCosts, healthDamageTaken } from "../Modul/splittermond-smoother-fight/scripts/domain/feedback.js";
 import {
     actionRequiresTarget,
     activeDefenseChangesDifficulty,
@@ -279,6 +280,51 @@ test("active defense can turn an attack into a failure", () => {
     assert.equal(result.degreeOfSuccess.fromRoll, 0);
 });
 
+for (const limitedTo of [999, 0, 2]) {
+    test(`attack recalculation preserves the current report contract with limit ${limitedTo}`, () => {
+        const original = attackReport({
+            roll: { total: 23, dice: [{ total: 8 }] },
+            skill: { id: "blades", points: 8 },
+            difficulty: 22,
+            degreeOfSuccess: { fromRoll: 0, modification: 1, limitedTo },
+        });
+        const before = structuredClone(original);
+        const result = recalculateAttackReport(original, 26);
+        assert.deepEqual(result.degreeOfSuccess, { fromRoll: -1, modification: 1, limitedTo });
+        assert.deepEqual(original, before, "the original card must remain unchanged");
+        assert.notEqual(result.degreeOfSuccess, original.degreeOfSuccess);
+    });
+}
+
+for (const [limitedTo, isCrit, expected] of [[999, false, 4], [0, false, 0], [2, false, 2], [0, true, 0], [2, true, 2]]) {
+    test(`attack recalculation applies limit ${limitedTo} after triumph=${isCrit}`, () => {
+        const result = recalculateAttackReport(attackReport({
+            roll: { total: 38 },
+            skill: { id: "blades", points: limitedTo === 0 ? 0 : 8 },
+            isCrit,
+            degreeOfSuccess: { fromRoll: limitedTo, modification: 1, limitedTo },
+        }), 26);
+        assert.equal(result.degreeOfSuccess.fromRoll, expected);
+        assert.equal(result.degreeOfSuccess.modification, 1, "only roll degrees are limited");
+        assert.equal(result.degreeOfSuccess.limitedTo, limitedTo);
+    });
+}
+
+test("the system limit takes precedence over skill points for NPC reports", () => {
+    const result = recalculateAttackReport(attackReport({
+        skill: { points: 0 }, degreeOfSuccess: { fromRoll: 2, modification: 0, limitedTo: 999 },
+    }), 20);
+    assert.equal(result.degreeOfSuccess.fromRoll, 2);
+});
+
+for (const isCrit of [false, true]) {
+    test(`untrained legacy reports remain limited without adding a current-system field (triumph=${isCrit})`, () => {
+        const result = recalculateAttackReport(attackReport({ skill: { points: 0 }, isCrit }), 20);
+        assert.equal(result.degreeOfSuccess.fromRoll, 0);
+        assert.equal(Object.hasOwn(result.degreeOfSuccess, "limitedTo"), false);
+    });
+}
+
 test("active defense recreates attack cards only for changed outcomes", () => {
     assert.equal(attackOutcomeChanged(
         attackReport(),
@@ -324,6 +370,39 @@ test("confirmed zero damage uses different feedback from applied damage", () => 
     assert.equal(healthCostFeedbackKind(4, 4, true), "damageBlocked");
     assert.equal(healthCostFeedbackKind(4, 4, false), null);
     assert.equal(healthCostFeedbackKind(4, 2, true), null);
+});
+
+test("bonus health consumption counts from its first ledger entry, including partial absorption", () => {
+    const grants = [{ sourceId: "effect", value: 5 }];
+    const before = snapshotHealthCosts({}, grants);
+    const after = snapshotHealthCosts({ bonus: { entries: [{ sourceId: "effect", value: 0 }] } }, grants);
+    assert.equal(healthDamageTaken(before, after), 5);
+    after.total = 2;
+    assert.equal(healthDamageTaken(before, after), 7);
+    assert.equal(before.bonuses[0].remaining, 5);
+    assert.equal(healthDamageTaken(undefined, after), 0);
+    assert.equal(healthDamageTaken(before, undefined), 0);
+    assert.deepEqual(snapshotHealthCosts(undefined), { total: 0, bonuses: [] });
+    assert.equal(healthDamageTaken(snapshotHealthCosts({}), snapshotHealthCosts({ consumed: { value: 3 } })), 3);
+});
+
+test("changing, removing or restoring health grants is not damage", () => {
+    const snapshot = (grants, entries = [], total = 0) => snapshotHealthCosts({
+        consumed: { value: total }, bonus: { entries },
+    }, grants);
+    const grants = [{ sourceId: "a", value: 5 }, { sourceId: "b", value: 3 }];
+    const before = snapshot(grants);
+    assert.equal(healthDamageTaken(before, snapshot([])), 0);
+    assert.equal(healthDamageTaken(before, snapshot([{ sourceId: "a", value: 2 }])), 0);
+    assert.equal(healthDamageTaken(before, snapshot([{ sourceId: "c", value: 5 }])), 0);
+    const used = snapshot(grants, [{ sourceId: "a", value: 0 }, { sourceId: "b", value: 1 }]);
+    assert.equal(healthDamageTaken(before, used), 7);
+    assert.equal(healthDamageTaken(used, before), 0);
+    assert.equal(healthDamageTaken(used, snapshot([{ sourceId: "a", value: 10 }], [{ sourceId: "a", value: 0 }])), 0);
+    assert.equal(healthDamageTaken(before, snapshot([grants[1]], [{ sourceId: "b", value: 1 }])), 2);
+    assert.equal(snapshot([null, { sourceId: "z", value: 0 }]).bonuses.length, 0);
+    assert.equal(snapshot(grants, [{ sourceId: "a", value: -2 }]).bonuses[0].remaining, 0);
+    assert.equal(snapshot(grants, [{ sourceId: "a", value: 9 }]).bonuses[0].remaining, 5);
 });
 
 test("legacy tick movement is consumed only after initiative actually advances", () => {

@@ -7,6 +7,7 @@ import {
     handleChatCardAction,
 } from "../Modul/splittermond-smoother-fight/scripts/features/chat/actions.js";
 import {
+    applyDefenseNumbingDamage,
     applyRemoteDefenseNumbingDamage,
     applyRemoteDamageApplication,
     finalizeRemoteDamageApplication,
@@ -325,6 +326,68 @@ function fumbleData() {
         conditionsApplied: false,
         conditionsApplicationStarted: false,
     };
+}
+
+for (const modern of [false, true]) {
+    for (const kind of ["fumble", "defense"]) {
+        test(`${modern ? "14.3.1" : "14.2.7"} ${kind} damage uses the correct cost API and cannot apply twice`, async () => {
+            resetHarness();
+            class NativeCost { constructor(data) { Object.assign(this, data); } }
+            game.splittermond = { API: { hooks: { onApplyCost: { defineSchema: () => [{}, {}, { model: NativeCost }] } } } };
+            const actor = new TestActor("cost-compatibility");
+            if (modern) {
+                actor.consumeCost = undefined;
+                actor.applyCost = async (resource, cost) => {
+                    assert.equal(resource, "health");
+                    assert.ok(cost instanceof NativeCost);
+                    assert.equal(cost._consumed, kind === "fumble" ? 3 : 0);
+                    assert.equal(cost._nonConsumed, kind === "defense" ? 3 : 0);
+                    assert.equal(cost._isChanneled, false);
+                    actor.system.health.consumed.value += cost._consumed;
+                    actor.system.health.exhausted.value += cost._nonConsumed;
+                    actor.damageApplications++;
+                };
+            } else {
+                actor.consumeCost = async (resource, cost) => {
+                    assert.equal(resource, "health");
+                    assert.equal(cost, kind === "fumble" ? "3V3" : "3");
+                    actor.system.health[kind === "fumble" ? "consumed" : "exhausted"].value += 3;
+                    actor.damageApplications++;
+                };
+            }
+            const message = new TestMessage("cost-compatibility", { actor,
+                context: { numbingDamage: 3 }, fumble: { ...fumbleData(), damage: 3 } });
+            const apply = () => kind === "fumble" ? handleFumbleAction(message, "damage") : applyDefenseNumbingDamage(message, 3);
+            await apply();
+            await apply();
+            assert.equal(actor.damageApplications, 1);
+            assert.equal(actor.system.health[kind === "fumble" ? "consumed" : "exhausted"].value, 3);
+            assert.equal(kind === "fumble" ? getFumbleActionApplicationState(message, "damage") : getNumbingDamageApplicationState(message), "completed");
+        });
+    }
+}
+
+for (const kind of ["fumble", "defense"]) {
+    test(`${kind} failure after consuming only bonus health stays uncertain and blocks retry`, async () => {
+        resetHarness();
+        class NativeCost { constructor(data) { Object.assign(this, data); } }
+        game.splittermond = { API: { hooks: { onApplyCost: { defineSchema: () => [{}, {}, { model: NativeCost }] } } } };
+        const actor = new TestActor("bonus-only-failure");
+        actor.bonusGrants = { healthpoints: [{ sourceId: "effect", value: 5 }] };
+        actor.consumeCost = undefined;
+        actor.applyCost = async () => {
+            actor.system.health.bonus = { entries: [{ sourceId: "effect", value: 2 }] };
+            actor.damageApplications++;
+            throw new Error("failed after spending bonus health");
+        };
+        const message = new TestMessage("bonus-only-failure", { actor,
+            context: { numbingDamage: 3 }, fumble: { ...fumbleData(), damage: 3 } });
+        const apply = () => kind === "fumble" ? handleFumbleAction(message, "damage") : applyDefenseNumbingDamage(message, 3);
+        await assert.rejects(apply(), /failed after spending bonus health/);
+        assert.equal(kind === "fumble" ? getFumbleActionApplicationState(message, "damage") : getNumbingDamageApplicationState(message), "uncertain");
+        await apply();
+        assert.equal(actor.damageApplications, 1);
+    });
 }
 
 function fumbleActionUi(message, { focused = true } = {}) {

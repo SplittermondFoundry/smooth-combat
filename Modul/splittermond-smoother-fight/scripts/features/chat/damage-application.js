@@ -1,8 +1,6 @@
 import { services } from "../../core/services.js";
 
-import {
-    healthCostTotal,
-} from "../../combat-rules.js";
+import { applyHealthDamage, snapshotActorHealthCosts } from "../../shared/health-cost-compatibility.js";
 
 import {
     MODULE_ID,
@@ -356,13 +354,13 @@ async function applyDefenseNumbingDamageForUser(message, fallbackDamage, user) {
     if (!damage) return false;
 
     defenseNumbingDamageLocks.add(message.id);
-    const previousHealthCost = healthCostTotal(actor.system?.health);
+    const previousHealthCost = JSON.stringify(snapshotActorHealthCosts(actor));
     try {
         await setNumbingDamageApplicationState(message, "applying", { damage });
         try {
-            await actor.consumeCost("health", String(damage), t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageSource"));
+            await applyHealthDamage(actor, damage, t("SMOOTHER_FIGHT.HUD.DefenseNumbingDamageSource"));
         } catch (error) {
-            const healthChanged = healthCostTotal(actor.system?.health) !== previousHealthCost;
+            const healthChanged = JSON.stringify(snapshotActorHealthCosts(actor)) !== previousHealthCost;
             await setNumbingDamageApplicationState(message, healthChanged ? "uncertain" : "idle", { damage });
             throw error;
         }

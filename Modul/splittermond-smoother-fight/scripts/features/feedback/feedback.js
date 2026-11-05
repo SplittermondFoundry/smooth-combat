@@ -4,11 +4,11 @@ import { services } from "../../core/services.js";
 
 import {
     combatMessageKind,
-    healthCostFeedbackKind,
-    healthCostTotal,
     isCombatantVisibleToUser,
     normalizeAudioFeedbackProfile,
 } from "../../combat-rules.js";
+import { healthDamageTaken } from "../../domain/feedback.js";
+import { snapshotActorHealthCosts } from "../../shared/health-cost-compatibility.js";
 
 import {
     AUDIO_CUSTOM_SOUND,
@@ -69,7 +69,7 @@ function actorHealthFeedbackKey(actor) {
 export function rememberActorHealthCost(actor) {
     const key = actorHealthFeedbackKey(actor);
     if (!key || feedbackState.healthCostsByActor.has(key)) return;
-    feedbackState.healthCostsByActor.set(key, healthCostTotal(actor?.system?.health));
+    feedbackState.healthCostsByActor.set(key, snapshotActorHealthCosts(actor));
 }
 
 export function forgetActorHealthCost(actor) {
@@ -81,9 +81,9 @@ export function announceAppliedDamageFeedback(actor) {
     const key = actorHealthFeedbackKey(actor);
     if (!key) return;
     const previous = feedbackState.healthCostsByActor.get(key);
-    const current = healthCostTotal(actor?.system?.health);
+    const current = snapshotActorHealthCosts(actor);
     feedbackState.healthCostsByActor.set(key, current);
-    if (healthCostFeedbackKind(previous, current) !== "damage") return;
+    if (healthDamageTaken(previous, current) <= 0) return;
 
     const tokens = services.getSceneTokens();
     const token = tokens.find((candidate) => candidate.actor?.uuid === actor.uuid)
@@ -161,7 +161,7 @@ function observeHealthCost(actor, original, args, application = null) {
     // observer). Only the outer invocation owns completion and feedback.
     if (healthCostInvocations.has(actor)) return original.apply(actor, args);
     const tracksHealth = String(resource ?? "").toLocaleLowerCase() === "health";
-    const previous = tracksHealth ? healthCostTotal(actor.system?.health) : null;
+    const previous = tracksHealth ? snapshotActorHealthCosts(actor) : null;
     const damageApplication = tracksHealth
         ? application ?? services.findPendingDamageApplicationForActor(actor.uuid)
         : null;
@@ -171,7 +171,7 @@ function observeHealthCost(actor, original, args, application = null) {
         result = original.apply(actor, args);
     } catch (error) {
         if (tracksHealth) {
-            const current = healthCostTotal(actor.system?.health);
+            const current = snapshotActorHealthCosts(actor);
             const outcome = healthCostOutcome(actor, previous, current, "failed", error);
             if (damageApplication) damageApplication.completionPromises?.push(Promise.resolve(outcome));
             else if (outcome.damage > 0) requestDamageInterruption(outcome);
@@ -182,15 +182,15 @@ function observeHealthCost(actor, original, args, application = null) {
     }
     if (tracksHealth) {
         const completion = Promise.resolve(result).then(() => {
-            const current = healthCostTotal(actor.system?.health);
-            if (healthCostFeedbackKind(previous, current, true) === "damageBlocked") {
+            const current = snapshotActorHealthCosts(actor);
+            if (JSON.stringify(previous) === JSON.stringify(current)) {
                 publishFeedback("damageBlocked", feedbackReferenceForActor(actor));
             }
             return healthCostOutcome(actor, previous, current, "completed", null);
         }, (error) => healthCostOutcome(
             actor,
             previous,
-            healthCostTotal(actor.system?.health),
+            snapshotActorHealthCosts(actor),
             "failed",
             error
         ));
@@ -207,10 +207,10 @@ function healthCostOutcome(actor, previous, current, status, error) {
         status,
         actorUuid: actor?.uuid ?? null,
         tokenUuid: feedbackReferenceForActor(actor).tokenUuid,
-        previousHealthCost: previous,
-        currentHealthCost: current,
-        damage: Math.max(0, Number(current) - Number(previous)),
-        healthChanged: current !== previous,
+        previousHealthCost: previous.total,
+        currentHealthCost: current.total,
+        damage: healthDamageTaken(previous, current),
+        healthChanged: JSON.stringify(current) !== JSON.stringify(previous),
         error,
     };
 }
